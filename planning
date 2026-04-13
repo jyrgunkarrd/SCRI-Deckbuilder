@@ -1,0 +1,307 @@
+Perfect! 
+
+Okay - let's create a resource tracker in the top right corner of the screen.
+
+It'll have 3 columns: 
+
+Column 1: 
+
+ - The Beast - convery any card on the grid into a werebeast
+ - The Blade - set all of a card's die faces to 4 damage. 
+ - The Crusade - convert any card in hand into a knight
+ - The Gate - convert any card in play into a portal
+ - The Inferno - deal direct damage
+
+Column 2: 
+
+ - The Scratch (this should be position in the same horizontal space as the third entries in the other colums, to keep things looking tidy and symmetrical) 
+
+Column 3:
+
+ - The Nightmare - discard recursion
+ - The Rampage - action economy
+ - The Shadow - remove progress and/or add influence 
+ - The Stitch - heal and buff a unit 
+ - The Trigger - mark a unit for death
+
+...Each resource should have a counter below it. For now we'll just set the counters to 0. The counters should use the font /assets/fonts/BITSUMIS.TTF 
+
+Images for each resource will be found in /assets/images/method ; the filename will match the resource name. The tracker should only display the image for the resource, not the name. 
+
+
+Perfect! 
+
+Okay - let's build a bit of the game phase logic. We'll build the phase logic in a new module - /src/system/turnrules.lua
+
+The game should start in the Start phase. The phase tracker should indicate the current phase by drawing a small, gold colored diamond in the center of the phase's diamond, coloring the phase name gold and pulsing the name of the phase.  
+
+
+
+Perfect; okay, let's create some resource generating rules. These can go in /src/system/resourcerules.lua
+
+When the game goes to the Start phase, the player's JACL should roll a six-sided die. On a result of 1 - 4, it should generate a resource for The Scratch and increment that counter by 1. On a result of 5 - 6, it should generate a resource that matches its method and increment that resource's counter by 1.
+
+Visually, this should be animated by create a small circle (colored green for The Scratch, colored gold for other resources) in the center of the method badge on the JACL panel and having it rapidly move to either the center of The Scratch badge or the center of the target resource image on the resource tracker. The resource counter increments when the little circle reaches its destination, and the circle despawns. 
+
+
+
+Okay; now we need Agents, and a start-up phase with a modal window where the player drags the Agents onto the board. 
+
+
+
+Perfect! 
+
+Now let's create the concept of Agents, and the Setup Phase.
+
+
+The Setup Phase should be the phase the game begins in - not listed on the phase track, because it happens before the proper phase cycles begin. It just allows some set-up functions to happen before the game gets going.
+
+
+Agents are a special type of Troop card; when a player has Agents assigned to them, the Agents will be populated in a neat horizontal row in a modal window that will appear at the beginning of the Setup phase. The modal window should appear within the top half of the screen, so it does not obscure the PlayerRow part of the central grid.
+
+Agents within the modal window should appear as they would if they were on a grid space.
+
+The player should be able to left click and drag the Agents from the modal window onto the PlayerRow grid spaces, just like clicking and dragging cards from their hand slots.
+
+When all Agents assigned to a player have been dragged from the modal window onto the grid, the modal window should close, the Setup Phase should end and the Start phase should begin. 
+
+
+For now, let's assign AGT0001 and AGT0002 in troops.lua to the player on game load. 
+
+
+
+Okay... we need to move to the House phase now, which means establshing the OpFor 
+
+We have Champions visually established. The Champions needs: 
+
+ - A Primary Objective
+
+
+...From left to right, across the top, we want: 
+
+ - Warzone
+ - Place / Person of Interest
+ - Champion
+ - Primary Objective
+ - Secondary Objective
+
+
+
+Perfect!
+
+Okay, let's create the concept of Objectives, starting with Primary Objectives.
+
+We'll place them in slot 3 of the placeholder slots at the top of the screen. The definitions for objectives will be in /data/objectives.lua , and they'll use images in /assets/images/objectives/ , with the image filename matching the id of the objective
+
+The outline of the box containing the objective image and the name label should be colored ff7cb1
+
+The name label should have the name entry of the object aligned to the left, and the plan value aligned tothe right. the font for the name should be colored ff7cb1, while the font for the plan value should be colored 00fffa.
+
+
+Perfect!
+
+Let's create Intelligence now, which are entries in objectives.lua with type = intel
+
+Intelligence should be in slot 4 of the placeholder slots at the top of the screen and follow all of the same display rules as primary objectives, except that the outline of the box containing the intelligence image and the name label should be colored 00fffa, the font for the name should be colored 00fffa,  and the font for the plan value should be colored ff7cb1.
+
+
+
+All of the bad guy stuff should operate on dice badges, maybe with some keywords sprinkled in sometimes. 
+
+
+
+Intelligence can work by being something the player disables for a temporary reprieve and/or a small reward. Destroyed intelligence assets will be replaced by random new ones, in an escalating fashion.
+
+
+Warzones represent a tug of war mechanic, with a Control value. When at 0 or less Control, they roll dice that might poison the player's deck with temporary curse cards. When at positive control, they roll dice that might put some nice cards in the player's deck. On average, it is worse to have a location in a negative control state than it is good to have a location in a positive control state.
+
+When a location becomes positive for the first time, a Person of Interest is revealed. A PoI has two Influence thresholds that can be hit; the first threshold will reward the player with a consumable or perhaps a relic. The second threshold will reward the player with the PoI itself, as a special permanent card in the player's deck that is very good.
+
+If a location goes to 0 or below while a PoI is revealed, that PoI becomes hostile and becomes a permanent curse in the deck for the rest of the run.
+
+
+Perfect; 
+
+I'm wondering if we can try out a change for legibility: 
+
+ - I'd like to get rid of the K suffix in the header.
+ - Instead of representing the value in the header with a number, I'd like to try representing the value by a number of white dots in a neat horizontal row equal to the value. We'll use the glyph U+F111 in /assets/fonts/icons.otf for the dots.
+ - I'd like the header to be filled black.  
+
+
+
+Okay. Now we need a hostile deck and stuff to put in it. 
+
+
+Okay. Now we need the War Phase. You exit Prelude by pressing Spacebar, everything with a die rolls that die, player can use their dice while looking at a preview of what the enemy will do, pressing spacebar executes all of the preview actions and moves the game to the End phase. 
+
+
+Perfect! 
+
+Okay; at the beginning of the War phase, I'd like everything that has a die to roll it.
+
+Visually, this should be done by placing a pulsing badge in the top right of their image and having that badge flash quickly through all of the die faces assigned to the entity before randomly selecting one to land on and keep displaying.
+
+These die rolls should be made sequentially, starting with the entities in the top slots and moving left to right, then everything in the OppRow moving from left to right, then everything in the PlayerRow moving from left to right. 
+
+
+Perfect! 
+
+When a player card on the grid is being targeted by an attack, can we show a damage preview to the player? 
+
+The damage preview should be an overlay of pips colored ff4c4c put on top of the health bar pips for the targeted card, showing how much damage is going to be dealt to them. The red pips should be equal to the total summed value score of all attacker dice. 
+
+
+Perfect! 
+
+Can we also try to set-up a system to alert the player when a card is taking damage that equals or exceeds its current health?
+
+If a card is taking damage that would match or exceed its current heath, I'd large a large badge with a black background and no fill to populate in the middge of that card's portrait. It should feature /assets/images/cards/overlays/kia.png as central art, and at the bottom of the badge it should print the value of how much damage (if any) the card is being overkilled by. The font should use the color e6336a .
+
+This badge should pulse. 
+
+
+Perfect! 
+
+Okay, let's give the player the ability to attack during the Engage phase. If a player card on the grid has rolled a dice face with targ = Atk , the player should be able to left click on the unit, which will highlight it and select it, an and then left click on either the Champion or an enemy card to inflict damage equal to their attack's value. After a player card has been used like this, the rolled die badge should be removed from them, they should be considered exhausted and unable to be used again and they should be dimmed to show that they have been used. 
+
+
+Perfect!
+
+Let's create a reroll button for the Engage phase.
+
+Can we put a button just above the JACL panel, the same width as the JACL panel, with Re-Roll: printed in the middle of it and a numerical value to the right of Re-Roll: . The value should start at 2.
+
+The button should only be visible during the Engage phase. 
+
+
+Perfect! 
+
+Okay - can we have the player set a rolled dice face badge for cards in the PlayerRow in the Engagement phase to locked / unlocked by right cliking on it (and we should make it so right clicking on the badge on a card should not expand the card). A locked dice face badge should be visually indicated by highlighting it with a gold outline. 
+
+When the player clicks the re-roll button, any cards in the PlayerRow without a locked die badge should have their badge re-rolled, the value on the button should decrement and /assets/audio/sfx/dice.wav should play. If the button is at a value of 0, it should become disabled.
+
+
+Perfect! 
+
+Okay - let's set-up the Retaliate sub-phase.
+
+The Engagement sub-phase should end when the player presses Spacebar and go to the Retaliate sub-phase.
+
+When the War phase moves to the Retaliate phase, enemies should attack their targets. This should happen sequentially, with the top slot row acting first from left to right, the the OppRow from left to right. 
+
+
+Perfect!
+
+Once all enemies have finished attacking, the game should move to the End phase. At the beginning of the End phase, the player should draw 1 card from their deck, all exhausted player cards on the grid should be unexhausted and the re-roll button value should be set back to 2.
+
+Then, the game should automatically advance to the Start phase.
+
+
+
+...Okay. Skeleton is in place and functional. It is probably buggy around the edges but that's why we play through it. 
+
+Now we need to flesh out everything until Fight #1 is a fully playable fight, which should cement a lot of the critical mechanics as well as give us a better sense of the math. 
+
+Next step is setting-up the Objective
+
+
+Intelligence: 
+
+ - WarGaze
+ - Rat Meat
+ - Boom Tap
+
+
+PAM's plans: 
+
+1. Access abandoned facility with uplink / authorization capability for operating Longinus III - The Heaven's Gate Mission Control Complex.
+
+2. Link to Longinus III
+
+3. Destroy player with orbital bombardment 
+
+
+...Okay, Objective functionality is wired.
+
+
+Now we need Warzone and POI functionality. 
+
+
+Now we need to set-up resource exchanging. 
+
+
+Now we need resource special abilities... we actually need a discard pile first, and the modal deck / discard pile view functionality. 
+
+We also need incapacitated faces for Agents. 
+
+
+SCRI needs the equivalent of StS strikes/defends in the form of basic attackers, basic saboteurs and basic influencers. It would make some sense then to have: 
+
+ - 2 basic attackers
+ - 2 basic saboteurs
+ - 2 basic influencers
+
+(6 card package)
+
+...and then on top of that, 2 uniques for the Aegis and 4 uniques for the Agents (2 each). This would split the deck completely evenly, which means specialization is tilted by the unique pool while the deck remains capable of doing all of the basic stuff. 
+
+The JACL should also have a Syntac (magic) school, and the Agents should each have a unique Lex (mage) (2 of the same). When a Lex is played, a modal should pop-up allowing the player to drag both the magic school associated with the JACL and the magic school associated with the Lex into either their hand or the board, or just click outside of the modal to dismiss it. 
+
+I think part of deck identity will revolve around whether or not the basic package stays, because the Agents / JACL support those cards and have ways of allowing them to scale / remain relevant, or is replaced and upgraded because the Agents / JACL have means of converting them... but with soome sort of flexibility trade-off or lack of player control over how the basics are replaced. So, player-directed deck thinning should be very limited, like in StS / PoC, but some archetypes might naturally still thin themselves and/or upgrade basics in ways the player can't control but are (arguuably) still beneficial. Also, I don't not want skipping cards to be an option. IMHO, this is the cleanest way to confront the issue of 'Skip Adding Card' simply being the best option. Because if skipping cards is allowed... it is almost certainly going to just be the best option, which in turn discourages players from actually engaging with the card pool and making decisions based on what they are going to draft rather than decisions based on what has already been drafted. 
+
+Basic Package:
+
+Washer (Combat Guerrilla)
+
+subclass Hitman -   Basic Atk 2 (x2), Basic Dfn 1 (x2), Blank (x2). 5 HP.
+subclass Guerrilla - Pain Atk 5 (x1), Basic Dfn 2 (x1), Cleave Atk 1 (x2), Blank (x2). 6 HP.
+subclass Thug - Basic Atk 4 (x1), Basic Dfn 4 (x1), Blank (x4). 4 HP.
+subclass Letterman - Exrt Atk 3 (x2), Atk/Dfn 1 (x2), Blank (x2). 5 HP.
+subclass Ironman - Hvy Atk 3 (x2), Exrt Atk 3 (x2), Blank (x2). 6 HP. 
+
+Past Life Soldier - 1 blank converts to Execute 6, Reach. +5 HP.
+Past Life Sprinter - all blanks convert to Atk 2/Heal 1. +6 HP. 
+Past Life Bouncer - all blanks covert to Exrt Atk 3. +5 HP. 
+Past Life Detective - all blanks to covert to Inf/Thorns 2. +5 HP.
+Past Life Burglar - all blanks convert to Pillage 2. Gains Scratch method badge. +0 HP. 
+
+Yanker(Sabotuer)
+
+subclass Arsonist - Torch 2 (x2), Sab 1 (x2), Blank (x2). 4 HP. 
+subclass Rioter - Torch 1 (x2), Pillage 1 (x2), Blank (x2). 3 HP.
+subclass Bomber - Sab 3 (x1), Sab 2 (x2), Execute 3 / Reach (x1), Blank (x2). 4 HP. 
+subclass Savior - Delay (x1), Sab/Pain 2 (x2), Atk/Heal 2 (x1), Blank (x2). 3 HP.   
+subclass Saboteur - Sab 3 Ext (x2), Sab 3 Op (x2), Blank (x2). 4 HP. 
+
+Past Life Chemist - all blanks convert to Torch 2. +1 HP. 
+Past Life Scholar - all blanks convert to Sab 3 Idealist. +0 HP. 
+Past Life Joyrider - 1 blank converts to Delay. +1 HP. 
+Past Life Farmer - 1 blank converts to 4 Atk Reach. +2 HP. 
+Past Life Mechanic - all blanks convert to Pillage 2. +1 HP. 
+
+Tapper (Influencer)
+
+subclass Spinner - Inf 2 (x2), Subv 1 (x2), Blank (x2). 3 HP.
+subclass Truther - Inf 4 (x1), Subv 2 (x1), Blank (x4). 2 HP. 
+subclass Advocate - Inf/Attract 1 (x2), Paperwork 3 (x2) - 3 HP,
+subclass Face - Flirt 3 (x2), Inf 2 (x2) - 2 HP.
+subclass Squeezer - Subv 1 (x2), Intimidate 2 (x2). 4 HP. 
+
+Past Life Lawyer - 1 blank becomes Professional Service 2, 1 blank becomes Paperwork 3. +1 HP
+Past Life Model - all blanks convert to Flirt 3. +0 HP. 
+Past Life Comedian - all blanks convert to Inf 2. +2 HP. 
+Past Life Prophet - 1 blank becomes Destined. +0 HP. Gains Crusade badge.  
+Past Life Charlatan - all blanks become Fleece 2. +1 HP. 
+
+
+When a basic card is killed, their name and Past Life are voided, the card replaced with 'Apostles of [Name]' who only retain the class and subclass. 
+
+
+Betty Six Cards:
+
+
+
+Mammoth Cards:
+
+JACL Aegis Cards: 

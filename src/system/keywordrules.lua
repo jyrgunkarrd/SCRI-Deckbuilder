@@ -1,0 +1,193 @@
+local keywordrules = {}
+local keywordDefinitions = require("data.keywords")
+local cardregistry = require("src.system.cardregistry")
+local TIME_LIMIT_KEYWORD_ID = "KWTIME"
+
+local enemyChampionHandlers = {
+    enemy_champion_play_another_card = function()
+        return {
+            playAnotherCard = true,
+        }
+    end,
+}
+
+local keywordsById = nil
+
+local function loadKeywords()
+    if keywordsById ~= nil then
+        return
+    end
+
+    keywordsById = {}
+
+    for _, definition in ipairs(keywordDefinitions or {}) do
+        if definition.id then
+            keywordsById[definition.id] = definition
+        end
+    end
+end
+
+function keywordrules.getCardKeywordIds(cardDefinition)
+    if not cardDefinition or cardDefinition.keyword == nil then
+        return {}
+    end
+
+    if type(cardDefinition.keyword) == "table" then
+        local keywordIds = {}
+
+        for _, keywordId in ipairs(cardDefinition.keyword) do
+            if keywordId then
+                keywordIds[#keywordIds + 1] = keywordId
+            end
+        end
+
+        return keywordIds
+    end
+
+    return { cardDefinition.keyword }
+end
+
+function keywordrules.cardHasKeyword(cardDefinition, keywordId)
+    if not cardDefinition or not keywordId then
+        return false
+    end
+
+    for _, cardKeywordId in ipairs(keywordrules.getCardKeywordIds(cardDefinition)) do
+        if cardKeywordId == keywordId then
+            return true
+        end
+    end
+
+    return false
+end
+
+local function getDefinitionKeywordValue(cardDefinition, keywordId)
+    if not cardDefinition or keywordId == nil then
+        return nil
+    end
+
+    if type(cardDefinition.kwval) == "table" then
+        return tonumber(cardDefinition.kwval[keywordId]) or 0
+    end
+
+    return tonumber(cardDefinition.kwval) or 0
+end
+
+function keywordrules.getEnemyChampionPlayEffect(cardDefinition)
+    if not cardDefinition then
+        return nil
+    end
+
+    loadKeywords()
+
+    for _, keywordId in ipairs(keywordrules.getCardKeywordIds(cardDefinition)) do
+        local keywordDefinition = keywordsById[keywordId]
+
+        if keywordDefinition and keywordDefinition.effect then
+            local handler = enemyChampionHandlers[keywordDefinition.effect]
+
+            if handler then
+                return handler(cardDefinition, keywordDefinition)
+            end
+        end
+    end
+
+    return nil
+end
+
+function keywordrules.getKeywordDefinition(keywordId)
+    if not keywordId then
+        return nil
+    end
+
+    loadKeywords()
+    return keywordsById[keywordId]
+end
+
+function keywordrules.initializeCardKeywordState(card, cardDefinition)
+    if not card or not cardDefinition then
+        return
+    end
+
+    local keywordIds = keywordrules.getCardKeywordIds(cardDefinition)
+
+    if #keywordIds == 0 then
+        return
+    end
+
+    for _, keywordId in ipairs(keywordIds) do
+        local keywordDefinition = keywordrules.getKeywordDefinition(keywordId)
+
+        if keywordDefinition and keywordDefinition.hasvalue == 1 then
+            card.keywordValues = card.keywordValues or {}
+
+            if card.keywordValues[keywordId] == nil then
+                card.keywordValues[keywordId] = getDefinitionKeywordValue(cardDefinition, keywordId)
+            end
+        end
+    end
+end
+
+function keywordrules.getCardKeywordValue(card, cardDefinition, keywordId)
+    if not cardDefinition or not keywordId then
+        return nil
+    end
+
+    local keywordDefinition = keywordrules.getKeywordDefinition(keywordId)
+
+    if not keywordDefinition or keywordDefinition.hasvalue ~= 1 then
+        return nil
+    end
+
+    if card and card.keywordValues and card.keywordValues[keywordId] ~= nil then
+        return card.keywordValues[keywordId]
+    end
+
+    return getDefinitionKeywordValue(cardDefinition, keywordId)
+end
+
+function keywordrules.getCardKeywordValues(card, cardDefinition)
+    local keywordValues = {}
+
+    for _, keywordId in ipairs(keywordrules.getCardKeywordIds(cardDefinition)) do
+        local keywordValue = keywordrules.getCardKeywordValue(card, cardDefinition, keywordId)
+
+        if keywordValue ~= nil then
+            keywordValues[keywordId] = keywordValue
+        end
+    end
+
+    if next(keywordValues) == nil then
+        return nil
+    end
+
+    return keywordValues
+end
+
+function keywordrules.decrementEndPhaseKeywords(cards)
+    local expiredCardIndices = {}
+
+    for cardIndex, card in ipairs(cards or {}) do
+        if card
+            and card.location
+            and card.location.kind == "grid"
+            and not card.destroyed
+            and not card.destroying then
+            local cardDefinition = cardregistry.getCard(card.setName, card.cardId)
+
+            if keywordrules.cardHasKeyword(cardDefinition, TIME_LIMIT_KEYWORD_ID) then
+                keywordrules.initializeCardKeywordState(card, cardDefinition)
+                card.keywordValues = card.keywordValues or {}
+                card.keywordValues[TIME_LIMIT_KEYWORD_ID] = (tonumber(card.keywordValues[TIME_LIMIT_KEYWORD_ID]) or 0) - 1
+
+                if card.keywordValues[TIME_LIMIT_KEYWORD_ID] <= 0 then
+                    expiredCardIndices[#expiredCardIndices + 1] = cardIndex
+                end
+            end
+        end
+    end
+
+    return expiredCardIndices
+end
+
+return keywordrules

@@ -1,0 +1,141 @@
+-- data/card/troops.lua
+-- Troop card type definitions
+
+local troops = {
+
+    --- Player Agents ---
+
+    {
+        id = "AGT0001",
+        type = "agent",
+        name = "Betty Six",
+        textbox = "Plunder or strike: Create a Flair in hand if you don't already have one.",
+        flavor = "Sample text.",
+        health = 6,
+        max = 6,
+        method = {
+            { resource = "The Trigger", amount = 2 },
+        },
+        D1 = "D011",
+        D2 = "D011",
+        D3 = "D011",
+        D4 = "D011",
+        D5 = "D011",
+        D6 = "D011",
+    },
+
+    {
+        id = "AGT0002",
+        type = "agent",
+        name = "Mammoth",
+        textbox = "Plunder or strike: Create a Flair in hand if you don't already have one.",
+        health = 2,
+        max = 2,
+        method = {
+            { resource = "The Beast", amount = 2 },
+        },
+        D1 = "D011",
+        D2 = "D011",
+        D3 = "D011",
+        D4 = "D011",
+        D5 = "D011",
+        D6 = "D011",
+    },
+
+    --- Player Troops ---
+
+    {
+        id = "0001",
+        type = "troop",
+        name = "Tomorrow",
+        textbox = "Plunder or strike: Create a Flair in hand if you don't already have one.",
+        health = 20,
+        max = 20,
+        mcost = {
+            { resource = "The Gate", amount = 5 },
+            { resource = "The Scratch", amount = 5 },
+        },
+        D1 = "D001",
+        D2 = "D001",
+        D3 = "D002",
+        D4 = "D003",
+        D5 = "D001",
+        D6 = "D001",
+    },
+
+    {
+        id = "0002",
+        type = "troop",
+        name = "Samantha and\nMaximus",
+        textbox = "Plunder or strike: Create a Flair in hand if you don't already have one.",
+        health = 10,
+        max = 20,
+        D1 = "D001",
+        D2 = "D001",
+        D3 = "D002",
+        D4 = "D001",
+        D5 = "D001",
+        D6 = "D001",
+    },
+
+    {
+        id = "0003",
+        type = "troop",
+        name = "Apex",
+        textbox = "Plunder or strike: Create a Flair in hand if you don't already have one.",
+        health = 20,
+        max = 20,
+        D1 = "D001",
+        D2 = "D001",
+        D3 = "D002",
+        D4 = "D001",
+        D5 = "D001",
+        D6 = "D001",
+    },
+
+    --- === Basic Troops === ---
+
+    --- Washers ---
+
+    {
+        id = "BDWASHM",
+        type = "troop",
+        rname = "masc",
+        rclass = "HIT",
+        classname = "Washer",
+        subclass = "Hitman",
+        flavor = "Dressed for a funeral or two.",
+        health = 5,
+        max = 5,
+        D1 = "BDMG2",
+        D2 = "BDMG2",
+        D3 = "BBLK1",
+        D4 = "BBLK1",
+        D5 = "BLK",
+        D6 = "BLK",
+    },
+
+    --- Token Troops ---
+
+    {
+        id = "TK0001",
+        type = "token",
+        name = "Black Dagger",
+        flavor = "The Black Daggers trace their history back to the Petro Age. Their most veteran aces are the only direct link back to that time - a source of stories too wonderful and horrific to really believe.",
+        health = 2,
+        max = 2,
+        keyword = { "KWFLY", "KWTIME" },
+        kwval = {
+            KWTIME = 2,
+        },
+        D1 = "BDMG3",
+        D2 = "BDMG2",
+        D3 = "BDMG3",
+        D4 = "BLK",
+        D5 = "BLK",
+        D6 = "BLK",
+    },
+
+}
+
+return troops
