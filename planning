@@ -271,8 +271,8 @@ Yanker(Sabotuer)
 subclass Arsonist - Torch 2 (x2), Sab 1 (x2), Blank (x2). 4 HP. 
 subclass Rioter - Torch 1 (x2), Pillage 1 (x2), Blank (x2). 3 HP.
 subclass Bomber - Sab 3 (x1), Sab 2 (x2), Execute 3 / Reach (x1), Blank (x2). 4 HP. 
-subclass Savior - Delay (x1), Sab/Pain 2 (x2), Atk/Heal 2 (x1), Blank (x2). 3 HP.   
-subclass Saboteur - Sab 3 Ext (x2), Sab 3 Op (x2), Blank (x2). 4 HP. 
+subclass Savior - Delay (x1), Sab/Pain 2 (x2), Atk/Heal 2 (x1), Blank (x2). 3 HP.   (gal deflecting bullets with cape; guy intercepting missile with fist; gal using shield to stop tank; guy using magic energy shield to stop fiery blast)
+subclass Saboteur - Sab 3 Ext (x2), Sab 3 Op (x2), Blank (x2). 4 HP. (gal uploading a virus; guy cutting power cables; gal unleashing robotic electronics parasite; guy cursing a fuel tank  
 
 Past Life Chemist - all blanks convert to Torch 2. +1 HP. 
 Past Life Scholar - all blanks convert to Sab 3 Idealist. +0 HP. 
@@ -282,9 +282,9 @@ Past Life Mechanic - all blanks convert to Pillage 2. +1 HP.
 
 Tapper (Influencer)
 
-subclass Spinner - Inf 2 (x2), Subv 1 (x2), Blank (x2). 3 HP.
+subclass Logger - Inf 2 (x2), Subv 1 (x2), Blank (x2). 3 HP.
 subclass Truther - Inf 4 (x1), Subv 2 (x1), Blank (x4). 2 HP. 
-subclass Advocate - Inf/Attract 1 (x2), Paperwork 3 (x2) - 3 HP,
+subclass Advocate - Inf/Attract 1 (x2), Paperwork 3 (x2) - 3 HP.
 subclass Face - Flirt 3 (x2), Inf 2 (x2) - 2 HP.
 subclass Squeezer - Subv 1 (x2), Intimidate 2 (x2). 4 HP. 
 
@@ -298,10 +298,103 @@ Past Life Charlatan - all blanks become Fleece 2. +1 HP.
 When a basic card is killed, their name and Past Life are voided, the card replaced with 'Apostles of [Name]' who only retain the class and subclass. 
 
 
+
+...Okay, no - there is something about this process of development with the opening package I just dislike. I can't put my finger on it, but there's something about it that feels 'bloaty', and a bunch of the cards being developed here - while they do end-up having the right vibe for the setting - don't feel 'correct'. They don't feel like interesting elements of either the game or fiction, and they're supposed to be interesting to both of those things. They feel rote.
+
+I'm going to instead see how it goes just designing unique decks for each Agent and each JACL.
+
+
+JACL Aegis Cards: 
+
+ - Need board presence
+ - Need objective control
+ - Need Warzone control
+ - Need mana production
+ - need strategist element (the game's equivlanet of 'spells' played from hand. should be free to play, but require exhausting a strategist card on the grid)
+ - need overall concept
+
+Overall strategy of go wide and swing. Efficient attack for the cost, but not much staying power for board presence. 
+
+Black Beret x4
+Cost: 1
+Health: 1
+Die: D3/D2/D2/D1/-/-
+Keyword: Savior (When this unit Rescues another unit, it may use its die again. A Rescue occurs when another unit is prevented from dying).
+
+Psycho Bomber x2
+Cost: 1 Gate
+Health: 2
+Die: S2/S1+D1/S1+D1/Divert*/-/-
+*Divert redirects an enemy attack towards this unit
+
+Lex Glider x2
+Cost: 1 + 1 Gate
+Health: 2
+Die: I2/I1/T2/T1/-/-
+Keyword: Strategist
+Special Text - When this card is Exhausted to play a Strategy, this cards gains the Flying* keyword.
+*Units with flying can only be attacked by other units with flying.
+
+Fritz Droid Specialist x2
+Cost: 2 Gate
+Health: 2
+Die: Droid*/T2/T1/T1/-/-
+*Spawns a Fritz Droid token.
+Special Text - When this card enters play, create a Fritz Droid token.
+
+Fritz Droid Token
+Cost: None
+Health: 1
+Die: T1/T1/T1/-/-/SD*
+*SD = Self Destruct. Token removed, 1 damage to random enemy. If this face is rolled, it is immediately executed.
+
+Team Indigo
+Cost: 1 + 2 Gate
+Health: 5
+Die: Operative*/D2/D2/T1+D1/-/-
+*Spawns 1 of 3 random Operative tokens
+Keyword: Strategist
+Special Text - When this card is Exhausted to play a Strategy, this cards gains the Flying* keyword.
+*Units with flying can only be attacked by other units with flying.
+
+TacTome (Operative Token #1)
+Cost: None
+Health: 3
+Die: Zap*/D3/D2/D2/Dust*/Dust*
+*Dust = Token removed, 2 SynTac added to pool.
+*Zap = Deal damage equal to the amount of SynTac in pool.
+Keyword: Strategist
+
+Blaze (Operative Token #2)
+Cost: None
+Health: 1
+Die: D3/D2+SB*2/D2+SB*2/D2/-/-
+*SG = Self-Block. Blocks an amount of damage.
+Keyword: Savior
+
+Flash (Operative Token #3)
+Cost: None
+Health: 1
+Die: T2/T1+D1/T1+D1/T1/-/-
+Keyword: Savior
+
+
+Rappelling Psychos 
+Cost: Strategy 
+Special Text: Create 2 Psycho Commando tokens
+
+Psycho Commando
+Cost: None
+Health: 1
+Die: D3/D2 Pain*/D2 Pain*/-/-/-
+*Pain = Unit damages itself
+
+Splinter Missile
+Cost: Strategy 
+Special Text: Sacrifice a unit with Flying to deal damage equal to its Health to up to 2 targets. 
+
+
 Betty Six Cards:
 
 
-
 Mammoth Cards:
-
-JACL Aegis Cards: 

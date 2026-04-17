@@ -115,7 +115,45 @@ local troops = {
         D6 = "BLK",
     },
 
-    --- Token Troops ---
+    --- Yankers
+
+    {
+        id = "BOMYANKM",
+        type = "troop",
+        rname = "masc",
+        rclass = "BOM",
+        classname = "Yanker",
+        subclass = "Bomber",
+        flavor = "Dressed for a funeral or two.",
+        health = 5,
+        max = 5,
+        D1 = "BDMG2",
+        D2 = "BDMG2",
+        D3 = "BBLK1",
+        D4 = "BBLK1",
+        D5 = "BLK",
+        D6 = "BLK",
+    },
+
+    {
+        id = "BOMYANKF",
+        type = "troop",
+        rname = "fem",
+        rclass = "BOM",
+        classname = "Yanker",
+        subclass = "Bomber",
+        flavor = "Dressed for a funeral or two.",
+        health = 5,
+        max = 5,
+        D1 = "BDMG2",
+        D2 = "BDMG2",
+        D3 = "BBLK1",
+        D4 = "BBLK1",
+        D5 = "BLK",
+        D6 = "BLK",
+    },
+
+    --- === Token Troops === ---
 
     {
         id = "TK0001",

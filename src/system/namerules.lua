@@ -16,9 +16,14 @@ local function getRandomEntry(entries)
     return entries[math.random(1, #entries)]
 end
 
-local function buildMasculineName()
+local RANDOM_NAME_FIRST_NAME_KEYS = {
+    masc = "Masculine",
+    fem = "Feminine",
+}
+
+local function buildPersonName(firstNameKey)
     local personNames = names.Person or {}
-    local firstName = getRandomEntry(personNames.Masculine)
+    local firstName = getRandomEntry(personNames[firstNameKey])
     local surname = getRandomEntry(personNames.Surname)
 
     if firstName and surname then
@@ -29,8 +34,10 @@ local function buildMasculineName()
 end
 
 function namerules.buildRandomName(randomNameType)
-    if randomNameType == "masc" then
-        return buildMasculineName()
+    local firstNameKey = RANDOM_NAME_FIRST_NAME_KEYS[randomNameType]
+
+    if firstNameKey then
+        return buildPersonName(firstNameKey)
     end
 
     return nil

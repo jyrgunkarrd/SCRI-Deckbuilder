@@ -6,11 +6,14 @@ local sfxrules = require("src.audio.sfxrules")
 local cardregistry = require("src.system.cardregistry")
 local cardinstances = require("src.system.cardinstances")
 local cardzones = require("src.system.cardzones")
+local championplayrules = require("src.system.championplayrules")
 local championrules = require("src.system.championrules")
+local engagerules = require("src.system.engagerules")
 local envrules = require("src.system.envrules")
 local notifications = require("src.system.notifications")
 local objectiverules = require("src.system.objectiverules")
 local objectiveprogressrules = require("src.system.objectiveprogressrules")
+local phasecontroller = require("src.system.phasecontroller")
 local turnrules = require("src.system.turnrules")
 local warzonerules = require("src.system.warzonerules")
 local warzonecontrolrules = require("src.system.warzonecontrolrules")
@@ -24,6 +27,7 @@ local specialrules = require("src.system.specialrules")
 local infiltrationrules = require("src.system.infiltrationrules")
 local targetoverlays = require("src.render.targetoverlays")
 local gamestatedraw = require("src.render.gamestate_draw")
+local inputcontroller = require("src.ui.inputcontroller")
 local modals = require("src.ui.modals")
 local warrules = require("src.system.warrules")
 
@@ -31,7 +35,6 @@ local CARD_HOVER_ANIMATION_SPEED = 10
 local CARD_ENTRANCE_SPEED = 6
 local CARD_ENTRANCE_STAGGER = 0.1
 local CARD_ENTRANCE_MAX_DT = 1 / 60
-local CHAMPION_PLAY_DELAY = 0.2
 local DAMAGE_JITTER_DURATION = 0.28
 local DAMAGE_JITTER_MAGNITUDE = 7
 local DESTRUCTION_DURATION = 0.6
@@ -42,49 +45,50 @@ local RANDOM_WARZONE_SUFFIX = "B"
 local ACTIVE_POI_ID = "POI0001"
 local ACTIVE_PRIMARY_OBJECTIVE_ID = "PRIMOBJ0001"
 
-local playerJacl = nil
-local activeChampion = nil
-local activeWarzone = nil
-local activePoi = nil
-local activePrimaryObjective = nil
-local activeIntel = nil
-local playerDeck = nil
-local championDeck = nil
-local cards = {}
+local gameState = {
+    playerJacl = nil,
+    activeChampion = nil,
+    activeWarzone = nil,
+    activePoi = nil,
+    activePrimaryObjective = nil,
+    activeIntel = nil,
+    playerDeck = nil,
+    championDeck = nil,
+    cards = {},
 
-local hoveredCardIndex = nil
-local hoveredTopSlotId = nil
-local hoveredKeyword = nil
-local expandedGridCardIndex = nil
-local expandedTopSlotId = nil
-local selectedAttackerCardIndex = nil
-local draggedCardIndex = nil
-local draggedCardOrigin = nil
-local dragOffsetX = 0
-local dragOffsetY = 0
-local cardEntranceTimer = 0
-local cardExpansion = {}
-local cardEntranceProgress = {}
-local topSlotExpansion = {}
-local damageJitters = {}
-local waitingForStartGeneration = false
-local pendingChampionPlays = 0
-local championPlayDelayTimer = 0
-local engageRerollCount = 2
-local isResourceExchangeModalOpen = false
-local isJaclDeckModalOpen = false
-local jaclDeckModalScroll = {
-    deck = 0,
-    discard = 0,
+    hoveredCardIndex = nil,
+    hoveredTopSlotId = nil,
+    hoveredKeyword = nil,
+    expandedGridCardIndex = nil,
+    expandedTopSlotId = nil,
+    selectedAttackerCardIndex = nil,
+    draggedCardIndex = nil,
+    draggedCardOrigin = nil,
+    dragOffsetX = 0,
+    dragOffsetY = 0,
+    cardEntranceTimer = 0,
+    cardExpansion = {},
+    cardEntranceProgress = {},
+    topSlotExpansion = {},
+    damageJitters = {},
+    waitingForStartGeneration = false,
+    championPlayState = championplayrules.createState(),
+    engageRerollCount = 2,
+    isResourceExchangeModalOpen = false,
+    isJaclDeckModalOpen = false,
+    jaclDeckModalScroll = {
+        deck = 0,
+        discard = 0,
+    },
+    jaclDeckPreviewCard = nil,
+    activeDeckModalDeck = nil,
+    primedJaclSpecial = nil,
+    hoveredJaclSpecialDefinition = nil,
+    hoveredJaclSpecialPreviewCard = nil,
+    hasRenderedFirstFrame = false,
+    pendingPhaseEntry = false,
+    pendingSetupCompletion = false,
 }
-local jaclDeckPreviewCard = nil
-local activeDeckModalDeck = nil
-local primedJaclSpecial = nil
-local hoveredJaclSpecialDefinition = nil
-local hoveredJaclSpecialPreviewCard = nil
-local hasRenderedFirstFrame = false
-local pendingPhaseEntry = false
-local pendingSetupCompletion = false
 local getCardDrawPosition
 local isGridRowColumnOccupied
 local isWarRollSourceActive
@@ -99,6 +103,10 @@ local clearAllBlocking
 local beginInfiltrationEffect
 local getNextOpenHandSlot
 local preloadWarzoneFamily
+local updateInfiltrationEffect
+local playHunterAddedSfxForCard
+local playHunterAddedSfxForCardDefinition
+local playHunterAddedSfxForCards
 local function getDamageJitterKeyForCard(cardIndex)
     return "card:" .. tostring(cardIndex)
 end
@@ -112,7 +120,7 @@ local function isCardUnavailable(card)
 end
 
 local function startCardDestruction(cardIndex)
-    local card = cards[cardIndex]
+    local card = gameState.cards[cardIndex]
 
     if not card or card.destroying or card.destroyed then
         return
@@ -124,17 +132,17 @@ local function startCardDestruction(cardIndex)
     warrules.clearCardRollState(cardIndex)
     sfxrules.playDestroy()
 
-    if selectedAttackerCardIndex == cardIndex then
-        selectedAttackerCardIndex = nil
+    if gameState.selectedAttackerCardIndex == cardIndex then
+        gameState.selectedAttackerCardIndex = nil
     end
 end
 
 local function startChampionDestruction()
-    topsloteffects.startChampionDestruction(activeChampion)
+    topsloteffects.startChampionDestruction(gameState.activeChampion)
 end
 
 local function startIntelDestruction()
-    topsloteffects.startIntelDestruction(activeIntel)
+    topsloteffects.startIntelDestruction(gameState.activeIntel)
 end
 
 local function triggerDamageFeedback(entityKey)
@@ -142,7 +150,7 @@ local function triggerDamageFeedback(entityKey)
         return
     end
 
-    damageJitters[entityKey] = {
+    gameState.damageJitters[entityKey] = {
         elapsed = 0,
         duration = DAMAGE_JITTER_DURATION,
         magnitude = DAMAGE_JITTER_MAGNITUDE,
@@ -151,7 +159,7 @@ local function triggerDamageFeedback(entityKey)
 end
 
 local function getDamageJitterOffset(entityKey)
-    local jitter = damageJitters[entityKey]
+    local jitter = gameState.damageJitters[entityKey]
 
     if not jitter then
         return 0, 0
@@ -226,16 +234,16 @@ local function getHoveredTopSlotId(mouseX, mouseY)
         mouseX,
         mouseY,
         turnrules.getCurrentPhase(),
-        activeChampion,
-        activeWarzone,
-        activePoi,
-        activePrimaryObjective,
-        activeIntel
+        gameState.activeChampion,
+        gameState.activeWarzone,
+        gameState.activePoi,
+        gameState.activePrimaryObjective,
+        gameState.activeIntel
     )
 end
 
 local function getSetupCardCount()
-    return cardzones.getSetupCardCount(cards, isCardDestroyed)
+    return cardzones.getSetupCardCount(gameState.cards, isCardDestroyed)
 end
 
 local function addSetupAgents()
@@ -247,7 +255,7 @@ local function addSetupAgents()
     for slotIndex, cardId in ipairs(setupAgentIds) do
         local cardDefinition = cardregistry.getCard("troops", cardId)
 
-        cards[#cards + 1] = cardinstances.create(
+        gameState.cards[#gameState.cards + 1] = cardinstances.create(
             cardDefinition,
             "setup:" .. cardId .. ":" .. tostring(slotIndex),
             {
@@ -257,36 +265,48 @@ local function addSetupAgents()
             "player"
         )
 
-        initializeCardHealthState(cards[#cards])
+        initializeCardHealthState(gameState.cards[#gameState.cards])
 
         if cardId == "AGT0001" then
-            dealDamageToCard(cards[#cards], 2, true)
+            dealDamageToCard(gameState.cards[#gameState.cards], 2, true)
         end
     end
 end
 
 local function normalizeSetupCardSlots()
-    cardzones.normalizeSetupCardSlots(cards, isCardDestroyed)
+    cardzones.normalizeSetupCardSlots(gameState.cards, isCardDestroyed)
 end
 
 local function normalizeHandCardSlots()
-    cardzones.normalizeHandCardSlots(cards, isCardDestroyed)
+    cardzones.normalizeHandCardSlots(gameState.cards, isCardDestroyed)
 end
 
 getNextOpenHandSlot = function()
-    return cardzones.getNextOpenHandSlot(cards, envrules.getPlayerHand().slots, isCardDestroyed)
+    return cardzones.getNextOpenHandSlot(gameState.cards, envrules.getPlayerHand().slots, isCardDestroyed)
 end
 
 local function createGeneratedSupportCard(cardDefinition, targetLocation)
-    return cardinstances.createGeneratedSupportCard(cards, cardExpansion, cardEntranceProgress, playerDeck, cardDefinition, targetLocation)
+    local generatedCard = cardinstances.createGeneratedSupportCard(gameState.cards, gameState.cardExpansion, gameState.cardEntranceProgress, gameState.playerDeck, cardDefinition, targetLocation)
+
+    if generatedCard and (targetLocation.kind == "hand" or targetLocation.kind == "deck") then
+        playHunterAddedSfxForCardDefinition(cardDefinition)
+    end
+
+    return generatedCard
 end
 
 local function createGeneratedDeckCardShuffled(cardDefinition)
-    return cardinstances.createGeneratedDeckCardShuffled(playerDeck, cardDefinition)
+    local generatedCard = cardinstances.createGeneratedDeckCardShuffled(gameState.playerDeck, cardDefinition)
+
+    if generatedCard then
+        playHunterAddedSfxForCardDefinition(cardDefinition)
+    end
+
+    return generatedCard
 end
 
 local function createGeneratedGridCard(cardDefinition, rowId, column)
-    return cardinstances.createGeneratedGridCard(cards, cardExpansion, cardEntranceProgress, cardDefinition, rowId, column)
+    return cardinstances.createGeneratedGridCard(gameState.cards, gameState.cardExpansion, gameState.cardEntranceProgress, cardDefinition, rowId, column)
 end
 
 local function drawCardFromPlayerDeck()
@@ -296,16 +316,17 @@ local function drawCardFromPlayerDeck()
         return nil
     end
 
-    local drawnCard = deckrules.drawCardToHand(playerDeck, nextSlotIndex)
+    local drawnCard = deckrules.drawCardToHand(gameState.playerDeck, nextSlotIndex)
 
     if not drawnCard then
         return nil
     end
 
     initializeCardHealthState(drawnCard)
-    cards[#cards + 1] = drawnCard
-    cardExpansion[#cards] = 0
-    cardEntranceProgress[#cards] = 1
+    gameState.cards[#gameState.cards + 1] = drawnCard
+    gameState.cardExpansion[#gameState.cards] = 0
+    gameState.cardEntranceProgress[#gameState.cards] = 1
+    playHunterAddedSfxForCard(drawnCard)
 
     local drawnCardDefinition = cardregistry.getCard(drawnCard.setName, drawnCard.cardId)
 
@@ -330,21 +351,21 @@ local function discardDestroyedCard(card)
         return nil
     end
 
-    if card.deckOwner == "player" and playerDeck then
+    if card.deckOwner == "player" and gameState.playerDeck then
         card.sentToDiscard = true
-        return deckrules.discardCard(playerDeck, card)
+        return deckrules.discardCard(gameState.playerDeck, card)
     end
 
-    if card.deckOwner == "champion" and championDeck then
+    if card.deckOwner == "champion" and gameState.championDeck then
         card.sentToDiscard = true
-        return deckrules.discardCard(championDeck, card)
+        return deckrules.discardCard(gameState.championDeck, card)
     end
 
     return nil
 end
 
 local function removeCardFromPlay(cardIndex)
-    local card = cards[cardIndex]
+    local card = gameState.cards[cardIndex]
 
     if not card then
         return false
@@ -355,16 +376,16 @@ local function removeCardFromPlay(cardIndex)
     card.sentToDiscard = true
     warrules.clearCardRollState(cardIndex)
 
-    if selectedAttackerCardIndex == cardIndex then
-        selectedAttackerCardIndex = nil
+    if gameState.selectedAttackerCardIndex == cardIndex then
+        gameState.selectedAttackerCardIndex = nil
     end
 
-    if hoveredCardIndex == cardIndex then
-        hoveredCardIndex = nil
+    if gameState.hoveredCardIndex == cardIndex then
+        gameState.hoveredCardIndex = nil
     end
 
-    if expandedGridCardIndex == cardIndex then
-        expandedGridCardIndex = nil
+    if gameState.expandedGridCardIndex == cardIndex then
+        gameState.expandedGridCardIndex = nil
     end
 
     return true
@@ -373,7 +394,7 @@ end
 local function addObjectiveProgress(objectiveDefinition, amount, slotId)
     local result = objectiveprogressrules.addProgress(objectiveDefinition, amount, {
         slotId = slotId,
-        activePrimaryObjective = activePrimaryObjective,
+        activePrimaryObjective = gameState.activePrimaryObjective,
         objectiveEscalationActive = topsloteffects.isObjectiveEscalationActive(),
     })
 
@@ -399,8 +420,8 @@ end
 local function buildWarzoneControlContext(slotId)
     return {
         slotId = slotId,
-        activeWarzone = activeWarzone,
-        activePoi = activePoi,
+        activeWarzone = gameState.activeWarzone,
+        activePoi = gameState.activePoi,
         poiHunterTransformationActive = topsloteffects.isPoiHunterTransformationActive(),
         preloadTopStripAssets = envdraw.preloadTopStripAssets,
         beginWarzoneTransformation = beginWarzoneTransformation,
@@ -408,13 +429,13 @@ local function buildWarzoneControlContext(slotId)
         beginPoiFlipEffect = beginPoiFlipEffect,
         beginPoiGeneratedCardTransformation = beginPoiGeneratedCardTransformation,
         setActiveWarzone = function(warzoneDefinition)
-            activeWarzone = warzoneDefinition
+            gameState.activeWarzone = warzoneDefinition
         end,
         setActivePoi = function(poiDefinition)
-            activePoi = poiDefinition
+            gameState.activePoi = poiDefinition
         end,
         onControlChanged = function(changedSlotId)
-            damageJitters[changedSlotId or "warzone"] = {
+            gameState.damageJitters[changedSlotId or "warzone"] = {
                 elapsed = 0,
                 duration = DAMAGE_JITTER_DURATION,
                 magnitude = DAMAGE_JITTER_MAGNITUDE,
@@ -464,7 +485,7 @@ local function getReplacementIntel(defeatedIntel)
     end
 
     if defeatedIntel.id == "INT0000" then
-        return getRandomChampionIntel(activeChampion)
+        return getRandomChampionIntel(gameState.activeChampion)
     end
 
     return objectiverules.getObjective("INT0000")
@@ -473,7 +494,7 @@ end
 local function getHunterEmphasisInHand()
     local totalEmphasis = 0
 
-    for _, card in ipairs(cards or {}) do
+    for _, card in ipairs(gameState.cards or {}) do
         if card
             and card.location
             and card.location.kind == "hand"
@@ -490,7 +511,7 @@ local function getHunterEmphasisInHand()
 end
 
 local function getEndPhaseObjectiveProgress()
-    return (activePrimaryObjective and activePrimaryObjective.emphasis or 0) + getHunterEmphasisInHand()
+    return (gameState.activePrimaryObjective and gameState.activePrimaryObjective.emphasis or 0) + getHunterEmphasisInHand()
 end
 
 initializeCardHealthState = function(card)
@@ -507,7 +528,7 @@ dealDamageToCard = function(card, amount, suppressFeedback)
     if damageResult and damageResult.changed and not suppressFeedback then
         local damagedCardIndex = nil
 
-        for cardIndex, candidateCard in ipairs(cards) do
+        for cardIndex, candidateCard in ipairs(gameState.cards) do
             if candidateCard == card then
                 damagedCardIndex = cardIndex
                 break
@@ -531,11 +552,11 @@ addBlockingToCard = function(card, amount)
 end
 
 clearAllBlocking = function()
-    return damagerules.clearAllBlocking(cards)
+    return damagerules.clearAllBlocking(gameState.cards)
 end
 
 dealDamageToChampion = function(amount, suppressFeedback)
-    local damageResult = damagerules.dealDamageToChampion(activeChampion, amount)
+    local damageResult = damagerules.dealDamageToChampion(gameState.activeChampion, amount)
 
     if damageResult and damageResult.changed and not suppressFeedback then
         triggerDamageFeedback("champion")
@@ -548,179 +569,75 @@ dealDamageToChampion = function(amount, suppressFeedback)
     return damageResult
 end
 
-local function getCenterBiasedOppRowColumn()
-    local oppRow = getOppRow()
-
-    if not oppRow then
-        return nil
-    end
-
-    local center = (#oppRow.cells + 1) / 2
-    local bestColumn = nil
-    local bestDistance = nil
-
-    for _, cell in ipairs(oppRow.cells) do
-        if not isGridRowColumnOccupied("OppRow", cell.column) then
-            local distance = math.abs(cell.column - center)
-
-            if bestDistance == nil
-                or distance < bestDistance
-                or (distance == bestDistance and cell.column > bestColumn) then
-                bestColumn = cell.column
-                bestDistance = distance
-            end
-        end
-    end
-
-    return bestColumn
-end
-
-local function playChampionHouseCard()
-    if not championDeck or not championDeck.cards then
-        return nil
-    end
-
-    if #championDeck.cards == 0 then
-        deckrules.reshuffleDiscardIntoDeck(championDeck)
-    end
-
-    if #championDeck.cards == 0 then
-        return nil
-    end
-
-    local targetColumn = getCenterBiasedOppRowColumn()
-
-    if not targetColumn then
-        return nil
-    end
-
-    local randomIndex = love.math.random(1, #championDeck.cards)
-    local card = table.remove(championDeck.cards, randomIndex)
-    local playedCardIndex = #cards + 1
-
-    cards[playedCardIndex] = {
-        instanceId = card.instanceId,
-        setName = card.setName,
-        cardId = card.cardId,
-        displayName = card.displayName,
-        portraitPath = card.portraitPath,
-        deckOwner = card.deckOwner,
-        location = {
-            kind = "grid",
-            rowId = "OppRow",
-            column = targetColumn,
-        },
+local function getChampionPlayContext()
+    return {
+        championDeck = gameState.championDeck,
+        cards = gameState.cards,
+        cardExpansion = gameState.cardExpansion,
+        cardEntranceProgress = gameState.cardEntranceProgress,
+        getOppRow = getOppRow,
+        isGridRowColumnOccupied = isGridRowColumnOccupied,
+        initializeCardHealthState = initializeCardHealthState,
     }
-    initializeCardHealthState(cards[playedCardIndex])
-    cardExpansion[playedCardIndex] = 0
-    cardEntranceProgress[playedCardIndex] = 1
-    sfxrules.playUnitPlay()
-
-    return cardregistry.getCard(card.setName, card.cardId)
-end
-
-local function isChampionPlaySequenceComplete()
-    return pendingChampionPlays == 0 and championPlayDelayTimer <= 0
-end
-
-local function resolveChampionPlayKeywords(cardDefinition)
-    local effect = keywordrules.getEnemyChampionPlayEffect(cardDefinition)
-
-    if effect and effect.playAnotherCard then
-        pendingChampionPlays = pendingChampionPlays + 1
-        championPlayDelayTimer = CHAMPION_PLAY_DELAY
-    end
-end
-
-local function enterCurrentPhase()
-    local currentPhase = turnrules.getCurrentPhase()
-
-    if currentPhase == turnrules.getSetupPhase() then
-        cards = deckrules.assignCardsToHand(playerDeck, envrules.getPlayerHand().slots)
-        initializeCardsHealthState(cards)
-        addSetupAgents()
-        normalizeSetupCardSlots()
-    elseif currentPhase == "Start" then
-        local gridCardGenerators = {}
-
-        for cardIndex, card in ipairs(cards) do
-            if isGridCard(card) and not isCardUnavailable(card) then
-                local drawX, drawY, expansionProgress, renderOptions = getCardDrawPosition(card, cardIndex)
-                local cardDefinition = cardregistry.getCard(card.setName, card.cardId)
-                local methodBadgeCenters = carddraw.getMethodBadgeCenters(card.setName, card.cardId, drawX, drawY, expansionProgress, renderOptions)
-
-                if methodBadgeCenters and #methodBadgeCenters > 0 and cardDefinition and cardDefinition.method then
-                    gridCardGenerators[#gridCardGenerators + 1] = {
-                        column = card.location.column,
-                        methodBadgeCenters = methodBadgeCenters,
-                        methodEntries = cardDefinition.method,
-                    }
-                end
-            end
-        end
-
-        table.sort(gridCardGenerators, function(a, b)
-            return a.column < b.column
-        end)
-
-        resourcerules.enterStartPhase(playerJacl, envdraw.getBottomLeftPanelLayout(playerJacl), envdraw.getResourceTrackerLayout(), gridCardGenerators)
-        waitingForStartGeneration = true
-    elseif currentPhase == "House" then
-        local playedCardDefinition = playChampionHouseCard()
-
-        if playedCardDefinition then
-            resolveChampionPlayKeywords(playedCardDefinition)
-        end
-    elseif currentPhase == "Prelude" then
-        sfxrules.playPrelude()
-        notifications.push("Mobilize!")
-    elseif currentPhase == "War" then
-        sfxrules.playPhaseEnd()
-        warrules.beginPhase(getTopSlotRollTargets(), cards, activePrimaryObjective, activeIntel, activeWarzone)
-    elseif currentPhase == "End" then
-        warrules.clearBlankResults()
-        warrules.clearAllRollResults()
-        clearAllBlocking()
-        for _, expiredCardIndex in ipairs(keywordrules.decrementEndPhaseKeywords(cards)) do
-            removeCardFromPlay(expiredCardIndex)
-        end
-        drawCardFromPlayerDeck()
-        if activePoi
-            and activePoi.id
-            and activePoi.id:sub(-1) == "B"
-            and beginPoiGeneratedCardTransformation(activePoi, activePoi.huntID) then
-            return
-        end
-        addObjectiveProgress(activePrimaryObjective, getEndPhaseObjectiveProgress())
-        warrules.resetPlayerCardStates(cards)
-        engageRerollCount = 2
-        turnrules.advancePhase()
-        enterCurrentPhase()
-    end
 end
 
 getTopSlotRollTargets = function()
     return envdraw.getTopSlotRollTargets(
         turnrules.getCurrentPhase(),
-        activeChampion,
-        activeWarzone,
-        activePoi,
-        activePrimaryObjective,
-        activeIntel
+        gameState.activeChampion,
+        gameState.activeWarzone,
+        gameState.activePoi,
+        gameState.activePrimaryObjective,
+        gameState.activeIntel
     )
 end
 
+local function getPhaseControllerDeps()
+    return {
+        carddraw = carddraw,
+        cardregistry = cardregistry,
+        championplayrules = championplayrules,
+        deckrules = deckrules,
+        envdraw = envdraw,
+        envrules = envrules,
+        keywordrules = keywordrules,
+        notifications = notifications,
+        resourcerules = resourcerules,
+        sfxrules = sfxrules,
+        topsloteffects = topsloteffects,
+        turnrules = turnrules,
+        warrules = warrules,
+        addObjectiveProgress = addObjectiveProgress,
+        addSetupAgents = addSetupAgents,
+        addWarzoneControl = addWarzoneControl,
+        beginInfiltrationEffect = beginInfiltrationEffect,
+        beginPoiGeneratedCardTransformation = beginPoiGeneratedCardTransformation,
+        clearAllBlocking = clearAllBlocking,
+        createGeneratedSupportCard = createGeneratedSupportCard,
+        dealDamageToCard = dealDamageToCard,
+        drawCardFromPlayerDeck = drawCardFromPlayerDeck,
+        getCardDrawPosition = getCardDrawPosition,
+        getChampionPlayContext = getChampionPlayContext,
+        getEndPhaseObjectiveProgress = getEndPhaseObjectiveProgress,
+        getReplacementIntel = getReplacementIntel,
+        getSetupCardCount = getSetupCardCount,
+        getTopSlotRollTargets = getTopSlotRollTargets,
+        initializeCardsHealthState = initializeCardsHealthState,
+        isCardUnavailable = isCardUnavailable,
+        isGridCard = isGridCard,
+        normalizeSetupCardSlots = normalizeSetupCardSlots,
+        playHunterAddedSfxForCards = playHunterAddedSfxForCards,
+        removeCardFromPlay = removeCardFromPlay,
+        updateInfiltrationEffect = updateInfiltrationEffect,
+    }
+end
+
+local function enterCurrentPhase()
+    phasecontroller.enterCurrentPhase(gameState, getPhaseControllerDeps())
+end
+
 local function completeSetupPhaseIfReady()
-    if turnrules.getCurrentPhase() ~= turnrules.getSetupPhase() then
-        return
-    end
-
-    if getSetupCardCount() > 0 then
-        return
-    end
-
-    turnrules.beginStartPhase()
-    pendingSetupCompletion = true
+    phasecontroller.completeSetupPhaseIfReady(gameState, getPhaseControllerDeps())
 end
 
 local function canPlayCard(card)
@@ -742,6 +659,28 @@ local function isHunterCard(card)
     return cardDefinition and cardDefinition.type == "hunter" or false
 end
 
+local function isHunterCardDefinition(cardDefinition)
+    return cardDefinition and cardDefinition.type == "hunter" or false
+end
+
+playHunterAddedSfxForCard = function(card)
+    if isHunterCard(card) then
+        sfxrules.playHunt()
+    end
+end
+
+playHunterAddedSfxForCardDefinition = function(cardDefinition)
+    if isHunterCardDefinition(cardDefinition) then
+        sfxrules.playHunt()
+    end
+end
+
+playHunterAddedSfxForCards = function(cards)
+    for _, card in ipairs(cards or {}) do
+        playHunterAddedSfxForCard(card)
+    end
+end
+
 local function payCardCosts(card)
     local cardDefinition = cardregistry.getCard(card.setName, card.cardId)
 
@@ -757,18 +696,18 @@ local function getCardPresentationContext()
         envdraw = envdraw,
         turnrules = turnrules,
         warrules = warrules,
-        cards = cards,
-        cardExpansion = cardExpansion,
-        cardEntranceProgress = cardEntranceProgress,
-        draggedCardIndex = draggedCardIndex,
-        dragOffsetX = dragOffsetX,
-        dragOffsetY = dragOffsetY,
-        selectedAttackerCardIndex = selectedAttackerCardIndex,
-        activeChampion = activeChampion,
-        activeWarzone = activeWarzone,
-        activePoi = activePoi,
-        activePrimaryObjective = activePrimaryObjective,
-        activeIntel = activeIntel,
+        cards = gameState.cards,
+        cardExpansion = gameState.cardExpansion,
+        cardEntranceProgress = gameState.cardEntranceProgress,
+        draggedCardIndex = gameState.draggedCardIndex,
+        dragOffsetX = gameState.dragOffsetX,
+        dragOffsetY = gameState.dragOffsetY,
+        selectedAttackerCardIndex = gameState.selectedAttackerCardIndex,
+        activeChampion = gameState.activeChampion,
+        activeWarzone = gameState.activeWarzone,
+        activePoi = gameState.activePoi,
+        activePrimaryObjective = gameState.activePrimaryObjective,
+        activeIntel = gameState.activeIntel,
         destructionDuration = DESTRUCTION_DURATION,
         isWarRollSourceActive = isWarRollSourceActive,
         isCardUnavailable = isCardUnavailable,
@@ -785,7 +724,7 @@ local function getCardRenderOptions(card, cardIndex)
 end
 
 isGridRowColumnOccupied = function(rowId, column, ignoredCardIndex)
-    return cardzones.isGridRowColumnOccupied(cards, rowId, column, ignoredCardIndex)
+    return cardzones.isGridRowColumnOccupied(gameState.cards, rowId, column, ignoredCardIndex)
 end
 
 function getCardDrawPosition(card, cardIndex)
@@ -812,7 +751,7 @@ beginInfiltrationEffect = function(entityKey, generatedCardDefinition, count)
 end
 
 local function getValidDropColumn(mouseX, mouseY, ignoredCardIndex, draggedCard)
-    return cardzones.getValidDropColumn(mouseX, mouseY, cards, ignoredCardIndex, draggedCard, {
+    return cardzones.getValidDropColumn(mouseX, mouseY, gameState.cards, ignoredCardIndex, draggedCard, {
         getPlayerRow = getPlayerRow,
         getOppRow = getOppRow,
         isHunterCard = isHunterCard,
@@ -820,7 +759,7 @@ local function getValidDropColumn(mouseX, mouseY, ignoredCardIndex, draggedCard)
 end
 
 local function getDropCell(mouseX, mouseY)
-    return cardzones.getDropCell(mouseX, mouseY, cards, draggedCardIndex, {
+    return cardzones.getDropCell(mouseX, mouseY, gameState.cards, gameState.draggedCardIndex, {
         getPlayerRow = getPlayerRow,
         getOppRow = getOppRow,
         isHunterCard = isHunterCard,
@@ -832,214 +771,98 @@ local function getPlayerRowCellAt(mouseX, mouseY)
 end
 
 local function getValidJaclSpecialTargetCell(mouseX, mouseY)
-    return cardzones.getValidJaclSpecialTargetCell(mouseX, mouseY, cards, {
+    return cardzones.getValidJaclSpecialTargetCell(mouseX, mouseY, gameState.cards, {
         getPlayerRow = getPlayerRow,
     })
 end
 
 isWarRollSourceActive = function(entityKey)
     if entityKey == "champion" then
-        return activeChampion and not activeChampion.hidden and not topsloteffects.isChampionDestructionActive()
+        return gameState.activeChampion and not gameState.activeChampion.hidden and not topsloteffects.isChampionDestructionActive()
     end
 
     local cardIndex = entityKey and entityKey:match("^card:(%d+)$")
 
     if cardIndex then
-        local sourceCard = cards[tonumber(cardIndex)]
+        local sourceCard = gameState.cards[tonumber(cardIndex)]
         return sourceCard and not sourceCard.destroying and not sourceCard.destroyed
     end
 
     return true
 end
 
+local function getEngageContext()
+    return {
+        turnrules = turnrules,
+        warrules = warrules,
+        envdraw = envdraw,
+        cards = gameState.cards,
+        hoveredCardIndex = gameState.hoveredCardIndex,
+        selectedAttackerCardIndex = gameState.selectedAttackerCardIndex,
+        engageRerollCount = gameState.engageRerollCount,
+        playerJacl = gameState.playerJacl,
+        activePrimaryObjective = gameState.activePrimaryObjective,
+        activeIntel = gameState.activeIntel,
+        activeWarzone = gameState.activeWarzone,
+        activePoi = gameState.activePoi,
+        isCardUnavailable = isCardUnavailable,
+        getCardDrawPosition = getCardDrawPosition,
+        addBlockingToCard = addBlockingToCard,
+        addObjectiveProgress = addObjectiveProgress,
+        addWarzoneControl = addWarzoneControl,
+        dealDamageToChampion = dealDamageToChampion,
+        dealDamageToCard = dealDamageToCard,
+        beginInfiltrationEffect = beginInfiltrationEffect,
+        setSelectedAttackerCardIndex = function(cardIndex)
+            gameState.selectedAttackerCardIndex = cardIndex
+        end,
+        setExpandedGridCardIndex = function(cardIndex)
+            gameState.expandedGridCardIndex = cardIndex
+        end,
+        setExpandedTopSlotId = function(slotId)
+            gameState.expandedTopSlotId = slotId
+        end,
+        setEngageRerollCount = function(count)
+            gameState.engageRerollCount = count
+        end,
+    }
+end
+
 local function tryResolveEngageClick(hoveredTopSlotId)
-    if turnrules.getCurrentPhase() ~= "War" or turnrules.getCurrentWarSubphase() ~= "Engage" then
-        return false
-    end
-
-    if selectedAttackerCardIndex then
-        local attackerCard = cards[selectedAttackerCardIndex]
-        local attackerRollState = warrules.getCardRollState(selectedAttackerCardIndex)
-
-        if not attackerCard or not warrules.canCardAttack(selectedAttackerCardIndex) then
-            selectedAttackerCardIndex = nil
-            return false
-        end
-
-        if attackerRollState.targetType == "Blk" then
-            if hoveredCardIndex then
-                local targetCard = cards[hoveredCardIndex]
-
-                if targetCard
-                    and targetCard.location.kind == "grid"
-                    and targetCard.location.rowId == "PlayerRow" then
-                    addBlockingToCard(targetCard, attackerRollState.damageValue or 0)
-                    warrules.consumeCardAttack(selectedAttackerCardIndex)
-                    selectedAttackerCardIndex = nil
-                end
-            end
-
-            return true
-        end
-
-        if hoveredCardIndex == selectedAttackerCardIndex then
-            selectedAttackerCardIndex = nil
-            return true
-        end
-
-        if attackerRollState.targetType == "Sab" then
-            if hoveredTopSlotId == "objective" and activePrimaryObjective then
-                addObjectiveProgress(activePrimaryObjective, -(attackerRollState.damageValue or 0), "objective")
-                warrules.consumeCardAttack(selectedAttackerCardIndex)
-                selectedAttackerCardIndex = nil
-                return true
-            elseif hoveredTopSlotId == "intel" and activeIntel then
-                addObjectiveProgress(activeIntel, -(attackerRollState.damageValue or 0), "intel")
-                warrules.consumeCardAttack(selectedAttackerCardIndex)
-                selectedAttackerCardIndex = nil
-                return true
-            end
-
-            return true
-        end
-
-        if attackerRollState.targetType == "WZPlayer" then
-            if hoveredTopSlotId == "warzone" and activeWarzone then
-                addWarzoneControl(activeWarzone, attackerRollState.damageValue or 0, "warzone")
-                warrules.consumeCardAttack(selectedAttackerCardIndex)
-                selectedAttackerCardIndex = nil
-            elseif hoveredTopSlotId == "poi" and activePoi then
-                addWarzoneControl(activePoi, attackerRollState.damageValue or 0, "poi")
-                warrules.consumeCardAttack(selectedAttackerCardIndex)
-                selectedAttackerCardIndex = nil
-            end
-
-            return true
-        end
-
-        if hoveredTopSlotId == "champion" then
-            dealDamageToChampion(attackerRollState.damageValue or 0)
-            warrules.consumeCardAttack(selectedAttackerCardIndex)
-            selectedAttackerCardIndex = nil
-            return true
-        end
-
-        if hoveredCardIndex then
-            local targetCard = cards[hoveredCardIndex]
-
-            if targetCard and targetCard.location.kind == "grid" and targetCard.location.rowId == "OppRow" then
-                local attackerDefinition = cardregistry.getCard(attackerCard.setName, attackerCard.cardId)
-                local targetDefinition = cardregistry.getCard(targetCard.setName, targetCard.cardId)
-
-                if warrules.canAttackTarget(attackerDefinition, targetDefinition) then
-                    dealDamageToCard(targetCard, attackerRollState.damageValue or 0)
-                    warrules.consumeCardAttack(selectedAttackerCardIndex)
-                    selectedAttackerCardIndex = nil
-                end
-
-                return true
-            end
-        end
-
-        return true
-    end
-
-    if hoveredCardIndex then
-        local hoveredCard = cards[hoveredCardIndex]
-
-        if hoveredCard
-            and hoveredCard.location.kind == "grid"
-            and hoveredCard.location.rowId == "PlayerRow"
-            and warrules.canCardAttack(hoveredCardIndex) then
-            local hoveredRollState = warrules.getCardRollState(hoveredCardIndex)
-
-            if hoveredRollState and hoveredRollState.targetType == "Inf" then
-                local generatedCardDefinition = cardregistry.getCardById(hoveredRollState.cardgen)
-
-                if generatedCardDefinition
-                    and beginInfiltrationEffect(warrules.getCardEntityKey(hoveredCardIndex), generatedCardDefinition, hoveredRollState.damageValue or 0) then
-                    warrules.consumeCardAttack(hoveredCardIndex)
-                end
-
-                return true
-            end
-
-            selectedAttackerCardIndex = hoveredCardIndex
-            expandedGridCardIndex = nil
-            expandedTopSlotId = nil
-            return true
-        end
-    end
-
-    return false
+    return engagerules.tryResolveClick(hoveredTopSlotId, getEngageContext())
 end
 
 local function isEngagePhase()
-    return turnrules.getCurrentPhase() == "War" and turnrules.getCurrentWarSubphase() == "Engage"
+    return engagerules.isEngagePhase(getEngageContext())
+end
+
+local function canOpenPlayerDeckModal()
+    return turnrules.getCurrentPhase() == "Prelude" or isEngagePhase()
 end
 
 local function getHoveredPlayerRollBadgeCardIndex(mouseX, mouseY)
-    if not isEngagePhase() then
-        return nil
-    end
-
-    for cardIndex = #cards, 1, -1 do
-        local card = cards[cardIndex]
-        local rollState = warrules.getCardRollState(cardIndex)
-
-        if card
-            and not isCardUnavailable(card)
-            and card.location.kind == "grid"
-            and card.location.rowId == "PlayerRow"
-            and rollState
-            and rollState.faceIndex then
-            local drawX, drawY, expansionProgress, renderOptions = getCardDrawPosition(card, cardIndex)
-            local badgeX, badgeY, badgeWidth, badgeHeight = carddraw.getCardRollBadgeRect(drawX, drawY, renderOptions)
-
-            if mouseX >= badgeX
-                and mouseX <= badgeX + badgeWidth
-                and mouseY >= badgeY
-                and mouseY <= badgeY + badgeHeight then
-                return cardIndex
-            end
-        end
-    end
-
-    return nil
-end
-
-local function isPointInsideRerollButton(mouseX, mouseY)
-    if not isEngagePhase() then
-        return false
-    end
-
-    local layout = envdraw.getRerollButtonLayout(playerJacl)
-
-    return mouseX >= layout.x
-        and mouseX <= layout.x + layout.width
-        and mouseY >= layout.y
-        and mouseY <= layout.y + layout.height
+    return engagerules.getHoveredPlayerRollBadgeCardIndex(mouseX, mouseY, getEngageContext())
 end
 
 local function buildModalState()
     return {
-        playerJacl = playerJacl,
-        activePrimaryObjective = activePrimaryObjective,
-        isResourceExchangeModalOpen = isResourceExchangeModalOpen,
-        isJaclDeckModalOpen = isJaclDeckModalOpen,
-        jaclDeckModalScroll = jaclDeckModalScroll,
-        jaclDeckPreviewCard = jaclDeckPreviewCard,
-        activeDeckModalDeck = activeDeckModalDeck,
-        primedJaclSpecial = primedJaclSpecial,
+        playerJacl = gameState.playerJacl,
+        activePrimaryObjective = gameState.activePrimaryObjective,
+        isResourceExchangeModalOpen = gameState.isResourceExchangeModalOpen,
+        isJaclDeckModalOpen = gameState.isJaclDeckModalOpen,
+        jaclDeckModalScroll = gameState.jaclDeckModalScroll,
+        jaclDeckPreviewCard = gameState.jaclDeckPreviewCard,
+        activeDeckModalDeck = gameState.activeDeckModalDeck,
+        primedJaclSpecial = gameState.primedJaclSpecial,
     }
 end
 
 local function applyModalState(modalState)
-    isResourceExchangeModalOpen = modalState.isResourceExchangeModalOpen
-    isJaclDeckModalOpen = modalState.isJaclDeckModalOpen
-    jaclDeckPreviewCard = modalState.jaclDeckPreviewCard
-    activeDeckModalDeck = modalState.activeDeckModalDeck
-    primedJaclSpecial = modalState.primedJaclSpecial
+    gameState.isResourceExchangeModalOpen = modalState.isResourceExchangeModalOpen
+    gameState.isJaclDeckModalOpen = modalState.isJaclDeckModalOpen
+    gameState.jaclDeckPreviewCard = modalState.jaclDeckPreviewCard
+    gameState.activeDeckModalDeck = modalState.activeDeckModalDeck
+    gameState.primedJaclSpecial = modalState.primedJaclSpecial
 end
 
 local function getModalDeps()
@@ -1058,11 +881,11 @@ local function getModalDeps()
 end
 
 local function isPointInsideJaclScratchBadge(mouseX, mouseY)
-    return modals.isPointInsideJaclScratchBadge(mouseX, mouseY, envdraw, playerJacl)
+    return modals.isPointInsideJaclScratchBadge(mouseX, mouseY, envdraw, gameState.playerJacl)
 end
 
 local function isPointInsideJaclPortrait(mouseX, mouseY)
-    return modals.isPointInsideJaclPortrait(mouseX, mouseY, envdraw, playerJacl)
+    return modals.isPointInsideJaclPortrait(mouseX, mouseY, envdraw, gameState.playerJacl)
 end
 
 local function primeJaclSpecial(resourceName)
@@ -1073,32 +896,20 @@ local function primeJaclSpecial(resourceName)
 end
 
 local function tryUseEngageReroll(mouseX, mouseY)
-    if not isPointInsideRerollButton(mouseX, mouseY) or engageRerollCount <= 0 then
-        return false
-    end
-
-    local rerolledAny = warrules.rerollUnlockedPlayerCards(cards)
-    engageRerollCount = math.max(0, engageRerollCount - 1)
-    selectedAttackerCardIndex = nil
-
-    if rerolledAny then
-        sfxrules.playDice()
-    end
-
-    return true
+    return engagerules.tryUseReroll(mouseX, mouseY, getEngageContext())
 end
 
 getTargetingContext = function()
     return {
-        cards = cards,
-        hoveredCardIndex = hoveredCardIndex,
-        hoveredTopSlotId = hoveredTopSlotId,
+        cards = gameState.cards,
+        hoveredCardIndex = gameState.hoveredCardIndex,
+        hoveredTopSlotId = gameState.hoveredTopSlotId,
         currentPhase = turnrules.getCurrentPhase(),
         displayStates = warrules.getDisplayStates(),
-        activePrimaryObjective = activePrimaryObjective,
-        activeIntel = activeIntel,
-        activeWarzone = activeWarzone,
-        activePoi = activePoi,
+        activePrimaryObjective = gameState.activePrimaryObjective,
+        activeIntel = gameState.activeIntel,
+        activeWarzone = gameState.activeWarzone,
+        activePoi = gameState.activePoi,
         getCardRollState = warrules.getCardRollState,
     }
 end
@@ -1106,11 +917,11 @@ end
 local function drawTopSlotHoverTargetBrackets(currentPhase, warzonePreviewState, objectivePreviewPips, intelPreviewPips)
     local slots = envdraw.getTopSlotLayouts(
         currentPhase,
-        activeChampion,
-        activeWarzone,
-        activePoi,
-        activePrimaryObjective,
-        activeIntel,
+        gameState.activeChampion,
+        gameState.activeWarzone,
+        gameState.activePoi,
+        gameState.activePrimaryObjective,
+        gameState.activeIntel,
         warzonePreviewState,
         objectivePreviewPips,
         intelPreviewPips
@@ -1128,134 +939,193 @@ local function drawCardStateOverlays(card, cardIndex, drawX, drawY, expansionPro
 end
 
 local function updateHoveredCard()
-    local previousHoveredCardIndex = hoveredCardIndex
-    hoveredKeyword = nil
+    local previousHoveredCardIndex = gameState.hoveredCardIndex
+    gameState.hoveredKeyword = nil
 
-    if draggedCardIndex or isResourceExchangeModalOpen or isJaclDeckModalOpen then
-        hoveredCardIndex = nil
-        hoveredTopSlotId = nil
-        hoveredJaclSpecialDefinition = nil
-        hoveredJaclSpecialPreviewCard = nil
+    if gameState.draggedCardIndex or gameState.isResourceExchangeModalOpen or gameState.isJaclDeckModalOpen then
+        gameState.hoveredCardIndex = nil
+        gameState.hoveredTopSlotId = nil
+        gameState.hoveredJaclSpecialDefinition = nil
+        gameState.hoveredJaclSpecialPreviewCard = nil
         return
     end
 
     local mouseX, mouseY = love.mouse.getPosition()
-    hoveredTopSlotId = getHoveredTopSlotId(mouseX, mouseY)
-    hoveredJaclSpecialDefinition = nil
-    hoveredJaclSpecialPreviewCard = nil
+    gameState.hoveredTopSlotId = getHoveredTopSlotId(mouseX, mouseY)
+    gameState.hoveredJaclSpecialDefinition = nil
+    gameState.hoveredJaclSpecialPreviewCard = nil
 
-    if hoveredCardIndex then
-        local activeCard = cards[hoveredCardIndex]
+    if gameState.hoveredCardIndex then
+        local activeCard = gameState.cards[gameState.hoveredCardIndex]
 
         if activeCard and not isCardUnavailable(activeCard) then
-            local drawX, drawY, expansionProgress, renderOptions = getCardDrawPosition(activeCard, hoveredCardIndex)
+            local drawX, drawY, expansionProgress, renderOptions = getCardDrawPosition(activeCard, gameState.hoveredCardIndex)
 
             if carddraw.isPointInsideDrawnCard(mouseX, mouseY, drawX, drawY, expansionProgress, nil, renderOptions) then
-                hoveredKeyword = carddraw.getHoveredKeyword(activeCard.setName, activeCard.cardId, drawX, drawY, renderOptions, mouseX, mouseY)
+                gameState.hoveredKeyword = carddraw.getHoveredKeyword(activeCard.setName, activeCard.cardId, drawX, drawY, renderOptions, mouseX, mouseY)
                 return
             end
         end
     end
 
-    hoveredCardIndex = nil
+    gameState.hoveredCardIndex = nil
 
-    for cardIndex = #cards, 1, -1 do
-        if not isCardUnavailable(cards[cardIndex]) then
-            local drawX, drawY, expansionProgress, renderOptions = getCardDrawPosition(cards[cardIndex], cardIndex)
+    for cardIndex = #gameState.cards, 1, -1 do
+        if not isCardUnavailable(gameState.cards[cardIndex]) then
+            local drawX, drawY, expansionProgress, renderOptions = getCardDrawPosition(gameState.cards[cardIndex], cardIndex)
 
             if carddraw.isPointInsideDrawnCard(mouseX, mouseY, drawX, drawY, expansionProgress, nil, renderOptions) then
-                hoveredCardIndex = cardIndex
-                hoveredKeyword = carddraw.getHoveredKeyword(cards[cardIndex].setName, cards[cardIndex].cardId, drawX, drawY, renderOptions, mouseX, mouseY)
+                gameState.hoveredCardIndex = cardIndex
+                gameState.hoveredKeyword = carddraw.getHoveredKeyword(gameState.cards[cardIndex].setName, gameState.cards[cardIndex].cardId, drawX, drawY, renderOptions, mouseX, mouseY)
                 break
             end
         end
     end
 
-    if hoveredCardIndex ~= nil
-        and hoveredCardIndex ~= previousHoveredCardIndex
-        and cards[hoveredCardIndex]
-        and cards[hoveredCardIndex].location.kind == "hand" then
+    if gameState.hoveredCardIndex ~= nil
+        and gameState.hoveredCardIndex ~= previousHoveredCardIndex
+        and gameState.cards[gameState.hoveredCardIndex]
+        and gameState.cards[gameState.hoveredCardIndex].location.kind == "hand" then
         sfxrules.playHover()
     end
 
-    if not hoveredKeyword and playerJacl and playerJacl.special then
-        local hoveredMethodBadge = envdraw.getJaclMethodBadgeAt(mouseX, mouseY, playerJacl)
+    if not gameState.hoveredKeyword and gameState.playerJacl and gameState.playerJacl.special then
+        local hoveredMethodBadge = envdraw.getJaclMethodBadgeAt(mouseX, mouseY, gameState.playerJacl)
 
         if hoveredMethodBadge then
-            hoveredJaclSpecialDefinition = specialrules.getSpecial(playerJacl.special)
+            gameState.hoveredJaclSpecialDefinition = specialrules.getSpecial(gameState.playerJacl.special)
 
-            if hoveredJaclSpecialDefinition and hoveredJaclSpecialDefinition.spawn then
-                hoveredJaclSpecialPreviewCard = cardregistry.getCardById(hoveredJaclSpecialDefinition.spawn)
+            if gameState.hoveredJaclSpecialDefinition and gameState.hoveredJaclSpecialDefinition.spawn then
+                gameState.hoveredJaclSpecialPreviewCard = cardregistry.getCardById(gameState.hoveredJaclSpecialDefinition.spawn)
             end
         end
     end
+end
+
+local function getInputControllerDeps()
+    return {
+        envdraw = envdraw,
+        modals = modals,
+        notifications = notifications,
+        phasecontroller = phasecontroller,
+        sfxrules = sfxrules,
+        turnrules = turnrules,
+        warrules = warrules,
+        applyModalState = applyModalState,
+        buildModalState = buildModalState,
+        canExpandCard = canExpandCard,
+        canOpenPlayerDeckModal = canOpenPlayerDeckModal,
+        canPlayCard = canPlayCard,
+        completeSetupPhaseIfReady = completeSetupPhaseIfReady,
+        copyLocation = copyLocation,
+        getCardDrawPosition = getCardDrawPosition,
+        getHoveredPlayerRollBadgeCardIndex = getHoveredPlayerRollBadgeCardIndex,
+        getHoveredTopSlotId = getHoveredTopSlotId,
+        getModalDeps = getModalDeps,
+        getPhaseControllerDeps = getPhaseControllerDeps,
+        getValidDropColumn = getValidDropColumn,
+        isEngagePhase = isEngagePhase,
+        isGridCard = isGridCard,
+        isHunterCard = isHunterCard,
+        isPointInsideJaclPortrait = isPointInsideJaclPortrait,
+        isPointInsideJaclScratchBadge = isPointInsideJaclScratchBadge,
+        isSetupCard = isSetupCard,
+        normalizeHandCardSlots = normalizeHandCardSlots,
+        normalizeSetupCardSlots = normalizeSetupCardSlots,
+        payCardCosts = payCardCosts,
+        primeJaclSpecial = primeJaclSpecial,
+        tryResolveEngageClick = tryResolveEngageClick,
+        tryUseEngageReroll = tryUseEngageReroll,
+        updateHoveredCard = updateHoveredCard,
+    }
 end
 
 function love.load()
     love.math.setRandomSeed(os.time())
     love.graphics.setBackgroundColor(0.08, 0.08, 0.1)
     love.graphics.setColor(1, 1, 1)
+    gameState.cards = {}
+    gameState.hoveredCardIndex = nil
+    gameState.hoveredTopSlotId = nil
+    gameState.hoveredKeyword = nil
+    gameState.expandedGridCardIndex = nil
+    gameState.expandedTopSlotId = nil
+    gameState.selectedAttackerCardIndex = nil
+    gameState.draggedCardIndex = nil
+    gameState.draggedCardOrigin = nil
+    gameState.dragOffsetX = 0
+    gameState.dragOffsetY = 0
+    gameState.cardEntranceTimer = 0
+    gameState.cardExpansion = {}
+    gameState.cardEntranceProgress = {}
+    gameState.topSlotExpansion = {}
+    gameState.damageJitters = {}
+    gameState.waitingForStartGeneration = false
+    gameState.hasRenderedFirstFrame = false
+    gameState.pendingPhaseEntry = false
+    gameState.pendingSetupCompletion = false
     turnrules.reset()
     resourcerules.reset()
     warrules.reset()
     notifications.reset()
-    engageRerollCount = 2
-    isResourceExchangeModalOpen = false
-    isJaclDeckModalOpen = false
-    jaclDeckModalScroll.deck = 0
-    jaclDeckModalScroll.discard = 0
-    jaclDeckPreviewCard = nil
-    activeDeckModalDeck = nil
-    primedJaclSpecial = nil
-    hoveredJaclSpecialDefinition = nil
-    hoveredJaclSpecialPreviewCard = nil
+    championplayrules.resetState(gameState.championPlayState)
+    gameState.engageRerollCount = 2
+    gameState.isResourceExchangeModalOpen = false
+    gameState.isJaclDeckModalOpen = false
+    gameState.jaclDeckModalScroll.deck = 0
+    gameState.jaclDeckModalScroll.discard = 0
+    gameState.jaclDeckPreviewCard = nil
+    gameState.activeDeckModalDeck = nil
+    gameState.primedJaclSpecial = nil
+    gameState.hoveredJaclSpecialDefinition = nil
+    gameState.hoveredJaclSpecialPreviewCard = nil
     cardinstances.reset()
     warzonecontrolrules.reset()
     topsloteffects.reset()
     infiltrationrules.reset()
-    playerJacl = jaclrules.getJacl(PLAYER_JACL_ID)
-    activeChampion = championrules.getChampion(ACTIVE_CHAMPION_ID)
-    if activeChampion then
-        activeChampion.hidden = false
+    gameState.playerJacl = jaclrules.getJacl(PLAYER_JACL_ID)
+    gameState.activeChampion = championrules.getChampion(ACTIVE_CHAMPION_ID)
+    if gameState.activeChampion then
+        gameState.activeChampion.hidden = false
     end
-    activeWarzone = warzonerules.getRandomWarzoneByIdSuffix(RANDOM_WARZONE_SUFFIX) or warzonerules.getWarzone(ACTIVE_WARZONE_ID)
-    activePoi = nil
-    activePrimaryObjective = getChampionPrimaryObjective(activeChampion)
-    activeIntel = getRandomChampionIntel(activeChampion)
-    if activeIntel then
-        activeIntel.hidden = false
+    gameState.activeWarzone = warzonerules.getRandomWarzoneByIdSuffix(RANDOM_WARZONE_SUFFIX) or warzonerules.getWarzone(ACTIVE_WARZONE_ID)
+    gameState.activePoi = nil
+    gameState.activePrimaryObjective = getChampionPrimaryObjective(gameState.activeChampion)
+    gameState.activeIntel = getRandomChampionIntel(gameState.activeChampion)
+    if gameState.activeIntel then
+        gameState.activeIntel.hidden = false
     end
-    envdraw.preloadTopStripAssets(activeChampion, activeWarzone, activePoi, activePrimaryObjective, activeIntel)
-    preloadWarzoneFamily(activeWarzone)
-    playerDeck = playerJacl and deckrules.buildDeck(playerJacl.deckId) or nil
-    championDeck = activeChampion and activeChampion.deckId and deckrules.buildDeck(activeChampion.deckId) or nil
+    envdraw.preloadTopStripAssets(gameState.activeChampion, gameState.activeWarzone, gameState.activePoi, gameState.activePrimaryObjective, gameState.activeIntel)
+    preloadWarzoneFamily(gameState.activeWarzone)
+    gameState.playerDeck = gameState.playerJacl and deckrules.buildDeck(gameState.playerJacl.deckId) or nil
+    gameState.championDeck = gameState.activeChampion and gameState.activeChampion.deckId and deckrules.buildDeck(gameState.activeChampion.deckId) or nil
 
-    if playerDeck then
-        playerDeck.owner = "player"
+    if gameState.playerDeck then
+        gameState.playerDeck.owner = "player"
 
-        for _, deckCard in ipairs(playerDeck.cards) do
+        for _, deckCard in ipairs(gameState.playerDeck.cards) do
             deckCard.deckOwner = "player"
         end
     end
 
-    if championDeck then
-        championDeck.owner = "champion"
+    if gameState.championDeck then
+        gameState.championDeck.owner = "champion"
 
-        for _, deckCard in ipairs(championDeck.cards) do
+        for _, deckCard in ipairs(gameState.championDeck.cards) do
             deckCard.deckOwner = "champion"
         end
     end
 
     enterCurrentPhase()
-    pendingPhaseEntry = false
+    gameState.pendingPhaseEntry = false
 
-    for cardIndex = 1, #cards do
-        cardExpansion[cardIndex] = 0
-        cardEntranceProgress[cardIndex] = 0
+    for cardIndex = 1, #gameState.cards do
+        gameState.cardExpansion[cardIndex] = 0
+        gameState.cardEntranceProgress[cardIndex] = 0
     end
 end
 
-local function updateInfiltrationEffect(dt)
+updateInfiltrationEffect = function(dt)
     infiltrationrules.update(dt, function(generatedCardDefinition)
         if createGeneratedDeckCardShuffled(generatedCardDefinition) then
             sfxrules.playInfluence()
@@ -1266,51 +1136,10 @@ end
 function love.update(dt)
     local entranceDt = math.min(dt, CARD_ENTRANCE_MAX_DT)
 
-    if hasRenderedFirstFrame and pendingPhaseEntry then
-        enterCurrentPhase()
-        pendingPhaseEntry = false
-    end
-
-    if pendingSetupCompletion then
-        enterCurrentPhase()
-        pendingSetupCompletion = false
-    end
-
-    cardEntranceTimer = cardEntranceTimer + entranceDt
+    gameState.cardEntranceTimer = gameState.cardEntranceTimer + entranceDt
     resourcerules.update(dt)
 
-    if pendingChampionPlays > 0 then
-        championPlayDelayTimer = championPlayDelayTimer - dt
-
-        if championPlayDelayTimer <= 0 then
-            pendingChampionPlays = pendingChampionPlays - 1
-
-            local playedCardDefinition = playChampionHouseCard()
-
-            if playedCardDefinition then
-                resolveChampionPlayKeywords(playedCardDefinition)
-            end
-
-            if pendingChampionPlays > 0 then
-                championPlayDelayTimer = championPlayDelayTimer + CHAMPION_PLAY_DELAY
-            else
-                championPlayDelayTimer = 0
-            end
-        end
-    end
-
-    if turnrules.getCurrentPhase() == "House" and isChampionPlaySequenceComplete() then
-        turnrules.advancePhase()
-        enterCurrentPhase()
-    end
-
-    if waitingForStartGeneration and turnrules.getCurrentPhase() == "Start" and resourcerules.isGenerationComplete() then
-        waitingForStartGeneration = false
-        turnrules.advancePhase()
-        enterCurrentPhase()
-    end
-
-    for _, card in ipairs(cards) do
+    for _, card in ipairs(gameState.cards) do
         if card.destroying then
             card.destroyElapsed = (card.destroyElapsed or 0) + dt
 
@@ -1322,149 +1151,48 @@ function love.update(dt)
         end
     end
 
-    for entityKey, jitter in pairs(damageJitters) do
+    for entityKey, jitter in pairs(gameState.damageJitters) do
         jitter.elapsed = jitter.elapsed + dt
 
         if jitter.elapsed >= jitter.duration then
-            damageJitters[entityKey] = nil
+            gameState.damageJitters[entityKey] = nil
         end
     end
 
-    local topSlotEffectEvents = topsloteffects.update(dt)
-
-    if topSlotEffectEvents.championDestroyed and activeChampion then
-        activeChampion.hidden = true
-    end
-
-    if topSlotEffectEvents.intelDestroyed then
-        local defeatedIntel = activeIntel
-
-        if activeIntel then
-            activeIntel.hidden = true
-        end
-
-        activeIntel = getReplacementIntel(defeatedIntel)
-
-        if activeIntel then
-            activeIntel.hidden = false
-        end
-    end
-
-    if topSlotEffectEvents.objectiveEscalationSwap then
-        activePrimaryObjective = topSlotEffectEvents.objectiveEscalationSwap or activePrimaryObjective
-    end
-
-    if topSlotEffectEvents.poiHunterTransformationComplete then
-        local effect = topSlotEffectEvents.poiHunterTransformationComplete
-        local generatedCard = createGeneratedSupportCard(
-            effect.generatedCardDefinition,
-            effect.targetLocation
-        )
-
-        if generatedCard then
-            activePoi = nil
-        end
-
-        if turnrules.getCurrentPhase() == "End" then
-            clearAllBlocking()
-            addObjectiveProgress(activePrimaryObjective, getEndPhaseObjectiveProgress())
-            warrules.resetPlayerCardStates(cards)
-            engageRerollCount = 2
-            turnrules.advancePhase()
-            enterCurrentPhase()
-        end
-    end
-
-    updateInfiltrationEffect(dt)
-
-    warrules.update(dt, turnrules.getCurrentPhase())
-
-    local retaliation = warrules.updateRetaliate(dt, turnrules.getCurrentPhase(), turnrules.getCurrentWarSubphase())
-
-    if retaliation then
-        if retaliation.targetType == "Obj"
-            and retaliation.targetCard
-            and retaliation.targetCard.kind == "objective"
-            and activePrimaryObjective
-            and activePrimaryObjective.id == retaliation.targetCard.objectiveId then
-            addObjectiveProgress(activePrimaryObjective, retaliation.damageValue or 0)
-        elseif retaliation.targetType == "WZOpp"
-            and activeWarzone then
-            addWarzoneControl(activeWarzone, -(retaliation.damageValue or 0), "warzone")
-        elseif retaliation.targetType == "IntCD"
-            and retaliation.targetCard
-            and retaliation.targetCard.kind == "intel"
-            and activeIntel
-            and activeIntel.id == retaliation.targetCard.objectiveId then
-            addObjectiveProgress(activeIntel, -(retaliation.damageValue or 0), "intel")
-        elseif retaliation.targetType == "Inf"
-            and retaliation.targetCard
-            and retaliation.targetCard.kind == "deck" then
-            local generatedCardDefinition = cardregistry.getCardById(retaliation.cardgen)
-
-            if generatedCardDefinition then
-                beginInfiltrationEffect(retaliation.entityKey, generatedCardDefinition, retaliation.damageValue or 0)
-            end
-        else
-            local targetCard = cards[retaliation.targetCardIndex]
-
-            if targetCard and not isCardUnavailable(targetCard) then
-                dealDamageToCard(targetCard, retaliation.damageValue or 0)
-            end
-        end
-
-        warrules.clearEntityRollState(retaliation.entityKey)
-    end
-
-    if turnrules.getCurrentPhase() == "War"
-        and turnrules.getCurrentWarSubphase() == "Retaliate"
-        and warrules.isRetaliationComplete() then
-        turnrules.advancePhase()
-        enterCurrentPhase()
-    end
-
-    if turnrules.isWarRollPhase() and warrules.isRollSequenceComplete() then
-        local nextWarSubphase = turnrules.advanceWarSubphase()
-
-        if nextWarSubphase == "Engage" then
-            engageRerollCount = 2
-            sfxrules.playEngage()
-            notifications.push("Engage!")
-        end
-    end
+    phasecontroller.update(gameState, getPhaseControllerDeps(), dt)
 
     notifications.update(dt)
     updateHoveredCard()
 
-    for cardIndex, card in ipairs(cards) do
+    for cardIndex, card in ipairs(gameState.cards) do
         local startTime = (cardIndex - 1) * CARD_ENTRANCE_STAGGER
         local entranceTarget = 1
         local expansionTarget = 0
-        local entranceProgress = cardEntranceProgress[cardIndex] or 0
-        local expansionProgress = cardExpansion[cardIndex] or 0
+        local entranceProgress = gameState.cardEntranceProgress[cardIndex] or 0
+        local expansionProgress = gameState.cardExpansion[cardIndex] or 0
 
-        if card.location.kind == "hand" and cardEntranceTimer < startTime then
+        if card.location.kind == "hand" and gameState.cardEntranceTimer < startTime then
             entranceTarget = 0
         end
 
-        if draggedCardIndex ~= cardIndex then
+        if gameState.draggedCardIndex ~= cardIndex then
             if canExpandCard(card) then
-                expansionTarget = expandedGridCardIndex == cardIndex and 1 or 0
+                expansionTarget = gameState.expandedGridCardIndex == cardIndex and 1 or 0
             else
-                expansionTarget = hoveredCardIndex == cardIndex and 1 or 0
+                expansionTarget = gameState.hoveredCardIndex == cardIndex and 1 or 0
             end
         end
 
         if entranceProgress < entranceTarget then
-            cardEntranceProgress[cardIndex] = math.min(entranceTarget, entranceProgress + (entranceDt * CARD_ENTRANCE_SPEED))
+            gameState.cardEntranceProgress[cardIndex] = math.min(entranceTarget, entranceProgress + (entranceDt * CARD_ENTRANCE_SPEED))
         elseif entranceProgress > entranceTarget then
-            cardEntranceProgress[cardIndex] = math.max(entranceTarget, entranceProgress - (entranceDt * CARD_ENTRANCE_SPEED))
+            gameState.cardEntranceProgress[cardIndex] = math.max(entranceTarget, entranceProgress - (entranceDt * CARD_ENTRANCE_SPEED))
         end
 
         if expansionProgress < expansionTarget then
-            cardExpansion[cardIndex] = math.min(expansionTarget, expansionProgress + (dt * CARD_HOVER_ANIMATION_SPEED))
+            gameState.cardExpansion[cardIndex] = math.min(expansionTarget, expansionProgress + (dt * CARD_HOVER_ANIMATION_SPEED))
         elseif expansionProgress > expansionTarget then
-            cardExpansion[cardIndex] = math.max(expansionTarget, expansionProgress - (dt * CARD_HOVER_ANIMATION_SPEED))
+            gameState.cardExpansion[cardIndex] = math.max(expansionTarget, expansionProgress - (dt * CARD_HOVER_ANIMATION_SPEED))
         end
     end
 
@@ -1477,257 +1205,35 @@ function love.update(dt)
     }
 
     for _, slotId in ipairs(topSlotIds) do
-        local expansionProgress = topSlotExpansion[slotId] or 0
-        local expansionTarget = expandedTopSlotId == slotId and 1 or 0
+        local expansionProgress = gameState.topSlotExpansion[slotId] or 0
+        local expansionTarget = gameState.expandedTopSlotId == slotId and 1 or 0
 
         if expansionProgress < expansionTarget then
-            topSlotExpansion[slotId] = math.min(expansionTarget, expansionProgress + (dt * CARD_HOVER_ANIMATION_SPEED))
+            gameState.topSlotExpansion[slotId] = math.min(expansionTarget, expansionProgress + (dt * CARD_HOVER_ANIMATION_SPEED))
         elseif expansionProgress > expansionTarget then
-            topSlotExpansion[slotId] = math.max(expansionTarget, expansionProgress - (dt * CARD_HOVER_ANIMATION_SPEED))
+            gameState.topSlotExpansion[slotId] = math.max(expansionTarget, expansionProgress - (dt * CARD_HOVER_ANIMATION_SPEED))
         end
     end
 end
 
 function love.mousepressed(x, y, button)
-    if button ~= 1 and button ~= 2 and button ~= 3 then
-        return
-    end
-
-    local modalState = buildModalState()
-    local modalDeps = getModalDeps()
-
-    if modals.handleDeckModalMousePressed(x, y, button, modalState, modalDeps)
-        or modals.handleResourceExchangeMousePressed(x, y, button, modalState, modalDeps)
-        or modals.handlePrimedSpecialMousePressed(x, y, button, modalState, modalDeps) then
-        applyModalState(modalState)
-        return
-    end
-
-    applyModalState(modalState)
-
-    updateHoveredCard()
-    hoveredTopSlotId = getHoveredTopSlotId(x, y)
-    local hoveredPlayerRollBadgeCardIndex = getHoveredPlayerRollBadgeCardIndex(x, y)
-    local clickedScratchBadge = isPointInsideJaclScratchBadge(x, y)
-    local clickedJaclPortrait = isPointInsideJaclPortrait(x, y)
-    local clickedJaclMethodBadge = envdraw.getJaclMethodBadgeAt(x, y, playerJacl)
-
-    if button == 1 and tryUseEngageReroll(x, y) then
-        return
-    end
-
-    if button == 1 and clickedJaclMethodBadge then
-        if primeJaclSpecial(clickedJaclMethodBadge.resource) then
-            expandedGridCardIndex = nil
-            expandedTopSlotId = nil
-            hoveredCardIndex = nil
-            hoveredKeyword = nil
-            return
-        end
-
-        sfxrules.playPlayReject()
-    end
-
-    if button == 2 and clickedScratchBadge and turnrules.getCurrentPhase() == "Prelude" then
-        isResourceExchangeModalOpen = true
-        expandedGridCardIndex = nil
-        expandedTopSlotId = nil
-        hoveredCardIndex = nil
-        hoveredKeyword = nil
-        return
-    end
-
-    if button == 3 and clickedJaclPortrait and turnrules.getCurrentPhase() == "Prelude" then
-        local openModalState = buildModalState()
-        modals.resetAndOpenJaclDeck(openModalState, playerDeck)
-        applyModalState(openModalState)
-        expandedGridCardIndex = nil
-        expandedTopSlotId = nil
-        hoveredCardIndex = nil
-        hoveredKeyword = nil
-        return
-    end
-
-    if button == 3 and hoveredTopSlotId == "champion" and championDeck then
-        local openModalState = buildModalState()
-        modals.resetAndOpenJaclDeck(openModalState, championDeck)
-        applyModalState(openModalState)
-        expandedGridCardIndex = nil
-        expandedTopSlotId = nil
-        hoveredCardIndex = nil
-        hoveredKeyword = nil
-        return
-    end
-
-    if button == 2 and hoveredPlayerRollBadgeCardIndex then
-        warrules.toggleCardLock(hoveredPlayerRollBadgeCardIndex)
-        return
-    end
-
-    if button == 1 and tryResolveEngageClick(hoveredTopSlotId) then
-        return
-    end
-
-    if expandedGridCardIndex then
-        if button == 2 and (hoveredTopSlotId or (hoveredCardIndex and canExpandCard(cards[hoveredCardIndex]))) then
-            if hoveredTopSlotId then
-                expandedGridCardIndex = nil
-                expandedTopSlotId = hoveredTopSlotId
-                sfxrules.playCharSelect()
-            elseif hoveredPlayerRollBadgeCardIndex then
-                return
-            elseif hoveredCardIndex == expandedGridCardIndex then
-                expandedGridCardIndex = nil
-                hoveredCardIndex = nil
-            else
-                expandedGridCardIndex = hoveredCardIndex
-                sfxrules.playCharSelect()
-            end
-
-            return
-        end
-
-        expandedGridCardIndex = nil
-        hoveredCardIndex = nil
-        return
-    end
-
-    if expandedTopSlotId then
-        if button == 2 and (hoveredTopSlotId or (hoveredCardIndex and canExpandCard(cards[hoveredCardIndex]))) then
-            if hoveredTopSlotId then
-                if hoveredTopSlotId == expandedTopSlotId then
-                    expandedTopSlotId = nil
-                else
-                    expandedTopSlotId = hoveredTopSlotId
-                    sfxrules.playCharSelect()
-                end
-            else
-                expandedTopSlotId = nil
-                expandedGridCardIndex = hoveredCardIndex
-                sfxrules.playCharSelect()
-            end
-
-            return
-        end
-
-        expandedTopSlotId = nil
-        hoveredCardIndex = nil
-        return
-    end
-
-    if button == 2 then
-        if hoveredTopSlotId then
-            expandedTopSlotId = hoveredTopSlotId
-            sfxrules.playCharSelect()
-        elseif hoveredPlayerRollBadgeCardIndex then
-            return
-        elseif hoveredCardIndex and canExpandCard(cards[hoveredCardIndex]) then
-            expandedGridCardIndex = hoveredCardIndex
-            sfxrules.playCharSelect()
-        end
-
-        return
-    end
-
-    if not hoveredCardIndex then
-        return
-    end
-
-    if cards[hoveredCardIndex].location.kind == "hand" and turnrules.getCurrentPhase() ~= "Prelude" then
-        return
-    end
-
-    if isGridCard(cards[hoveredCardIndex]) then
-        return
-    end
-
-    if turnrules.getCurrentPhase() == turnrules.getSetupPhase() and not isSetupCard(cards[hoveredCardIndex]) then
-        return
-    end
-
-    draggedCardIndex = hoveredCardIndex
-    draggedCardOrigin = copyLocation(cards[draggedCardIndex].location)
-    expandedGridCardIndex = nil
-    expandedTopSlotId = nil
-
-    local drawX, drawY = getCardDrawPosition(cards[draggedCardIndex], draggedCardIndex)
-    dragOffsetX = x - drawX
-    dragOffsetY = y - drawY
-    cardExpansion[draggedCardIndex] = 0
-    hoveredCardIndex = nil
+    inputcontroller.mousepressed(gameState, getInputControllerDeps(), x, y, button)
 end
 
 function love.wheelmoved(_, y)
-    local modalState = buildModalState()
-
-    if modals.handleWheelMoved(y, modalState, {
-        envdraw = envdraw,
-    }) then
-        applyModalState(modalState)
-    end
+    inputcontroller.wheelmoved(gameState, getInputControllerDeps(), _, y)
 end
 
 function love.mousereleased(x, y, button)
-    if button ~= 1 or not draggedCardIndex then
-        return
-    end
-
-    local draggedCard = cards[draggedCardIndex]
-    local dropColumn = getValidDropColumn(x, y, draggedCardIndex, draggedCard)
-
-    local canPlayDrop = dropColumn and canPlayCard(draggedCard)
-
-    if canPlayDrop and payCardCosts(draggedCard) then
-        local targetRowId = isHunterCard(draggedCard) and "OppRow" or "PlayerRow"
-        cards[draggedCardIndex].location = {
-            kind = "grid",
-            rowId = targetRowId,
-            column = dropColumn,
-        }
-        if draggedCardOrigin.kind == "hand" then
-            normalizeHandCardSlots()
-        end
-        sfxrules.playUnitPlay()
-    elseif dropColumn and not canPlayDrop then
-        sfxrules.playPlayReject()
-        notifications.push("Not Enough Resources")
-    else
-        cards[draggedCardIndex].location = copyLocation(draggedCardOrigin)
-    end
-
-    if draggedCardOrigin.kind == "setup" then
-        normalizeSetupCardSlots()
-    end
-
-    draggedCardIndex = nil
-    draggedCardOrigin = nil
-    expandedGridCardIndex = nil
-    hoveredCardIndex = nil
-    completeSetupPhaseIfReady()
-    updateHoveredCard()
+    inputcontroller.mousereleased(gameState, getInputControllerDeps(), x, y, button)
 end
 
 function love.keypressed(key)
-    if key == "escape" then
-        local modalState = buildModalState()
-
-        if modals.handleEscapeKey(modalState) then
-            applyModalState(modalState)
-        else
-            love.event.quit()
-        end
-    elseif key == "space" and turnrules.getCurrentPhase() == "Prelude" then
-        turnrules.advancePhase()
-        enterCurrentPhase()
-    elseif key == "space" and isEngagePhase() then
-        selectedAttackerCardIndex = nil
-        turnrules.advanceWarSubphase()
-        warrules.beginRetaliatePhase(getTopSlotRollTargets(), cards)
-    end
+    inputcontroller.keypressed(gameState, getInputControllerDeps(), key)
 end
 
 function love.draw()
-    hasRenderedFirstFrame = true
+    gameState.hasRenderedFirstFrame = true
     gamestatedraw.draw({
         turnrules = turnrules,
         warrules = warrules,
@@ -1736,28 +1242,28 @@ function love.draw()
         carddraw = carddraw,
         topsloteffects = topsloteffects,
         notifications = notifications,
-        activeChampion = activeChampion,
-        activeWarzone = activeWarzone,
-        activePoi = activePoi,
-        activePrimaryObjective = activePrimaryObjective,
-        activeIntel = activeIntel,
-        expandedTopSlotId = expandedTopSlotId,
-        topSlotExpansion = topSlotExpansion,
-        playerJacl = playerJacl,
-        engageRerollCount = engageRerollCount,
-        cards = cards,
-        hoveredCardIndex = hoveredCardIndex,
-        draggedCardIndex = draggedCardIndex,
-        expandedGridCardIndex = expandedGridCardIndex,
-        isJaclDeckModalOpen = isJaclDeckModalOpen,
-        activeDeckModalDeck = activeDeckModalDeck,
-        jaclDeckModalScroll = jaclDeckModalScroll,
-        jaclDeckPreviewCard = jaclDeckPreviewCard,
-        isResourceExchangeModalOpen = isResourceExchangeModalOpen,
-        hoveredKeyword = hoveredKeyword,
-        hoveredJaclSpecialDefinition = hoveredJaclSpecialDefinition,
-        hoveredJaclSpecialPreviewCard = hoveredJaclSpecialPreviewCard,
-        primedJaclSpecial = primedJaclSpecial,
+        activeChampion = gameState.activeChampion,
+        activeWarzone = gameState.activeWarzone,
+        activePoi = gameState.activePoi,
+        activePrimaryObjective = gameState.activePrimaryObjective,
+        activeIntel = gameState.activeIntel,
+        expandedTopSlotId = gameState.expandedTopSlotId,
+        topSlotExpansion = gameState.topSlotExpansion,
+        playerJacl = gameState.playerJacl,
+        engageRerollCount = gameState.engageRerollCount,
+        cards = gameState.cards,
+        hoveredCardIndex = gameState.hoveredCardIndex,
+        draggedCardIndex = gameState.draggedCardIndex,
+        expandedGridCardIndex = gameState.expandedGridCardIndex,
+        isJaclDeckModalOpen = gameState.isJaclDeckModalOpen,
+        activeDeckModalDeck = gameState.activeDeckModalDeck,
+        jaclDeckModalScroll = gameState.jaclDeckModalScroll,
+        jaclDeckPreviewCard = gameState.jaclDeckPreviewCard,
+        isResourceExchangeModalOpen = gameState.isResourceExchangeModalOpen,
+        hoveredKeyword = gameState.hoveredKeyword,
+        hoveredJaclSpecialDefinition = gameState.hoveredJaclSpecialDefinition,
+        hoveredJaclSpecialPreviewCard = gameState.hoveredJaclSpecialPreviewCard,
+        primedJaclSpecial = gameState.primedJaclSpecial,
         isWarRollSourceActive = isWarRollSourceActive,
         getDamageJitterOffset = getDamageJitterOffset,
         getObjectiveProgressJitterOffset = getObjectiveProgressJitterOffset,
