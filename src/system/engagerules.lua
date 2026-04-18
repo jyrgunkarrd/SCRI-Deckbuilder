@@ -12,9 +12,40 @@ local function clearSelectedAttacker(ctx)
     ctx.setSelectedAttackerCardIndex(nil)
 end
 
-local function consumeSelectedAttack(ctx)
-    ctx.warrules.consumeCardAttack(ctx.selectedAttackerCardIndex)
+local function finishSelectedAttack(ctx, saviorTriggered)
+    if not saviorTriggered then
+        ctx.warrules.consumeCardAttack(ctx.selectedAttackerCardIndex)
+    end
+
     clearSelectedAttacker(ctx)
+end
+
+local function resolveSelectedAttack(ctx, action)
+    local attackerCardIndex = ctx.selectedAttackerCardIndex
+    local saviorCheck = ctx.warrules.beginSaviorCheck(attackerCardIndex, ctx.cards, ctx.isWarRollSourceActive)
+    local resolved = action()
+
+    if not resolved then
+        return false
+    end
+
+    finishSelectedAttack(ctx, ctx.warrules.didSaviorPreventDeath(saviorCheck, ctx.cards, ctx.isWarRollSourceActive))
+    return true
+end
+
+local function resolveImmediateCardAction(ctx, cardIndex, action)
+    local saviorCheck = ctx.warrules.beginSaviorCheck(cardIndex, ctx.cards, ctx.isWarRollSourceActive)
+    local resolved = action()
+
+    if not resolved then
+        return false
+    end
+
+    if not ctx.warrules.didSaviorPreventDeath(saviorCheck, ctx.cards, ctx.isWarRollSourceActive) then
+        ctx.warrules.consumeCardAttack(cardIndex)
+    end
+
+    return true
 end
 
 function engagerules.tryResolveClick(hoveredTopSlotId, ctx)
@@ -31,19 +62,39 @@ function engagerules.tryResolveClick(hoveredTopSlotId, ctx)
             return false
         end
 
-        if attackerRollState.targetType == "Blk" then
+        if ctx.warrules.hasTargetType(attackerRollState, "Blk") then
             if ctx.hoveredCardIndex then
                 local targetCard = ctx.cards[ctx.hoveredCardIndex]
 
                 if targetCard
                     and targetCard.location.kind == "grid"
                     and targetCard.location.rowId == "PlayerRow" then
-                    ctx.addBlockingToCard(targetCard, attackerRollState.damageValue or 0)
-                    consumeSelectedAttack(ctx)
+                    resolveSelectedAttack(ctx, function()
+                        ctx.addBlockingToCard(targetCard, attackerRollState.damageValue or 0)
+                        return true
+                    end)
+
+                    return true
                 end
             end
+        end
 
-            return true
+        if ctx.warrules.hasTargetType(attackerRollState, "Div") then
+            if ctx.hoveredCardIndex then
+                local targetCard = ctx.cards[ctx.hoveredCardIndex]
+
+                if targetCard
+                    and targetCard.location.kind == "grid"
+                    and targetCard.location.rowId == "PlayerRow" then
+                    resolveSelectedAttack(ctx, function()
+                        ctx.warrules.redirectIncomingAttacks(ctx.cards, ctx.hoveredCardIndex, ctx.selectedAttackerCardIndex)
+                        ctx.addBlockingToCard(attackerCard, attackerRollState.damageValue or 0)
+                        return true
+                    end)
+
+                    return true
+                end
+            end
         end
 
         if ctx.hoveredCardIndex == ctx.selectedAttackerCardIndex then
@@ -51,48 +102,64 @@ function engagerules.tryResolveClick(hoveredTopSlotId, ctx)
             return true
         end
 
-        if attackerRollState.targetType == "Sab" then
+        if ctx.warrules.hasTargetType(attackerRollState, "Sab") then
             if hoveredTopSlotId == "objective" and ctx.activePrimaryObjective then
-                ctx.addObjectiveProgress(ctx.activePrimaryObjective, -(attackerRollState.damageValue or 0), "objective")
-                consumeSelectedAttack(ctx)
+                resolveSelectedAttack(ctx, function()
+                    ctx.addObjectiveProgress(ctx.activePrimaryObjective, -(attackerRollState.damageValue or 0), "objective")
+                    return true
+                end)
                 return true
             elseif hoveredTopSlotId == "intel" and ctx.activeIntel then
-                ctx.addObjectiveProgress(ctx.activeIntel, -(attackerRollState.damageValue or 0), "intel")
-                consumeSelectedAttack(ctx)
+                resolveSelectedAttack(ctx, function()
+                    ctx.addObjectiveProgress(ctx.activeIntel, -(attackerRollState.damageValue or 0), "intel")
+                    return true
+                end)
                 return true
             end
-
-            return true
         end
 
-        if attackerRollState.targetType == "WZPlayer" then
+        if ctx.warrules.hasTargetType(attackerRollState, "WZPlayer") then
             if hoveredTopSlotId == "warzone" and ctx.activeWarzone then
-                ctx.addWarzoneControl(ctx.activeWarzone, attackerRollState.damageValue or 0, "warzone")
-                consumeSelectedAttack(ctx)
+                resolveSelectedAttack(ctx, function()
+                    ctx.addWarzoneControl(ctx.activeWarzone, attackerRollState.damageValue or 0, "warzone")
+                    return true
+                end)
             elseif hoveredTopSlotId == "poi" and ctx.activePoi then
-                ctx.addWarzoneControl(ctx.activePoi, attackerRollState.damageValue or 0, "poi")
-                consumeSelectedAttack(ctx)
+                resolveSelectedAttack(ctx, function()
+                    ctx.addWarzoneControl(ctx.activePoi, attackerRollState.damageValue or 0, "poi")
+                    return true
+                end)
             end
-
-            return true
         end
 
-        if hoveredTopSlotId == "champion" then
-            ctx.dealDamageToChampion(attackerRollState.damageValue or 0)
-            consumeSelectedAttack(ctx)
+        if hoveredTopSlotId == "champion" and ctx.warrules.hasTargetType(attackerRollState, "Atk") then
+            resolveSelectedAttack(ctx, function()
+                ctx.dealDamageToChampion(attackerRollState.damageValue or 0)
+                return true
+            end)
             return true
         end
 
         if ctx.hoveredCardIndex then
             local targetCard = ctx.cards[ctx.hoveredCardIndex]
 
-            if targetCard and targetCard.location.kind == "grid" and targetCard.location.rowId == "OppRow" then
+            if targetCard
+                and targetCard.location.kind == "grid"
+                and targetCard.location.rowId == "OppRow"
+                and (ctx.warrules.hasTargetType(attackerRollState, "Atk") or ctx.warrules.hasTargetType(attackerRollState, "AtkSab")) then
                 local attackerDefinition = cardregistry.getCard(attackerCard.setName, attackerCard.cardId)
                 local targetDefinition = cardregistry.getCard(targetCard.setName, targetCard.cardId)
 
                 if ctx.warrules.canAttackTarget(attackerDefinition, targetDefinition) then
-                    ctx.dealDamageToCard(targetCard, attackerRollState.damageValue or 0)
-                    consumeSelectedAttack(ctx)
+                    resolveSelectedAttack(ctx, function()
+                        ctx.dealDamageToCard(targetCard, attackerRollState.damageValue or 0)
+
+                        if ctx.warrules.hasTargetType(attackerRollState, "AtkSab") and ctx.activePrimaryObjective then
+                            ctx.addObjectiveProgress(ctx.activePrimaryObjective, -(attackerRollState.damageValue or 0), "objective")
+                        end
+
+                        return true
+                    end)
                 end
 
                 return true
@@ -111,12 +178,13 @@ function engagerules.tryResolveClick(hoveredTopSlotId, ctx)
             and ctx.warrules.canCardAttack(ctx.hoveredCardIndex) then
             local hoveredRollState = ctx.warrules.getCardRollState(ctx.hoveredCardIndex)
 
-            if hoveredRollState and hoveredRollState.targetType == "Inf" then
+            if hoveredRollState and ctx.warrules.hasTargetType(hoveredRollState, "Inf") then
                 local generatedCardDefinition = cardregistry.getCardById(hoveredRollState.cardgen)
 
-                if generatedCardDefinition
-                    and ctx.beginInfiltrationEffect(ctx.warrules.getCardEntityKey(ctx.hoveredCardIndex), generatedCardDefinition, hoveredRollState.damageValue or 0) then
-                    ctx.warrules.consumeCardAttack(ctx.hoveredCardIndex)
+                if generatedCardDefinition then
+                    resolveImmediateCardAction(ctx, ctx.hoveredCardIndex, function()
+                        return ctx.beginInfiltrationEffect(ctx.warrules.getCardEntityKey(ctx.hoveredCardIndex), generatedCardDefinition, hoveredRollState.damageValue or 0)
+                    end)
                 end
 
                 return true

@@ -749,9 +749,9 @@ local function drawHealthFooter(x, y, width, height, padding, footerHeight, foot
     end
 end
 
-local function drawCostBadges(cardDefinition, x, y, width, height)
+local function getCostBadgeLayout(cardDefinition, x, y, width, height)
     if not cardDefinition.mcost or #cardDefinition.mcost == 0 then
-        return
+        return nil
     end
 
     local baseBadgeSize = width * COST_BADGE_SIZE_RATIO
@@ -761,12 +761,14 @@ local function drawCostBadges(cardDefinition, x, y, width, height)
     local groupGapRatio = 0.28
     local costGroups = {}
     local totalBaseHeight = 0
+    local maxColumnCount = 0
 
     for _, costEntry in ipairs(cardDefinition.mcost) do
         local amount = math.max(0, costEntry.amount or 0)
 
         if amount > 0 then
             local rowCount = math.max(1, math.ceil(amount / 2))
+            local columnCount = math.min(2, amount)
 
             costGroups[#costGroups + 1] = {
                 resource = costEntry.resource,
@@ -774,12 +776,13 @@ local function drawCostBadges(cardDefinition, x, y, width, height)
                 rowCount = rowCount,
             }
 
+            maxColumnCount = math.max(maxColumnCount, columnCount)
             totalBaseHeight = totalBaseHeight + (rowCount * baseBadgeSize) + (math.max(0, rowCount - 1) * baseBadgeGap)
         end
     end
 
     if #costGroups == 0 then
-        return
+        return nil
     end
 
     totalBaseHeight = totalBaseHeight + (math.max(0, #costGroups - 1) * (baseBadgeSize * groupGapRatio))
@@ -787,6 +790,32 @@ local function drawCostBadges(cardDefinition, x, y, width, height)
     local badgeSize = math.max(12, snap(baseBadgeSize * scale))
     local badgeGap = math.max(2, snap(baseBadgeGap * scale))
     local groupGap = math.max(3, snap(badgeSize * groupGapRatio))
+    local occupiedWidth = badgeMargin + (maxColumnCount * badgeSize) + (math.max(0, maxColumnCount - 1) * badgeGap)
+
+    return {
+        badgeMargin = badgeMargin,
+        badgeSize = badgeSize,
+        badgeGap = badgeGap,
+        costGroups = costGroups,
+        groupGap = groupGap,
+        occupiedWidth = occupiedWidth,
+        x = x,
+        y = y,
+    }
+end
+
+local function drawCostBadges(cardDefinition, x, y, width, height)
+    local layout = getCostBadgeLayout(cardDefinition, x, y, width, height)
+
+    if not layout then
+        return
+    end
+
+    local badgeMargin = layout.badgeMargin
+    local badgeSize = layout.badgeSize
+    local badgeGap = layout.badgeGap
+    local groupGap = layout.groupGap
+    local costGroups = layout.costGroups
     local currentY = y + badgeMargin
 
     for _, costGroup in ipairs(costGroups) do
@@ -822,20 +851,42 @@ local function drawCostBadges(cardDefinition, x, y, width, height)
     end
 end
 
-local function getKeywordBadgeRects(cardDefinition, x, y, width)
+local function getKeywordBadgeRects(cardDefinition, x, y, width, reservedLeftWidth)
     local keywordIds = getCardKeywordIds(cardDefinition)
     local badgeSize = math.max(18, snap(width * 0.18))
     local badgeInset = math.max(4, snap(width * 0.03))
     local badgeGap = math.max(4, snap(width * 0.02))
     local badgeRects = {}
+    local leftReserve = math.max(0, reservedLeftWidth or 0)
+    local rowStartX = x + badgeInset + leftReserve
+    local maxX = x + width - badgeInset
+    local currentX = rowStartX
+    local currentY = y + badgeInset
+
+    if leftReserve > 0 then
+        rowStartX = rowStartX + badgeGap
+        currentX = rowStartX
+    end
+
+    if rowStartX + badgeSize > maxX then
+        rowStartX = x + badgeInset
+        currentX = rowStartX
+    end
 
     for keywordIndex, keywordId in ipairs(keywordIds) do
+        if keywordIndex > 1 and currentX + badgeSize > maxX then
+            currentX = rowStartX
+            currentY = currentY + badgeSize + badgeGap
+        end
+
         badgeRects[#badgeRects + 1] = {
             keywordId = keywordId,
-            x = x + badgeInset,
-            y = y + badgeInset + ((keywordIndex - 1) * (badgeSize + badgeGap)),
+            x = currentX,
+            y = currentY,
             size = badgeSize,
         }
+
+        currentX = currentX + badgeSize + badgeGap
     end
 
     return badgeRects
@@ -889,8 +940,8 @@ local function drawKeywordBadge(keywordId, badgeX, badgeY, badgeSize, keywordVal
     end
 end
 
-local function drawKeywordBadges(cardDefinition, x, y, width, keywordValuesOverride)
-    for _, badgeRect in ipairs(getKeywordBadgeRects(cardDefinition, x, y, width)) do
+local function drawKeywordBadges(cardDefinition, x, y, width, keywordValuesOverride, reservedLeftWidth)
+    for _, badgeRect in ipairs(getKeywordBadgeRects(cardDefinition, x, y, width, reservedLeftWidth)) do
         local keywordValue = getCardKeywordDefaultValue(cardDefinition, badgeRect.keywordId)
 
         if keywordValuesOverride and keywordValuesOverride[badgeRect.keywordId] ~= nil then
@@ -1348,8 +1399,13 @@ function carddraw.getHoveredKeyword(setName, cardId, drawX, drawY, options, mous
     end
 
     local metrics = getCardMetrics(options)
+    local costBadgeLayout = cardDefinition.mcost
+        and not metrics.showHealthOnPortrait
+        and getCostBadgeLayout(cardDefinition, snap(drawX), snap(drawY), snap(metrics.width), snap(metrics.portraitHeight))
+        or nil
+    local reservedLeftWidth = costBadgeLayout and costBadgeLayout.occupiedWidth or 0
 
-    for _, badgeRect in ipairs(getKeywordBadgeRects(cardDefinition, snap(drawX), snap(drawY), snap(metrics.width))) do
+    for _, badgeRect in ipairs(getKeywordBadgeRects(cardDefinition, snap(drawX), snap(drawY), snap(metrics.width), reservedLeftWidth)) do
         if mouseX >= badgeRect.x
             and mouseX <= badgeRect.x + badgeRect.size
             and mouseY >= badgeRect.y
@@ -1512,7 +1568,13 @@ function carddraw.drawCardState(setName, cardId, x, y, expansionProgress, option
         love.graphics.rectangle("fill", drawX, portraitY, renderWidth, portraitHeight)
     end
 
-    drawKeywordBadges(cardDefinition, drawX, portraitY, renderWidth, metrics.keywordValues)
+    local costBadgeLayout = cardDefinition.mcost
+        and not metrics.showHealthOnPortrait
+        and getCostBadgeLayout(cardDefinition, drawX, portraitY, renderWidth, portraitHeight)
+        or nil
+    local keywordReservedLeftWidth = costBadgeLayout and costBadgeLayout.occupiedWidth or 0
+
+    drawKeywordBadges(cardDefinition, drawX, portraitY, renderWidth, metrics.keywordValues, keywordReservedLeftWidth)
 
     love.graphics.setColor(style.outlineColor[1], style.outlineColor[2], style.outlineColor[3], 1)
     love.graphics.rectangle("line", drawX, portraitY, renderWidth, portraitHeight)

@@ -102,6 +102,13 @@ local dice = {
             targ = "Atk",
         },
 
+        {
+            id = "BDMG1",
+            type = "BasicDmg",
+            value = 1,
+            targ = "Atk",
+        },
+
     --- Basic Block ---
 
     {
@@ -109,6 +116,24 @@ local dice = {
         type = "BasicBlk",
         value = 1,
         targ = "Blk",
+    },
+
+    --- Advanced Block ---
+
+    {
+        id = "DIV3",
+        type = "Divert",
+        value = 3,
+        targ = "Div",
+    },
+
+    --- Basic Sabotage ---
+
+    {
+        id = "SAB2",
+        type = "Detonator",
+        value = 2,
+        targ = "Sab",
     },
 
     --- Infiltration ---
@@ -119,6 +144,22 @@ local dice = {
         value = 5,
         targ = "Inf",
         cardgen = "HNTINFFM",
+    },
+
+    --- Attack / Sabotage Hybrid ---
+
+    {
+        id = "ATKORSAB1",
+        type = "AttackOrSabotage",
+        value = 1,
+        targ = { "Atk", "Sab" }
+    },
+
+    {
+        id = "ATKANDSAB1",
+        type = "AttackAndSabotage",
+        value = 1,
+        targ = { "AtkSab" }
     },
     
     

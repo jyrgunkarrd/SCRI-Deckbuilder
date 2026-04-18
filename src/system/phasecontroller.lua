@@ -65,6 +65,10 @@ local function resolveRetaliation(gameState, deps, retaliation)
         if targetCard and not deps.isCardUnavailable(targetCard) then
             deps.dealDamageToCard(targetCard, retaliation.damageValue or 0)
         end
+
+        if retaliation.targetType == "AtkSab" and gameState.activePrimaryObjective then
+            deps.addObjectiveProgress(gameState.activePrimaryObjective, retaliation.damageValue or 0)
+        end
     end
 
     deps.warrules.clearEntityRollState(retaliation.entityKey)

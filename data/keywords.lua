@@ -22,6 +22,12 @@ local keywords = {
             text = "This card will only remain in play area for a limited time.",
             hasvalue = 1,
         },
+
+        {
+            id = "KWSAV",
+            name = "Savior",
+            text = "When this card prevents a friendly unit from being defeated, it does not exhaust and may use that die face again.",
+        },
 }
 
 return keywords

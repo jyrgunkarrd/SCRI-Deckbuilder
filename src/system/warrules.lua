@@ -17,6 +17,7 @@ local objectiveTargetPreview = nil
 local intelTargetPreview = nil
 local warzoneTargetPreview = nil
 local FLYING_KEYWORD_ID = "KWFLY"
+local SAVIOR_KEYWORD_ID = "KWSAV"
 
 local function hasFlyingKeyword(definition)
     return keywordrules.cardHasKeyword(definition, FLYING_KEYWORD_ID)
@@ -28,6 +29,52 @@ local function canAttackTarget(attackerDefinition, targetDefinition)
     end
 
     return true
+end
+
+local function getTargetTypes(targetType)
+    if type(targetType) == "table" then
+        local targetTypes = {}
+
+        for _, candidate in ipairs(targetType) do
+            if candidate then
+                targetTypes[#targetTypes + 1] = candidate
+            end
+        end
+
+        return targetTypes
+    end
+
+    if targetType then
+        return { targetType }
+    end
+
+    return {}
+end
+
+local function hasTargetType(rollStateOrTargetType, targetType)
+    local availableTargetType = rollStateOrTargetType
+
+    if type(rollStateOrTargetType) == "table" and rollStateOrTargetType.targetType ~= nil then
+        availableTargetType = rollStateOrTargetType.targetType
+    end
+
+    for _, candidate in ipairs(getTargetTypes(availableTargetType)) do
+        if candidate == targetType then
+            return true
+        end
+    end
+
+    return false
+end
+
+local function firstTargetTypeMatching(rollStateOrTargetType, allowedTargetTypes)
+    for _, targetType in ipairs(allowedTargetTypes or {}) do
+        if hasTargetType(rollStateOrTargetType, targetType) then
+            return targetType
+        end
+    end
+
+    return nil
 end
 
 local function buildRollState(entityKey, definition, faceIndices, isEnemy, preserveState)
@@ -45,7 +92,7 @@ local function buildRollState(entityKey, definition, faceIndices, isEnemy, prese
 
     if isEnemy
         and selectedFaceDefinition
-        and selectedFaceDefinition.targ == "Atk"
+        and (hasTargetType(selectedFaceDefinition.targ, "Atk") or hasTargetType(selectedFaceDefinition.targ, "AtkSab"))
         and #playerAttackTargets > 0 then
         local validTargets = {}
 
@@ -67,28 +114,38 @@ local function buildRollState(entityKey, definition, faceIndices, isEnemy, prese
                 displayName = target.displayName,
                 portraitPath = target.portraitPath,
             }
+            if hasTargetType(selectedFaceDefinition.targ, "Atk") then
+                targetType = "Atk"
+            else
+                targetType = "AtkSab"
+            end
         end
     elseif selectedFaceDefinition
-        and selectedFaceDefinition.targ == "Inf" then
+        and hasTargetType(selectedFaceDefinition.targ, "Inf") then
+        targetType = "Inf"
         targetCard = {
             kind = "deck",
         }
     elseif selectedFaceDefinition
-        and selectedFaceDefinition.targ == "Obj"
+        and hasTargetType(selectedFaceDefinition.targ, "Obj")
         and objectiveTargetPreview then
+        targetType = "Obj"
         targetCard = objectiveTargetPreview
     elseif selectedFaceDefinition
-        and selectedFaceDefinition.targ == "IntCD"
+        and hasTargetType(selectedFaceDefinition.targ, "IntCD")
         and entityKey == "intel"
         and intelTargetPreview then
+        targetType = "IntCD"
         targetCard = intelTargetPreview
     elseif selectedFaceDefinition
-        and selectedFaceDefinition.targ == "WZOpp"
+        and hasTargetType(selectedFaceDefinition.targ, "WZOpp")
         and warzoneTargetPreview then
+        targetType = "WZOpp"
         targetCard = warzoneTargetPreview
     elseif selectedFaceDefinition
-        and selectedFaceDefinition.targ == "WZPlayer"
+        and hasTargetType(selectedFaceDefinition.targ, "WZPlayer")
         and warzoneTargetPreview then
+        targetType = "WZPlayer"
         targetCard = warzoneTargetPreview
     end
 
@@ -152,7 +209,15 @@ function warrules.canCardAttack(cardIndex)
 
     return rollState
         and not rollState.exhausted
-        and (rollState.targetType == "Atk" or rollState.targetType == "Blk" or rollState.targetType == "Inf" or rollState.targetType == "Sab" or rollState.targetType == "WZPlayer")
+        and (
+            hasTargetType(rollState, "Atk")
+            or hasTargetType(rollState, "AtkSab")
+            or hasTargetType(rollState, "Blk")
+            or hasTargetType(rollState, "Div")
+            or hasTargetType(rollState, "Inf")
+            or hasTargetType(rollState, "Sab")
+            or hasTargetType(rollState, "WZPlayer")
+        )
         and (rollState.damageValue or 0) > 0
 end
 
@@ -173,6 +238,131 @@ function warrules.consumeCardAttack(cardIndex)
     rollState.pulseScale = 1
     rollState.exhausted = true
     rollState.locked = false
+end
+
+local function cardCanTriggerSavior(cardIndex, cards)
+    local card = cards and cards[cardIndex] or nil
+
+    if not card
+        or not card.location
+        or card.location.kind ~= "grid"
+        or card.location.rowId ~= "PlayerRow"
+        or card.destroyed
+        or card.destroying then
+        return false
+    end
+
+    local definition = cardregistry.getCard(card.setName, card.cardId)
+    return keywordrules.cardHasKeyword(definition, SAVIOR_KEYWORD_ID)
+end
+
+local function isPlayerGridCardThreatenedWithDeath(card, cardIndex, isSourceActive)
+    if not card
+        or not card.location
+        or card.location.kind ~= "grid"
+        or card.location.rowId ~= "PlayerRow"
+        or card.destroyed
+        or card.destroying
+        or not card.currentHealth then
+        return false
+    end
+
+    local incomingDamage = warrules.getIncomingDamagePreview(cardIndex, isSourceActive)
+    local healthDamage = warrules.getHealthDamagePreview(card, incomingDamage)
+    return healthDamage >= card.currentHealth
+end
+
+function warrules.beginSaviorCheck(cardIndex, cards, isSourceActive)
+    if not cardCanTriggerSavior(cardIndex, cards) then
+        return nil
+    end
+
+    local threatenedCards = {}
+
+    for targetCardIndex, card in ipairs(cards or {}) do
+        if isPlayerGridCardThreatenedWithDeath(card, targetCardIndex, isSourceActive) then
+            threatenedCards[targetCardIndex] = true
+        end
+    end
+
+    if next(threatenedCards) == nil then
+        return nil
+    end
+
+    return {
+        cardIndex = cardIndex,
+        threatenedCards = threatenedCards,
+    }
+end
+
+function warrules.didSaviorPreventDeath(saviorCheck, cards, isSourceActive)
+    if not saviorCheck or not saviorCheck.threatenedCards then
+        return false
+    end
+
+    for cardIndex in pairs(saviorCheck.threatenedCards) do
+        local card = cards and cards[cardIndex] or nil
+
+        if card
+            and card.location
+            and card.location.kind == "grid"
+            and card.location.rowId == "PlayerRow"
+            and not card.destroyed
+            and not card.destroying
+            and card.currentHealth
+            and not isPlayerGridCardThreatenedWithDeath(card, cardIndex, isSourceActive) then
+            return true
+        end
+    end
+
+    return false
+end
+
+local function buildTargetCardPreview(card)
+    if not card then
+        return nil
+    end
+
+    return {
+        kind = "card",
+        setName = card.setName,
+        cardId = card.cardId,
+        displayName = card.displayName,
+        portraitPath = card.portraitPath,
+    }
+end
+
+function warrules.redirectIncomingAttacks(cards, fromCardIndex, toCardIndex)
+    if not cards or not fromCardIndex or not toCardIndex or fromCardIndex == toCardIndex then
+        return 0
+    end
+
+    local targetCard = cards[toCardIndex]
+
+    if not targetCard
+        or not targetCard.location
+        or targetCard.location.kind ~= "grid"
+        or targetCard.location.rowId ~= "PlayerRow"
+        or targetCard.destroyed
+        or targetCard.destroying then
+        return 0
+    end
+
+    local redirectedCount = 0
+    local targetPreview = buildTargetCardPreview(targetCard)
+
+    for _, rollState in pairs(warRollDisplayStates) do
+        if rollState
+            and rollState.faceIndex
+            and (hasTargetType(rollState, "Atk") or hasTargetType(rollState, "AtkSab"))
+            and rollState.targetCardIndex == fromCardIndex then
+            rollState.targetCardIndex = toCardIndex
+            rollState.targetCard = targetPreview
+            redirectedCount = redirectedCount + 1
+        end
+    end
+
+    return redirectedCount
 end
 
 function warrules.toggleCardLock(cardIndex)
@@ -262,10 +452,18 @@ function warrules.clearBlankResults()
         if rollState
             and rollState.faceIndex
             and (rollState.damageValue or 0) <= 0
-            and rollState.targetType == nil then
+            and #getTargetTypes(rollState.targetType) == 0 then
             warRollDisplayStates[entityKey] = nil
         end
     end
+end
+
+function warrules.hasTargetType(rollStateOrTargetType, targetType)
+    return hasTargetType(rollStateOrTargetType, targetType)
+end
+
+function warrules.firstTargetTypeMatching(rollStateOrTargetType, allowedTargetTypes)
+    return firstTargetTypeMatching(rollStateOrTargetType, allowedTargetTypes)
 end
 
 function warrules.clearAllRollResults()
@@ -280,7 +478,7 @@ function warrules.getIncomingDamagePreview(cardIndex, isSourceActive)
         local sourceIsActive = isSourceActive == nil or isSourceActive(entityKey, rollState)
 
         if sourceIsActive
-            and rollState.targetType == "Atk"
+            and (hasTargetType(rollState, "Atk") or hasTargetType(rollState, "AtkSab"))
             and rollState.targetCardIndex
             and warrules.getCardEntityKey(rollState.targetCardIndex) == cardKey then
             incomingDamage = incomingDamage + (rollState.damageValue or 0)
@@ -315,7 +513,7 @@ function warrules.getObjectiveProgressPreview(objectiveId, isSourceActive)
         local sourceIsActive = isSourceActive == nil or isSourceActive(entityKey, rollState)
 
         if sourceIsActive
-            and rollState.targetType == "Obj"
+            and hasTargetType(rollState, "Obj")
             and rollState.targetCard
             and rollState.targetCard.kind == "objective"
             and rollState.targetCard.objectiveId == objectiveId then
@@ -337,7 +535,7 @@ function warrules.getIntelProgressPreview(intelId, isSourceActive)
         local sourceIsActive = isSourceActive == nil or isSourceActive(entityKey, rollState)
 
         if sourceIsActive
-            and rollState.targetType == "IntCD"
+            and hasTargetType(rollState, "IntCD")
             and rollState.targetCard
             and rollState.targetCard.kind == "intel"
             and rollState.targetCard.objectiveId == intelId then
@@ -359,7 +557,7 @@ function warrules.getWarzoneControlPreview(warzoneId, currentControl, maxControl
         local sourceIsActive = isSourceActive == nil or isSourceActive(entityKey, rollState)
 
         if sourceIsActive
-            and rollState.targetType == "WZOpp"
+            and hasTargetType(rollState, "WZOpp")
             and rollState.targetCard
             and rollState.targetCard.kind == "warzone"
             and rollState.targetCard.warzoneId == warzoneId then
@@ -405,7 +603,7 @@ function warrules.setWarzoneTargetPreview(warzoneDefinition)
         if rollState
             and rollState.targetCard
             and rollState.targetCard.kind == "warzone"
-            and (rollState.targetType == "WZOpp" or rollState.targetType == "WZPlayer") then
+            and (hasTargetType(rollState, "WZOpp") or hasTargetType(rollState, "WZPlayer")) then
             rollState.targetCard = warzoneTargetPreview
         end
     end
@@ -426,15 +624,15 @@ function warrules.beginRetaliatePhase(topSlotTargets, cards)
             and rollState.faceIndex
             and (rollState.damageValue or 0) > 0
             and (
-                (rollState.targetType == "Atk" and rollState.targetCardIndex)
-                or (rollState.targetType == "Inf" and rollState.targetCard and rollState.targetCard.kind == "deck")
-                or (rollState.targetType == "Obj" and rollState.targetCard and rollState.targetCard.kind == "objective")
-                or rollState.targetType == "WZOpp"
-                or (rollState.targetType == "IntCD" and rollState.targetCard and rollState.targetCard.kind == "intel")
+                ((hasTargetType(rollState, "Atk") or hasTargetType(rollState, "AtkSab")) and rollState.targetCardIndex)
+                or (hasTargetType(rollState, "Inf") and rollState.targetCard and rollState.targetCard.kind == "deck")
+                or (hasTargetType(rollState, "Obj") and rollState.targetCard and rollState.targetCard.kind == "objective")
+                or hasTargetType(rollState, "WZOpp")
+                or (hasTargetType(rollState, "IntCD") and rollState.targetCard and rollState.targetCard.kind == "intel")
             ) then
             pendingRetaliations[#pendingRetaliations + 1] = {
                 entityKey = target.id,
-                targetType = rollState.targetType,
+                targetType = firstTargetTypeMatching(rollState, { "AtkSab", "Atk", "Inf", "Obj", "WZOpp", "IntCD" }),
                 targetCardIndex = rollState.targetCardIndex,
                 targetCard = rollState.targetCard,
                 damageValue = rollState.damageValue,
@@ -469,15 +667,15 @@ function warrules.beginRetaliatePhase(topSlotTargets, cards)
             and rollState.faceIndex
             and (rollState.damageValue or 0) > 0
             and (
-                (rollState.targetType == "Atk" and rollState.targetCardIndex)
-                or (rollState.targetType == "Inf" and rollState.targetCard and rollState.targetCard.kind == "deck")
-                or (rollState.targetType == "Obj" and rollState.targetCard and rollState.targetCard.kind == "objective")
-                or rollState.targetType == "WZOpp"
-                or (rollState.targetType == "IntCD" and rollState.targetCard and rollState.targetCard.kind == "intel")
+                ((hasTargetType(rollState, "Atk") or hasTargetType(rollState, "AtkSab")) and rollState.targetCardIndex)
+                or (hasTargetType(rollState, "Inf") and rollState.targetCard and rollState.targetCard.kind == "deck")
+                or (hasTargetType(rollState, "Obj") and rollState.targetCard and rollState.targetCard.kind == "objective")
+                or hasTargetType(rollState, "WZOpp")
+                or (hasTargetType(rollState, "IntCD") and rollState.targetCard and rollState.targetCard.kind == "intel")
             ) then
             pendingRetaliations[#pendingRetaliations + 1] = {
                 entityKey = entityKey,
-                targetType = rollState.targetType,
+                targetType = firstTargetTypeMatching(rollState, { "AtkSab", "Atk", "Inf", "Obj", "WZOpp", "IntCD" }),
                 targetCardIndex = rollState.targetCardIndex,
                 targetCard = rollState.targetCard,
                 damageValue = rollState.damageValue,

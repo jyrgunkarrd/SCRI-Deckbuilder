@@ -1,8 +1,26 @@
 local targetingrules = {}
 
+local function hasTargetType(rollState, targetType)
+    if not rollState or not targetType then
+        return false
+    end
+
+    if type(rollState.targetType) == "table" then
+        for _, candidate in ipairs(rollState.targetType) do
+            if candidate == targetType then
+                return true
+            end
+        end
+
+        return false
+    end
+
+    return rollState.targetType == targetType
+end
+
 function targetingrules.rollStateTargetsCard(rollState, cardIndex)
     return rollState
-        and rollState.targetType == "Atk"
+        and (hasTargetType(rollState, "Atk") or hasTargetType(rollState, "AtkSab"))
         and rollState.targetCard
         and rollState.targetCard.kind == "card"
         and rollState.targetCardIndex
@@ -19,22 +37,22 @@ function targetingrules.rollStateTargetsTopSlot(rollState, slotId, context)
     local targetCard = rollState.targetCard
 
     if slotId == "objective" then
-        return rollState.targetType == "Obj"
+        return hasTargetType(rollState, "Obj")
             and targetCard.kind == "objective"
             and context.activePrimaryObjective
             and targetCard.objectiveId == context.activePrimaryObjective.id
     elseif slotId == "intel" then
-        return rollState.targetType == "IntCD"
+        return hasTargetType(rollState, "IntCD")
             and targetCard.kind == "intel"
             and context.activeIntel
             and targetCard.objectiveId == context.activeIntel.id
     elseif slotId == "warzone" then
-        return (rollState.targetType == "WZOpp" or rollState.targetType == "WZPlayer")
+        return (hasTargetType(rollState, "WZOpp") or hasTargetType(rollState, "WZPlayer"))
             and targetCard.kind == "warzone"
             and context.activeWarzone
             and targetCard.warzoneId == context.activeWarzone.id
     elseif slotId == "poi" then
-        return (rollState.targetType == "WZOpp" or rollState.targetType == "WZPlayer")
+        return (hasTargetType(rollState, "WZOpp") or hasTargetType(rollState, "WZPlayer"))
             and targetCard.kind == "warzone"
             and context.activePoi
             and targetCard.warzoneId == context.activePoi.id

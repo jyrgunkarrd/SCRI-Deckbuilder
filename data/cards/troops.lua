@@ -153,6 +153,42 @@ local troops = {
         D6 = "BLK",
     },
 
+    --- === Aegis Troops === ---
+
+    {
+        id = "AEGBLK",
+        type = "troop",
+        name = "Black Beret",
+        health = 1,
+        max = 1,
+        keyword = { "KWSAV"},
+        flavor = "Not a moment of ceremony here. Just a job to do and the steel to get it done.",
+        mcost = {
+            { resource = "The Scratch", amount = 1 },
+        },
+        D1 = "BDMG3",
+        D2 = "BDMG2",
+        D3 = "BDMG2",
+        D4 = "BDMG1",
+        D5 = "BLK",
+        D6 = "BLK",
+    },
+
+    {
+        id = "AEGPSYBOM",
+        type = "troop",
+        name = "Psycho Bomber",
+        health = 2,
+        max = 2,
+        D1 = "SAB2",
+        D2 = "ATKANDSAB1",
+        D3 = "ATKANDSAB1",
+        D4 = "DIV3",
+        D5 = "BLK",
+        D6 = "BLK",
+    },
+
+
     --- === Token Troops === ---
 
     {

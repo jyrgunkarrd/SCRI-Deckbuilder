@@ -806,6 +806,7 @@ local function getEngageContext()
         activeWarzone = gameState.activeWarzone,
         activePoi = gameState.activePoi,
         isCardUnavailable = isCardUnavailable,
+        isWarRollSourceActive = isWarRollSourceActive,
         getCardDrawPosition = getCardDrawPosition,
         addBlockingToCard = addBlockingToCard,
         addObjectiveProgress = addObjectiveProgress,
