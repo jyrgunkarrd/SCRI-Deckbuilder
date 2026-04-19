@@ -18,9 +18,32 @@ local function hasTargetType(rollState, targetType)
     return rollState.targetType == targetType
 end
 
-function targetingrules.rollStateTargetsCard(rollState, cardIndex)
+local function canTargetEnemyCard(rollState, context)
+    if context and context.canTargetEnemyCard then
+        return context.canTargetEnemyCard(rollState)
+    end
+
+    return hasTargetType(rollState, "Atk") or hasTargetType(rollState, "AtkSab")
+end
+
+local function canTargetPlayerWarzone(rollState, context)
+    if context and context.canTargetPlayerWarzone then
+        return context.canTargetPlayerWarzone(rollState)
+    end
+
+    return hasTargetType(rollState, "WZPlayer") or hasTargetType(rollState, "InfTac")
+end
+
+local function isPlayerGridCard(card)
+    return card
+        and card.location
+        and card.location.kind == "grid"
+        and card.location.rowId == "PlayerRow"
+end
+
+function targetingrules.rollStateTargetsCard(rollState, cardIndex, context)
     return rollState
-        and (hasTargetType(rollState, "Atk") or hasTargetType(rollState, "AtkSab"))
+        and canTargetEnemyCard(rollState, context)
         and rollState.targetCard
         and rollState.targetCard.kind == "card"
         and rollState.targetCardIndex
@@ -47,12 +70,12 @@ function targetingrules.rollStateTargetsTopSlot(rollState, slotId, context)
             and context.activeIntel
             and targetCard.objectiveId == context.activeIntel.id
     elseif slotId == "warzone" then
-        return (hasTargetType(rollState, "WZOpp") or hasTargetType(rollState, "WZPlayer"))
+        return (hasTargetType(rollState, "WZOpp") or canTargetPlayerWarzone(rollState, context))
             and targetCard.kind == "warzone"
             and context.activeWarzone
             and targetCard.warzoneId == context.activeWarzone.id
     elseif slotId == "poi" then
-        return (hasTargetType(rollState, "WZOpp") or hasTargetType(rollState, "WZPlayer"))
+        return (hasTargetType(rollState, "WZOpp") or canTargetPlayerWarzone(rollState, context))
             and targetCard.kind == "warzone"
             and context.activePoi
             and targetCard.warzoneId == context.activePoi.id
@@ -73,11 +96,19 @@ function targetingrules.shouldBracketCard(cardIndex, context)
     if context.hoveredTopSlotId then
         local hoveredTopSlotRollState = displayStates[context.hoveredTopSlotId]
 
-        if targetingrules.rollStateTargetsCard(hoveredTopSlotRollState, cardIndex) then
+        if targetingrules.rollStateTargetsCard(hoveredTopSlotRollState, cardIndex, context) then
             return true
         end
 
         local cardRollState = context.getCardRollState and context.getCardRollState(cardIndex) or nil
+        local card = context.cards and context.cards[cardIndex] or nil
+
+        if context.hoveredTopSlotId == "champion"
+            and context.activeChampion
+            and isPlayerGridCard(card)
+            and canTargetEnemyCard(cardRollState, context) then
+            return true
+        end
 
         if targetingrules.rollStateTargetsTopSlot(cardRollState, context.hoveredTopSlotId, context) then
             return true
@@ -94,7 +125,7 @@ function targetingrules.shouldBracketCard(cardIndex, context)
         local hoveredRollState = context.getCardRollState and context.getCardRollState(context.hoveredCardIndex) or nil
 
         if hoveredCard.location.rowId ~= "PlayerRow"
-            and targetingrules.rollStateTargetsCard(hoveredRollState, cardIndex) then
+            and targetingrules.rollStateTargetsCard(hoveredRollState, cardIndex, context) then
             return true
         end
 
@@ -106,7 +137,7 @@ function targetingrules.shouldBracketCard(cardIndex, context)
                 and card.location
                 and card.location.kind == "grid"
                 and card.location.rowId == "OppRow"
-                and targetingrules.rollStateTargetsCard(rollState, context.hoveredCardIndex)
+                and targetingrules.rollStateTargetsCard(rollState, context.hoveredCardIndex, context)
         end
     end
 
@@ -132,6 +163,21 @@ function targetingrules.shouldBracketTopSlot(slotId, context)
         end
     end
 
+    if slotId == "champion" and context.activeChampion then
+        local selectedCard = context.cards
+            and context.selectedAttackerCardIndex
+            and context.cards[context.selectedAttackerCardIndex]
+            or nil
+        local selectedRollState = context.getCardRollState
+            and context.selectedAttackerCardIndex
+            and context.getCardRollState(context.selectedAttackerCardIndex)
+            or nil
+
+        if isPlayerGridCard(selectedCard) and canTargetEnemyCard(selectedRollState, context) then
+            return true
+        end
+    end
+
     if context.hoveredCardIndex then
         local hoveredCard = context.cards and context.cards[context.hoveredCardIndex] or nil
 
@@ -139,16 +185,25 @@ function targetingrules.shouldBracketTopSlot(slotId, context)
             return false
         end
 
+        local hoveredRollState = context.getCardRollState and context.getCardRollState(context.hoveredCardIndex) or nil
+
+        if slotId == "champion"
+            and context.activeChampion
+            and isPlayerGridCard(hoveredCard)
+            and canTargetEnemyCard(hoveredRollState, context) then
+            return true
+        end
+
         if hoveredCard.location.rowId ~= "PlayerRow"
             and targetingrules.rollStateTargetsTopSlot(
-                context.getCardRollState and context.getCardRollState(context.hoveredCardIndex) or nil,
+                hoveredRollState,
                 slotId,
                 context
             ) then
             return true
         end
 
-        if targetingrules.rollStateTargetsCard(displayStates[slotId], context.hoveredCardIndex) then
+        if targetingrules.rollStateTargetsCard(displayStates[slotId], context.hoveredCardIndex, context) then
             return true
         end
     end

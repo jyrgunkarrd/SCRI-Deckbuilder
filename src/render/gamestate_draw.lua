@@ -85,6 +85,7 @@ function gamestatedraw.draw(ctx)
         ctx.envdraw.drawRerollButton(ctx.playerJacl, ctx.engageRerollCount, ctx.engageRerollCount > 0)
     end
 
+    ctx.envdraw.drawSyntacBox(ctx.playerJacl, ctx.syntacCount)
     ctx.envdraw.drawBottomLeftPanel(ctx.playerJacl, ctx.resourcerules.getResourceCounts())
     ctx.envdraw.drawPlayerHand()
 

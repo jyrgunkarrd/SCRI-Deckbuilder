@@ -74,6 +74,7 @@ local gameState = {
     waitingForStartGeneration = false,
     championPlayState = championplayrules.createState(),
     engageRerollCount = 2,
+    syntacCount = 0,
     isResourceExchangeModalOpen = false,
     isJaclDeckModalOpen = false,
     jaclDeckModalScroll = {
@@ -814,6 +815,9 @@ local function getEngageContext()
         dealDamageToChampion = dealDamageToChampion,
         dealDamageToCard = dealDamageToCard,
         beginInfiltrationEffect = beginInfiltrationEffect,
+        addSyntac = function(amount)
+            gameState.syntacCount = math.min(10, math.max(0, (gameState.syntacCount or 0) + math.max(0, tonumber(amount) or 0)))
+        end,
         setSelectedAttackerCardIndex = function(cardIndex)
             gameState.selectedAttackerCardIndex = cardIndex
         end,
@@ -900,11 +904,16 @@ local function tryUseEngageReroll(mouseX, mouseY)
     return engagerules.tryUseReroll(mouseX, mouseY, getEngageContext())
 end
 
+local function tryCancelSelectedEngageAttacker()
+    return engagerules.tryCancelSelectedAttacker(getEngageContext())
+end
+
 getTargetingContext = function()
     return {
         cards = gameState.cards,
         hoveredCardIndex = gameState.hoveredCardIndex,
         hoveredTopSlotId = gameState.hoveredTopSlotId,
+        selectedAttackerCardIndex = gameState.selectedAttackerCardIndex,
         currentPhase = turnrules.getCurrentPhase(),
         displayStates = warrules.getDisplayStates(),
         activePrimaryObjective = gameState.activePrimaryObjective,
@@ -912,6 +921,8 @@ getTargetingContext = function()
         activeWarzone = gameState.activeWarzone,
         activePoi = gameState.activePoi,
         getCardRollState = warrules.getCardRollState,
+        canTargetEnemyCard = warrules.canTargetEnemyCard,
+        canTargetPlayerWarzone = warrules.canTargetPlayerWarzone,
     }
 end
 
@@ -1035,6 +1046,7 @@ local function getInputControllerDeps()
         normalizeSetupCardSlots = normalizeSetupCardSlots,
         payCardCosts = payCardCosts,
         primeJaclSpecial = primeJaclSpecial,
+        tryCancelSelectedEngageAttacker = tryCancelSelectedEngageAttacker,
         tryResolveEngageClick = tryResolveEngageClick,
         tryUseEngageReroll = tryUseEngageReroll,
         updateHoveredCard = updateHoveredCard,
@@ -1071,6 +1083,7 @@ function love.load()
     notifications.reset()
     championplayrules.resetState(gameState.championPlayState)
     gameState.engageRerollCount = 2
+    gameState.syntacCount = 0
     gameState.isResourceExchangeModalOpen = false
     gameState.isJaclDeckModalOpen = false
     gameState.jaclDeckModalScroll.deck = 0
@@ -1252,6 +1265,7 @@ function love.draw()
         topSlotExpansion = gameState.topSlotExpansion,
         playerJacl = gameState.playerJacl,
         engageRerollCount = gameState.engageRerollCount,
+        syntacCount = gameState.syntacCount,
         cards = gameState.cards,
         hoveredCardIndex = gameState.hoveredCardIndex,
         draggedCardIndex = gameState.draggedCardIndex,

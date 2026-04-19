@@ -46,6 +46,10 @@ local PANEL_LABEL_HEIGHT = 44
 local PANEL_LABEL_PADDING = 14
 local REROLL_BUTTON_HEIGHT = 38
 local REROLL_BUTTON_GAP = 12
+local SYNTAC_BOX_LABEL_PADDING = 14
+local SYNTAC_BOX_TRACKER_PADDING = 14
+local SYNTAC_BOX_TRACKER_GAP = 16
+local SYNTAC_BOX_MAX_PIPS = 10
 local RESOURCE_TRACKER_MARGIN_X = 28
 local RESOURCE_TRACKER_VERTICAL_PADDING = 16
 local RESOURCE_TRACKER_COLUMN_WIDTH = 128
@@ -2031,6 +2035,17 @@ function envdraw.drawPlayerHand()
     love.graphics.setColor(1, 1, 1, 1)
 end
 
+local function getHandSlotVisualBounds(slot)
+    local visualX = slot.x + ((slot.width - HAND_SLOT_VISUAL_WIDTH) / 2) + HAND_SLOT_VISUAL_OFFSET_X
+
+    return {
+        x = visualX,
+        y = slot.y,
+        width = HAND_SLOT_VISUAL_WIDTH,
+        height = slot.height,
+    }
+end
+
 local function buildBottomLeftPanelLayout()
     local handLayout = envdraw.getPlayerHandLayout()
     local firstHandSlot = handLayout.slots[1]
@@ -2106,6 +2121,33 @@ function envdraw.getRerollButtonLayout(jaclDefinition)
     }
 end
 
+function envdraw.getSyntacBoxLayout(jaclDefinition)
+    local handLayout = envdraw.getPlayerHandLayout()
+    local firstHandSlot = handLayout.slots[1]
+    local lastHandSlot = handLayout.slots[#handLayout.slots]
+    local rerollLayout = envdraw.getRerollButtonLayout(jaclDefinition)
+
+    if not firstHandSlot or not lastHandSlot then
+        return {
+            x = rerollLayout.x,
+            y = rerollLayout.y,
+            width = rerollLayout.width,
+            height = rerollLayout.height,
+        }
+    end
+
+    local firstVisualBounds = getHandSlotVisualBounds(firstHandSlot)
+    local lastVisualBounds = getHandSlotVisualBounds(lastHandSlot)
+    local rightEdge = lastVisualBounds.x + lastVisualBounds.width
+
+    return {
+        x = firstVisualBounds.x,
+        y = rerollLayout.y,
+        width = rightEdge - firstVisualBounds.x,
+        height = rerollLayout.height,
+    }
+end
+
 function envdraw.drawRerollButton(jaclDefinition, rerollCount, enabled)
     local layout = envdraw.getRerollButtonLayout(jaclDefinition)
     local labelFont = getFont(JACL_LABEL_FONT_PATH, 16)
@@ -2131,6 +2173,64 @@ function envdraw.drawRerollButton(jaclDefinition, rerollCount, enabled)
     love.graphics.setColor(0.93, 0.93, 0.95, textAlpha)
     love.graphics.print(labelText, startX, textY)
     love.graphics.print(valueText, startX + labelWidth + gap, textY)
+    love.graphics.setColor(1, 1, 1, 1)
+end
+
+function envdraw.drawSyntacBox(jaclDefinition, syntacCount)
+    local layout = envdraw.getSyntacBoxLayout(jaclDefinition)
+    local labelFont = getFont(JACL_LABEL_FONT_PATH, 16)
+    local labelText = "SynTac"
+    local pipCount = math.min(SYNTAC_BOX_MAX_PIPS, math.max(0, math.floor(tonumber(syntacCount) or 0)))
+    local maxCount = SYNTAC_BOX_MAX_PIPS
+    local textX = snap(layout.x + SYNTAC_BOX_LABEL_PADDING)
+    local textY = snap(layout.y + ((layout.height - labelFont:getHeight()) / 2))
+
+    love.graphics.setColor(0.12, 0.13, 0.16, 0.92)
+    love.graphics.rectangle("fill", layout.x, layout.y, layout.width, layout.height)
+    love.graphics.setColor(0.82, 0.85, 0.89, 0.78)
+    love.graphics.rectangle("line", layout.x, layout.y, layout.width, layout.height)
+
+    love.graphics.setFont(labelFont)
+    love.graphics.setColor(0.93, 0.93, 0.95, 1)
+    love.graphics.print(labelText, textX, textY)
+
+    local trackerX = snap(textX + labelFont:getWidth(labelText) + SYNTAC_BOX_TRACKER_GAP)
+    local trackerRight = snap(layout.x + layout.width - SYNTAC_BOX_TRACKER_PADDING)
+    local trackerWidth = math.max(1, trackerRight - trackerX)
+    local trackerHeight = math.max(1, layout.height - 8)
+    local columnCount = maxCount
+    local rowCount = math.max(1, math.ceil(maxCount / columnCount))
+    local pipGap = math.max(1, snap(layout.height * 0.06))
+    local pipSizeByWidth = (trackerWidth - ((columnCount - 1) * pipGap)) / math.max(1, columnCount)
+    local pipSizeByHeight = (trackerHeight - ((rowCount - 1) * pipGap)) / rowCount
+    local pipSize = math.max(1, snap(math.min(pipSizeByWidth, pipSizeByHeight, math.max(1, layout.height * 0.34))))
+    local totalGridWidth = (columnCount * pipSize) + ((columnCount - 1) * pipGap)
+    local totalGridHeight = (rowCount * pipSize) + ((rowCount - 1) * pipGap)
+    local startX = snap(trackerRight - totalGridWidth)
+    local startY = snap(layout.y + ((layout.height - totalGridHeight) / 2))
+
+    love.graphics.setColor(0.58, 0.9, 0.96, 0.45)
+
+    for pipIndex = 0, maxCount - 1 do
+        local row = math.floor(pipIndex / columnCount)
+        local column = pipIndex % columnCount
+        local pipX = startX + (column * (pipSize + pipGap))
+        local pipY = startY + (row * (pipSize + pipGap))
+
+        love.graphics.rectangle("line", pipX, pipY, pipSize, pipSize)
+    end
+
+    love.graphics.setColor(0.58, 0.9, 0.96, 1)
+
+    for pipIndex = 0, pipCount - 1 do
+        local row = math.floor(pipIndex / columnCount)
+        local column = pipIndex % columnCount
+        local pipX = startX + (column * (pipSize + pipGap))
+        local pipY = startY + (row * (pipSize + pipGap))
+
+        love.graphics.rectangle("fill", pipX, pipY, pipSize, pipSize)
+    end
+
     love.graphics.setColor(1, 1, 1, 1)
 end
 

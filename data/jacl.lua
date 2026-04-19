@@ -7,7 +7,7 @@ local jacl = {
     
         {
             id = "JACL001",
-            name = "JACL-S3D2-AEGIS",
+            name = "JACL-S3D2-VALSHAMR",
             deckId = "DCK001",
             special = "SPC0001",
             method = {

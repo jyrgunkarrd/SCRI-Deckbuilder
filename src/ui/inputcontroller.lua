@@ -73,6 +73,10 @@ function inputcontroller.mousepressed(gameState, deps, x, y, button)
         return
     end
 
+    if button == 2 and deps.tryCancelSelectedEngageAttacker() then
+        return
+    end
+
     if button == 2 and hoveredPlayerRollBadgeCardIndex then
         deps.warrules.toggleCardLock(hoveredPlayerRollBadgeCardIndex)
         return

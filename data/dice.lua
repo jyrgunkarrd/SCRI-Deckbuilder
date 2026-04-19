@@ -127,6 +127,23 @@ local dice = {
         targ = "Div",
     },
 
+    --- Basic SynTac
+
+    {
+        id = "TAC1",
+        type = "SynTac",
+        value = 1,
+        targ = "Tac",
+    },
+
+    {
+        id = "TAC2",
+        type = "SynTac",
+        value = 2,
+        targ = "Tac",
+    },
+
+
     --- Basic Sabotage ---
 
     {
@@ -134,6 +151,31 @@ local dice = {
         type = "Detonator",
         value = 2,
         targ = "Sab",
+    },
+
+    --- Basic Influence ---
+
+    {
+        id = "BINF1",
+        type = "BlackTap",
+        value = 1,
+        targ = "WZPlayer",
+    },
+
+    {
+        id = "BINF2",
+        type = "BlackTap",
+        value = 2,
+        targ = "WZPlayer",
+    },
+
+    --- Advanced Influence ---
+
+    {
+        id = "INFTAC1",
+        type = "TacAndInf",
+        value = 1,
+        targ = "InfTac",
     },
 
     --- Infiltration ---

@@ -188,6 +188,20 @@ local troops = {
         D6 = "BLK",
     },
 
+    {
+        id = "AEGLXSKY",
+        type = "troop",
+        name = "Lex Skydiver",
+        health = 2,
+        max = 2,
+        D1 = "TAC2",
+        D2 = "BINF2",
+        D3 = "INFTAC1",
+        D4 = "INFTAC1",
+        D5 = "BLK",
+        D6 = "BLK",
+    },
+
 
     --- === Token Troops === ---
 

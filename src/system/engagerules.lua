@@ -48,6 +48,18 @@ local function resolveImmediateCardAction(ctx, cardIndex, action)
     return true
 end
 
+local function applyAttackSideEffects(ctx, rollState)
+    if ctx.warrules.hasTargetType(rollState, "AtkSab") and ctx.activePrimaryObjective then
+        ctx.addObjectiveProgress(ctx.activePrimaryObjective, -(rollState.damageValue or 0), "objective")
+    end
+end
+
+local function applyPlayerWarzoneSideEffects(ctx, rollState)
+    if ctx.warrules.hasTargetType(rollState, "InfTac") then
+        ctx.addSyntac(rollState.damageValue or 0)
+    end
+end
+
 function engagerules.tryResolveClick(hoveredTopSlotId, ctx)
     if not engagerules.isEngagePhase(ctx) then
         return false
@@ -118,23 +130,26 @@ function engagerules.tryResolveClick(hoveredTopSlotId, ctx)
             end
         end
 
-        if ctx.warrules.hasTargetType(attackerRollState, "WZPlayer") then
+        if ctx.warrules.canTargetPlayerWarzone(attackerRollState) then
             if hoveredTopSlotId == "warzone" and ctx.activeWarzone then
                 resolveSelectedAttack(ctx, function()
                     ctx.addWarzoneControl(ctx.activeWarzone, attackerRollState.damageValue or 0, "warzone")
+                    applyPlayerWarzoneSideEffects(ctx, attackerRollState)
                     return true
                 end)
             elseif hoveredTopSlotId == "poi" and ctx.activePoi then
                 resolveSelectedAttack(ctx, function()
                     ctx.addWarzoneControl(ctx.activePoi, attackerRollState.damageValue or 0, "poi")
+                    applyPlayerWarzoneSideEffects(ctx, attackerRollState)
                     return true
                 end)
             end
         end
 
-        if hoveredTopSlotId == "champion" and ctx.warrules.hasTargetType(attackerRollState, "Atk") then
+        if hoveredTopSlotId == "champion" and ctx.warrules.canTargetEnemyCard(attackerRollState) then
             resolveSelectedAttack(ctx, function()
                 ctx.dealDamageToChampion(attackerRollState.damageValue or 0)
+                applyAttackSideEffects(ctx, attackerRollState)
                 return true
             end)
             return true
@@ -146,18 +161,14 @@ function engagerules.tryResolveClick(hoveredTopSlotId, ctx)
             if targetCard
                 and targetCard.location.kind == "grid"
                 and targetCard.location.rowId == "OppRow"
-                and (ctx.warrules.hasTargetType(attackerRollState, "Atk") or ctx.warrules.hasTargetType(attackerRollState, "AtkSab")) then
+                and ctx.warrules.canTargetEnemyCard(attackerRollState) then
                 local attackerDefinition = cardregistry.getCard(attackerCard.setName, attackerCard.cardId)
                 local targetDefinition = cardregistry.getCard(targetCard.setName, targetCard.cardId)
 
                 if ctx.warrules.canAttackTarget(attackerDefinition, targetDefinition) then
                     resolveSelectedAttack(ctx, function()
                         ctx.dealDamageToCard(targetCard, attackerRollState.damageValue or 0)
-
-                        if ctx.warrules.hasTargetType(attackerRollState, "AtkSab") and ctx.activePrimaryObjective then
-                            ctx.addObjectiveProgress(ctx.activePrimaryObjective, -(attackerRollState.damageValue or 0), "objective")
-                        end
-
+                        applyAttackSideEffects(ctx, attackerRollState)
                         return true
                     end)
                 end
@@ -190,6 +201,15 @@ function engagerules.tryResolveClick(hoveredTopSlotId, ctx)
                 return true
             end
 
+            if hoveredRollState and ctx.warrules.hasTargetType(hoveredRollState, "Tac") then
+                resolveImmediateCardAction(ctx, ctx.hoveredCardIndex, function()
+                    ctx.addSyntac(hoveredRollState.damageValue or 0)
+                    return true
+                end)
+
+                return true
+            end
+
             ctx.setSelectedAttackerCardIndex(ctx.hoveredCardIndex)
             ctx.setExpandedGridCardIndex(nil)
             ctx.setExpandedTopSlotId(nil)
@@ -198,6 +218,15 @@ function engagerules.tryResolveClick(hoveredTopSlotId, ctx)
     end
 
     return false
+end
+
+function engagerules.tryCancelSelectedAttacker(ctx)
+    if not engagerules.isEngagePhase(ctx) or not ctx.selectedAttackerCardIndex then
+        return false
+    end
+
+    clearSelectedAttacker(ctx)
+    return true
 end
 
 function engagerules.getHoveredPlayerRollBadgeCardIndex(mouseX, mouseY, ctx)
