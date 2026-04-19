@@ -220,8 +220,15 @@ function gamestatedraw.draw(ctx)
         local mouseX, mouseY = love.mouse.getPosition()
         ctx.carddraw.drawKeywordTooltip(ctx.hoveredKeyword, mouseX, mouseY)
     elseif ctx.hoveredJaclSpecialDefinition then
-        local mouseX, mouseY = love.mouse.getPosition()
-        ctx.envdraw.drawJaclSpecialTooltip(ctx.hoveredJaclSpecialDefinition, ctx.hoveredJaclSpecialPreviewCard, mouseX, mouseY)
+        local jaclLayout = ctx.envdraw.getBottomLeftPanelLayout(ctx.playerJacl)
+        ctx.envdraw.drawJaclSpecialTooltip(
+            ctx.hoveredJaclSpecialDefinition,
+            ctx.hoveredJaclSpecialPreviewCard,
+            jaclLayout.panelX,
+            jaclLayout.panelY,
+            jaclLayout.panelSize,
+            jaclLayout.panelSize
+        )
     end
 
     if ctx.primedJaclSpecial and ctx.primedJaclSpecial.resourceName then

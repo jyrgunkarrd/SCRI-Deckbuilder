@@ -105,6 +105,7 @@ local SPECIAL_TOOLTIP_BODY_SIZE = 12
 local SPECIAL_TOOLTIP_OFFSET_X = 18
 local SPECIAL_TOOLTIP_OFFSET_Y = 18
 local SPECIAL_TOOLTIP_PREVIEW_GAP = 16
+local SPECIAL_TOOLTIP_BACKDROP_PADDING = 8
 local SETUP_MODAL_MARGIN = 24
 local SETUP_MODAL_PADDING = 18
 local SETUP_MODAL_SLOT_GAP = 20
@@ -2411,7 +2412,7 @@ function envdraw.drawFloatingMethodBadge(resourceName, centerX, centerY)
     love.graphics.setColor(1, 1, 1, 1)
 end
 
-function envdraw.drawJaclSpecialTooltip(specialDefinition, previewCardDefinition, mouseX, mouseY)
+function envdraw.drawJaclSpecialTooltip(specialDefinition, previewCardDefinition, anchorX, anchorY, anchorWidth, anchorHeight)
     if not specialDefinition then
         return
     end
@@ -2419,28 +2420,47 @@ function envdraw.drawJaclSpecialTooltip(specialDefinition, previewCardDefinition
     local previousFont = love.graphics.getFont()
     local titleFont = getFont(JACL_LABEL_FONT_PATH, SPECIAL_TOOLTIP_TITLE_SIZE)
     local bodyFont = getFont(JACL_LABEL_FONT_PATH, SPECIAL_TOOLTIP_BODY_SIZE)
-    local textWidth = SPECIAL_TOOLTIP_WIDTH - (SPECIAL_TOOLTIP_PADDING * 2)
-    local _, wrappedBodyLines = bodyFont:getWrap(specialDefinition.text or "", textWidth)
-    local titleHeight = titleFont:getHeight()
-    local bodyHeight = math.max(bodyFont:getHeight(), #wrappedBodyLines * bodyFont:getHeight())
-    local tooltipHeight = (SPECIAL_TOOLTIP_PADDING * 2) + titleHeight + 6 + bodyHeight
     local previewWidth, previewHeight = 0, 0
 
     if previewCardDefinition then
         previewWidth, previewHeight = carddraw.getExpandedCardSize()
     end
 
-    local totalWidth = math.max(SPECIAL_TOOLTIP_WIDTH, previewWidth)
+    local tooltipWidth = previewWidth > 0 and previewWidth or SPECIAL_TOOLTIP_WIDTH
+    local textWidth = tooltipWidth - (SPECIAL_TOOLTIP_PADDING * 2)
+    local _, wrappedBodyLines = bodyFont:getWrap(specialDefinition.text or "", textWidth)
+    local titleHeight = titleFont:getHeight()
+    local bodyHeight = math.max(bodyFont:getHeight(), #wrappedBodyLines * bodyFont:getHeight())
+    local tooltipHeight = (SPECIAL_TOOLTIP_PADDING * 2) + titleHeight + 6 + bodyHeight
+    local totalWidth = tooltipWidth
     local totalHeight = tooltipHeight + (previewCardDefinition and (SPECIAL_TOOLTIP_PREVIEW_GAP + previewHeight) or 0)
     local windowWidth, windowHeight = love.graphics.getDimensions()
-    local boxX = snap(math.min(mouseX + SPECIAL_TOOLTIP_OFFSET_X, windowWidth - totalWidth - 8))
-    local boxY = snap(math.min(mouseY + SPECIAL_TOOLTIP_OFFSET_Y, windowHeight - totalHeight - 8))
+    local gap = SPECIAL_TOOLTIP_OFFSET_X
+    local rightX = (anchorX or 0) + (anchorWidth or 0) + gap
+    local leftX = (anchorX or 0) - gap - totalWidth
+    local boxX = rightX + totalWidth <= windowWidth - 8 and rightX or leftX
+    local boxY = anchorY or 0
     local tooltipY = boxY + (previewCardDefinition and (previewHeight + SPECIAL_TOOLTIP_PREVIEW_GAP) or 0)
 
+    boxX = snap(math.max(8, math.min(boxX, windowWidth - totalWidth - 8)))
+    boxY = snap(math.max(8, math.min(boxY, windowHeight - totalHeight - 8)))
+    tooltipY = boxY + (previewCardDefinition and (previewHeight + SPECIAL_TOOLTIP_PREVIEW_GAP) or 0)
+
+    love.graphics.setColor(0.02, 0.025, 0.03, 0.42)
+    love.graphics.rectangle(
+        "fill",
+        boxX - SPECIAL_TOOLTIP_BACKDROP_PADDING,
+        boxY - SPECIAL_TOOLTIP_BACKDROP_PADDING,
+        totalWidth + (SPECIAL_TOOLTIP_BACKDROP_PADDING * 2),
+        totalHeight + (SPECIAL_TOOLTIP_BACKDROP_PADDING * 2),
+        8,
+        8
+    )
+
     love.graphics.setColor(0.05, 0.05, 0.06, 0.96)
-    love.graphics.rectangle("fill", boxX, tooltipY, SPECIAL_TOOLTIP_WIDTH, tooltipHeight, 6, 6)
+    love.graphics.rectangle("fill", boxX, tooltipY, tooltipWidth, tooltipHeight, 6, 6)
     love.graphics.setColor(0.82, 0.85, 0.89, 0.82)
-    love.graphics.rectangle("line", boxX, tooltipY, SPECIAL_TOOLTIP_WIDTH, tooltipHeight, 6, 6)
+    love.graphics.rectangle("line", boxX, tooltipY, tooltipWidth, tooltipHeight, 6, 6)
 
     love.graphics.setFont(titleFont)
     love.graphics.setColor(0.95, 0.96, 0.98, 1)
@@ -2490,6 +2510,17 @@ function envdraw.drawTomeSpawnTooltip(previewCardDefinition, anchorX, anchorY, a
     boxX = snap(math.max(8, math.min(boxX, windowWidth - totalWidth - 8)))
     boxY = snap(math.max(8, math.min(boxY, windowHeight - totalHeight - 8)))
     bubbleY = boxY + previewHeight + SPECIAL_TOOLTIP_PREVIEW_GAP
+
+    love.graphics.setColor(0.02, 0.025, 0.03, 0.42)
+    love.graphics.rectangle(
+        "fill",
+        boxX - SPECIAL_TOOLTIP_BACKDROP_PADDING,
+        boxY - SPECIAL_TOOLTIP_BACKDROP_PADDING,
+        totalWidth + (SPECIAL_TOOLTIP_BACKDROP_PADDING * 2),
+        totalHeight + (SPECIAL_TOOLTIP_BACKDROP_PADDING * 2),
+        8,
+        8
+    )
 
     carddraw.drawCardState(previewCardDefinition.setName, previewCardDefinition.id, boxX, boxY, 1, {
         showBadgesInTextbox = true,
