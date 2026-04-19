@@ -205,6 +205,17 @@ function gamestatedraw.draw(ctx)
         end
     elseif ctx.isResourceExchangeModalOpen then
         ctx.envdraw.drawResourceExchangeModal(ctx.resourcerules.getResourceCounts())
+    elseif ctx.hoveredTomeSpawnPreviewCard then
+        local hoveredCard = ctx.hoveredCardIndex and ctx.cards[ctx.hoveredCardIndex] or nil
+
+        if hoveredCard then
+            local drawX, drawY, expansionProgress, renderOptions = ctx.getCardDrawPosition(hoveredCard, ctx.hoveredCardIndex)
+            local cardWidth, collapsedHeight = ctx.carddraw.getCardSize(renderOptions)
+            local _, expandedHeight = ctx.carddraw.getExpandedCardSize(renderOptions)
+            local cardHeight = collapsedHeight + ((expandedHeight - collapsedHeight) * (expansionProgress or 0))
+
+            ctx.envdraw.drawTomeSpawnTooltip(ctx.hoveredTomeSpawnPreviewCard, drawX, drawY, cardWidth, cardHeight)
+        end
     elseif ctx.hoveredKeyword then
         local mouseX, mouseY = love.mouse.getPosition()
         ctx.carddraw.drawKeywordTooltip(ctx.hoveredKeyword, mouseX, mouseY)
@@ -216,6 +227,10 @@ function gamestatedraw.draw(ctx)
     if ctx.primedJaclSpecial and ctx.primedJaclSpecial.resourceName then
         local mouseX, mouseY = love.mouse.getPosition()
         ctx.envdraw.drawFloatingMethodBadge(ctx.primedJaclSpecial.resourceName, mouseX + 16, mouseY + 16)
+    end
+
+    if ctx.fullArtImage then
+        ctx.envdraw.drawFullArtOverlay(ctx.fullArtImage)
     end
 
     ctx.notifications.draw()

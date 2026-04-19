@@ -28,6 +28,13 @@ local keywords = {
             name = "Savior",
             text = "When this card prevents a friendly unit from being defeated, it does not exhaust and may use that die face again.",
         },
+
+        {
+            id = "KWSTRAT",
+            name = "Strategist",
+            text = "Strategy cards may be played by dragging them onto this card. This card exhausts and its die face is cleared.",
+
+        },
 }
 
 return keywords

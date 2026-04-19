@@ -18,6 +18,7 @@ local intelTargetPreview = nil
 local warzoneTargetPreview = nil
 local FLYING_KEYWORD_ID = "KWFLY"
 local SAVIOR_KEYWORD_ID = "KWSAV"
+local TOME_CARD_TYPE = "tome"
 local ENEMY_CARD_TARGET_TYPES = { "Atk", "AtkSab" }
 local PLAYER_WARZONE_TARGET_TYPES = { "WZPlayer", "InfTac" }
 
@@ -26,6 +27,10 @@ local function hasFlyingKeyword(definition)
 end
 
 local function canAttackTarget(attackerDefinition, targetDefinition)
+    if targetDefinition and targetDefinition.type == TOME_CARD_TYPE then
+        return false
+    end
+
     if hasFlyingKeyword(targetDefinition) and not hasFlyingKeyword(attackerDefinition) then
         return false
     end
@@ -104,6 +109,7 @@ local function buildRollState(entityKey, definition, faceIndices, isEnemy, prese
     local damageValue = math.max(0, tonumber(selectedFaceDefinition and selectedFaceDefinition.value) or 0)
     local targetType = selectedFaceDefinition and selectedFaceDefinition.targ or nil
     local cardgen = selectedFaceDefinition and selectedFaceDefinition.cardgen or nil
+    local pain = (tonumber(selectedFaceDefinition and selectedFaceDefinition.pain) or 0) > 0
 
     if isEnemy
         and selectedFaceDefinition
@@ -168,6 +174,7 @@ local function buildRollState(entityKey, definition, faceIndices, isEnemy, prese
         targetCard = targetCard,
         targetCardIndex = targetCardIndex,
         cardgen = cardgen,
+        pain = pain,
         exhausted = preserveState and preserveState.exhausted or false,
         locked = preserveState and preserveState.locked or false,
     }
@@ -242,13 +249,27 @@ function warrules.consumeCardAttack(cardIndex)
     local rollState = warRollDisplayStates[entityKey]
 
     if not rollState then
-        return
+        return false
     end
 
     rollState.faceIndex = nil
     rollState.pulseScale = 1
     rollState.exhausted = true
     rollState.locked = false
+    return true
+end
+
+function warrules.exhaustCard(cardIndex)
+    local entityKey = warrules.getCardEntityKey(cardIndex)
+    local rollState = warRollDisplayStates[entityKey]
+
+    if not rollState then
+        return false
+    end
+
+    rollState.exhausted = true
+    rollState.locked = false
+    return true
 end
 
 local function cardCanTriggerSavior(cardIndex, cards)
@@ -356,6 +377,12 @@ function warrules.redirectIncomingAttacks(cards, fromCardIndex, toCardIndex)
         or targetCard.location.rowId ~= "PlayerRow"
         or targetCard.destroyed
         or targetCard.destroying then
+        return 0
+    end
+
+    local targetDefinition = cardregistry.getCard(targetCard.setName, targetCard.cardId)
+
+    if targetDefinition and targetDefinition.type == TOME_CARD_TYPE then
         return 0
     end
 
@@ -657,6 +684,7 @@ function warrules.beginRetaliatePhase(topSlotTargets, cards)
                 targetCard = rollState.targetCard,
                 damageValue = rollState.damageValue,
                 cardgen = rollState.cardgen,
+                pain = rollState.pain,
                 isTopSlot = true,
             }
         end
@@ -701,6 +729,7 @@ function warrules.beginRetaliatePhase(topSlotTargets, cards)
                 targetCard = rollState.targetCard,
                 damageValue = rollState.damageValue,
                 cardgen = rollState.cardgen,
+                pain = rollState.pain,
                 isTopSlot = false,
             }
         end
@@ -809,7 +838,7 @@ function warrules.beginPhase(topSlotTargets, cards, primaryObjectiveDefinition, 
         for _, rowCard in ipairs(rowCards) do
             local faceIndices = carddraw.getAssignedFaceIndices(rowCard.definition)
 
-            if rowId == "PlayerRow" then
+            if rowId == "PlayerRow" and rowCard.definition.type ~= TOME_CARD_TYPE then
                 playerAttackTargets[#playerAttackTargets + 1] = {
                     cardIndex = rowCard.cardIndex,
                     setName = rowCard.setName,

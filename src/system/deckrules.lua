@@ -42,6 +42,18 @@ local function createDeckCard(cardDefinition, instanceIndex, location)
     }, cardDefinition)
 end
 
+local function createDetachedDeckCard(deck, cardDefinition, location)
+    local instanceIndex = ((deck and deck.createdCardCount) or 0) + 1
+
+    if deck then
+        deck.createdCardCount = instanceIndex
+    end
+
+    local card = createDeckCard(cardDefinition, instanceIndex, location)
+    card.deckOwner = deck and deck.owner or nil
+    return card
+end
+
 local function copyCardInstance(card, location)
     return {
         instanceId = card.instanceId,
@@ -72,6 +84,7 @@ function deckrules.buildDeck(deckId)
         cards = {},
         discard = {},
         missingCards = {},
+        createdCardCount = 0,
     }
 
     for _, deckEntry in ipairs(deckDefinition.cards or {}) do
@@ -79,7 +92,8 @@ function deckrules.buildDeck(deckId)
 
         if cardDefinition then
             for quantityIndex = 1, deckEntry.quantity or 0 do
-                builtDeck.cards[#builtDeck.cards + 1] = createDeckCard(cardDefinition, #builtDeck.cards + 1, {
+                builtDeck.createdCardCount = builtDeck.createdCardCount + 1
+                builtDeck.cards[#builtDeck.cards + 1] = createDeckCard(cardDefinition, builtDeck.createdCardCount, {
                     kind = "deck",
                 })
             end
@@ -135,14 +149,58 @@ local function ensureDeckHasCards(deck)
     return deckrules.reshuffleDiscardIntoDeck(deck)
 end
 
-function deckrules.assignCardsToHand(deck, handSize)
+function deckrules.drawSpecificCardToHand(deck, cardId, slotIndex)
+    if not deck or not cardId or not slotIndex then
+        return nil
+    end
+
+    for cardIndex, card in ipairs(deck.cards or {}) do
+        if card.cardId == cardId then
+            local drawnCard = table.remove(deck.cards, cardIndex)
+            return copyCardInstance(drawnCard, {
+                kind = "hand",
+                slotIndex = slotIndex,
+            })
+        end
+    end
+
+    local cardDefinition = cardregistry.getCardById(cardId)
+
+    if not cardDefinition then
+        deck.missingCards = deck.missingCards or {}
+        deck.missingCards[#deck.missingCards + 1] = {
+            cardId = cardId,
+            quantity = 1,
+        }
+        return nil
+    end
+
+    return createDetachedDeckCard(deck, cardDefinition, {
+        kind = "hand",
+        slotIndex = slotIndex,
+    })
+end
+
+function deckrules.assignCardsToHand(deck, handSize, options)
     local handCards = {}
 
     if not deck then
         return handCards
     end
 
-    for slotIndex = 1, handSize do
+    local startingSlotIndex = 1
+    local firstCardId = options and options.firstCardId or nil
+
+    if firstCardId and handSize >= startingSlotIndex then
+        local firstCard = deckrules.drawSpecificCardToHand(deck, firstCardId, startingSlotIndex)
+
+        if firstCard then
+            handCards[#handCards + 1] = firstCard
+            startingSlotIndex = startingSlotIndex + 1
+        end
+    end
+
+    for slotIndex = startingSlotIndex, handSize do
         if not ensureDeckHasCards(deck) then
             break
         end

@@ -8,7 +8,11 @@ local tomes = {
         {
             id = "BOOKVAL",
             name = "Book of Valshamr",
-            syncost = 5,
+            type = "tome",
+            syncost = 1,
+            func = "Spawn",
+            value = 1,
+            target = { "AEGFREYTOK" }
         },
 }
 

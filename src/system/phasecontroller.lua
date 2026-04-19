@@ -1,5 +1,10 @@
 local phasecontroller = {}
 
+local function getCardIndexFromEntityKey(entityKey)
+    local cardIndex = entityKey and entityKey:match("^card:(%d+)$")
+    return cardIndex and tonumber(cardIndex) or nil
+end
+
 local function buildStartPhaseGenerators(gameState, deps)
     local gridCardGenerators = {}
 
@@ -71,6 +76,15 @@ local function resolveRetaliation(gameState, deps, retaliation)
         end
     end
 
+    if retaliation.pain == true then
+        local sourceCardIndex = getCardIndexFromEntityKey(retaliation.entityKey)
+        local sourceCard = sourceCardIndex and gameState.cards[sourceCardIndex] or nil
+
+        if sourceCard and not deps.isCardUnavailable(sourceCard) then
+            deps.dealDamageToCard(sourceCard, retaliation.damageValue or 0)
+        end
+    end
+
     deps.warrules.clearEntityRollState(retaliation.entityKey)
 end
 
@@ -78,7 +92,9 @@ function phasecontroller.enterCurrentPhase(gameState, deps)
     local currentPhase = deps.turnrules.getCurrentPhase()
 
     if currentPhase == deps.turnrules.getSetupPhase() then
-        gameState.cards = deps.deckrules.assignCardsToHand(gameState.playerDeck, deps.envrules.getPlayerHand().slots)
+        gameState.cards = deps.deckrules.assignCardsToHand(gameState.playerDeck, deps.envrules.getPlayerHand().slots, {
+            firstCardId = gameState.playerJacl and gameState.playerJacl.tomeId or nil,
+        })
         deps.initializeCardsHealthState(gameState.cards)
         deps.playHunterAddedSfxForCards(gameState.cards)
         deps.addSetupAgents()

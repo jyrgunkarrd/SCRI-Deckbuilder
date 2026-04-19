@@ -184,8 +184,8 @@ local troops = {
         D2 = "ATKANDSAB1",
         D3 = "ATKANDSAB1",
         D4 = "DIV3",
-        D5 = "BLK",
-        D6 = "BLK",
+        D5 = "NUL",
+        D6 = "NUL",
     },
 
     {
@@ -194,12 +194,13 @@ local troops = {
         name = "Lex Skydiver",
         health = 2,
         max = 2,
+        keyword = { "KWSTRAT"},
         D1 = "TAC2",
         D2 = "BINF2",
         D3 = "INFTAC1",
         D4 = "INFTAC1",
-        D5 = "BLK",
-        D6 = "BLK",
+        D5 = "NUL",
+        D6 = "NUL",
     },
 
 
@@ -219,9 +220,37 @@ local troops = {
         D1 = "BDMG3",
         D2 = "BDMG2",
         D3 = "BDMG3",
-        D4 = "BLK",
-        D5 = "BLK",
-        D6 = "BLK",
+        D4 = "NUL",
+        D5 = "NUL",
+        D6 = "NUL",
+    },
+
+    {
+        id = "AEGPSYCOMM",
+        type = "token",
+        name = "Psycho Commando",
+        health = 3,
+        max = 3,
+        D1 = "PDMG3",
+        D2 = "PDMG2",
+        D3 = "PDMG2",
+        D4 = "NUL",
+        D5 = "NUL",
+        D6 = "NUL",
+    },
+
+    {
+        id = "AEGFREYTOK",
+        type = "token",
+        name = "Freyja",
+        health = 3,
+        max = 3,
+        D1 = "PDMG3",
+        D2 = "PDMG2",
+        D3 = "PDMG2",
+        D4 = "NUL",
+        D5 = "NUL",
+        D6 = "NUL",
     },
 
 }

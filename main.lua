@@ -25,6 +25,8 @@ local keywordrules = require("src.system.keywordrules")
 local resourcerules = require("src.system.resourcerules")
 local specialrules = require("src.system.specialrules")
 local infiltrationrules = require("src.system.infiltrationrules")
+local strategyrules = require("src.system.strategyrules")
+local tomerules = require("src.system.tomerules")
 local targetoverlays = require("src.render.targetoverlays")
 local gamestatedraw = require("src.render.gamestate_draw")
 local inputcontroller = require("src.ui.inputcontroller")
@@ -84,8 +86,10 @@ local gameState = {
     jaclDeckPreviewCard = nil,
     activeDeckModalDeck = nil,
     primedJaclSpecial = nil,
+    fullArtImage = nil,
     hoveredJaclSpecialDefinition = nil,
     hoveredJaclSpecialPreviewCard = nil,
+    hoveredTomeSpawnPreviewCard = nil,
     hasRenderedFirstFrame = false,
     pendingPhaseEntry = false,
     pendingSetupCompletion = false,
@@ -108,6 +112,7 @@ local updateInfiltrationEffect
 local playHunterAddedSfxForCard
 local playHunterAddedSfxForCardDefinition
 local playHunterAddedSfxForCards
+local isPointInsideJaclPortrait
 local function getDamageJitterKeyForCard(cardIndex)
     return "card:" .. tostring(cardIndex)
 end
@@ -307,7 +312,106 @@ local function createGeneratedDeckCardShuffled(cardDefinition)
 end
 
 local function createGeneratedGridCard(cardDefinition, rowId, column)
-    return cardinstances.createGeneratedGridCard(gameState.cards, gameState.cardExpansion, gameState.cardEntranceProgress, cardDefinition, rowId, column)
+    local generatedCard = cardinstances.createGeneratedGridCard(gameState.cards, gameState.cardExpansion, gameState.cardEntranceProgress, cardDefinition, rowId, column)
+
+    if generatedCard
+        and turnrules.getCurrentPhase() == "War"
+        and turnrules.getCurrentWarSubphase() == "Engage" then
+        local generatedCardIndex = #gameState.cards
+
+        warrules.rerollEntity(
+            warrules.getCardEntityKey(generatedCardIndex),
+            cardDefinition,
+            rowId == "OppRow"
+        )
+    end
+
+    return generatedCard
+end
+
+local function getClosestOpenGridColumns(rowId, anchorColumn)
+    local row = rowId and envdraw.getGridRow(rowId) or nil
+    local columns = {}
+
+    if not row or not anchorColumn then
+        return columns
+    end
+
+    for _, cell in ipairs(row.cells or {}) do
+        local column = cell.column
+
+        if column and not cardzones.isGridRowColumnOccupied(gameState.cards, rowId, column) then
+            columns[#columns + 1] = column
+        end
+    end
+
+    table.sort(columns, function(a, b)
+        local distanceA = math.abs(a - anchorColumn)
+        local distanceB = math.abs(b - anchorColumn)
+
+        if distanceA == distanceB then
+            return a < b
+        end
+
+        return distanceA < distanceB
+    end)
+
+    return columns
+end
+
+local function spawnTokensNearCard(sourceCardIndex, tokenDefinition, count)
+    local sourceCard = sourceCardIndex and gameState.cards[sourceCardIndex] or nil
+
+    if not sourceCard
+        or not sourceCard.location
+        or sourceCard.location.kind ~= "grid"
+        or not tokenDefinition
+        or (count or 0) <= 0 then
+        return 0
+    end
+
+    local spawnedCount = 0
+    local rowId = sourceCard.location.rowId
+    local openColumns = getClosestOpenGridColumns(rowId, sourceCard.location.column)
+
+    for _, column in ipairs(openColumns) do
+        if spawnedCount >= count then
+            break
+        end
+
+        if createGeneratedGridCard(tokenDefinition, rowId, column) then
+            spawnedCount = spawnedCount + 1
+        end
+    end
+
+    return spawnedCount
+end
+
+local function spawnTokensNearPlayerCard(sourceCardIndex, tokenDefinition, count)
+    local sourceCard = sourceCardIndex and gameState.cards[sourceCardIndex] or nil
+
+    if not sourceCard
+        or not sourceCard.location
+        or sourceCard.location.kind ~= "grid"
+        or not tokenDefinition
+        or (count or 0) <= 0 then
+        return 0
+    end
+
+    local spawnedCount = 0
+    local openColumns = getClosestOpenGridColumns("PlayerRow", sourceCard.location.column)
+
+    for _, column in ipairs(openColumns) do
+        if spawnedCount >= count then
+            break
+        end
+
+        if createGeneratedGridCard(tokenDefinition, "PlayerRow", column) then
+            spawnedCount = spawnedCount + 1
+        end
+    end
+
+    return spawnedCount
 end
 
 local function drawCardFromPlayerDeck()
@@ -389,6 +493,23 @@ local function removeCardFromPlay(cardIndex)
         gameState.expandedGridCardIndex = nil
     end
 
+    return true
+end
+
+local function discardCardFromPlay(cardIndex)
+    local card = gameState.cards[cardIndex]
+
+    if not card then
+        return false
+    end
+
+    if card.deckOwner == "player" and gameState.playerDeck then
+        deckrules.discardCard(gameState.playerDeck, card)
+    elseif card.deckOwner == "champion" and gameState.championDeck then
+        deckrules.discardCard(gameState.championDeck, card)
+    end
+
+    removeCardFromPlay(cardIndex)
     return true
 end
 
@@ -644,6 +765,10 @@ end
 local function canPlayCard(card)
     local cardDefinition = cardregistry.getCard(card.setName, card.cardId)
 
+    if strategyrules.isStrategyDefinition(cardDefinition) then
+        return false
+    end
+
     if not cardDefinition or not cardDefinition.mcost then
         return true
     end
@@ -690,6 +815,119 @@ local function payCardCosts(card)
     end
 
     return resourcerules.payCosts(cardDefinition.mcost)
+end
+
+local function getGridCardAt(mouseX, mouseY, ignoredCardIndex)
+    for cardIndex = #gameState.cards, 1, -1 do
+        local card = gameState.cards[cardIndex]
+
+        if cardIndex ~= ignoredCardIndex
+            and not isCardUnavailable(card)
+            and card.location
+            and card.location.kind == "grid" then
+            local drawX, drawY, expansionProgress, renderOptions = getCardDrawPosition(card, cardIndex)
+
+            if carddraw.isPointInsideDrawnCard(mouseX, mouseY, drawX, drawY, expansionProgress, nil, renderOptions) then
+                return cardIndex
+            end
+        end
+    end
+
+    return nil
+end
+
+local function getCardAt(mouseX, mouseY, ignoredCardIndex)
+    for cardIndex = #gameState.cards, 1, -1 do
+        local card = gameState.cards[cardIndex]
+
+        if cardIndex ~= ignoredCardIndex and not isCardUnavailable(card) then
+            local drawX, drawY, expansionProgress, renderOptions = getCardDrawPosition(card, cardIndex)
+
+            if carddraw.isPointInsideDrawnCard(mouseX, mouseY, drawX, drawY, expansionProgress, nil, renderOptions) then
+                return cardIndex
+            end
+        end
+    end
+
+    return nil
+end
+
+local function getFullArtAt(mouseX, mouseY)
+    local cardIndex = getCardAt(mouseX, mouseY)
+
+    if cardIndex then
+        local card = gameState.cards[cardIndex]
+
+        return carddraw.getPortraitImage(card.setName, card.cardId, {
+            portraitPath = card.portraitPath,
+        })
+    end
+
+    if isPointInsideJaclPortrait(mouseX, mouseY) then
+        return envdraw.getJaclArtImage(gameState.playerJacl)
+    end
+
+    local topSlotId = getHoveredTopSlotId(mouseX, mouseY)
+
+    if topSlotId then
+        return envdraw.getTopSlotArtImage(
+            topSlotId,
+            gameState.activeChampion,
+            gameState.activeWarzone,
+            gameState.activePoi,
+            gameState.activePrimaryObjective,
+            gameState.activeIntel
+        )
+    end
+
+    return nil
+end
+
+local function tryOpenFullArt(mouseX, mouseY)
+    local image = getFullArtAt(mouseX, mouseY)
+
+    if not image then
+        return false
+    end
+
+    gameState.fullArtImage = image
+    gameState.draggedCardIndex = nil
+    gameState.draggedCardOrigin = nil
+    gameState.expandedGridCardIndex = nil
+    gameState.expandedTopSlotId = nil
+    return true
+end
+
+local function isStrategyCard(card)
+    return strategyrules.isStrategyCard(card, {
+        cardregistry = cardregistry,
+    })
+end
+
+local function tryUseTomeCard(cardIndex)
+    return tomerules.useTome(cardIndex, {
+        cards = gameState.cards,
+        turnrules = turnrules,
+        cardregistry = cardregistry,
+        spawnTokensNearCard = spawnTokensNearPlayerCard,
+        getSyntacCount = function()
+            return gameState.syntacCount or 0
+        end,
+        spendSyntac = function(amount)
+            gameState.syntacCount = math.max(0, (gameState.syntacCount or 0) - math.max(0, tonumber(amount) or 0))
+        end,
+    })
+end
+
+local function tryPlayStrategyCard(strategyCardIndex, targetCardIndex)
+    return strategyrules.playStrategy(strategyCardIndex, targetCardIndex, {
+        cards = gameState.cards,
+        turnrules = turnrules,
+        warrules = warrules,
+        cardregistry = cardregistry,
+        discardCard = discardCardFromPlay,
+        spawnTokensNearCard = spawnTokensNearCard,
+    })
 end
 
 local function getCardPresentationContext()
@@ -889,7 +1127,7 @@ local function isPointInsideJaclScratchBadge(mouseX, mouseY)
     return modals.isPointInsideJaclScratchBadge(mouseX, mouseY, envdraw, gameState.playerJacl)
 end
 
-local function isPointInsideJaclPortrait(mouseX, mouseY)
+isPointInsideJaclPortrait = function(mouseX, mouseY)
     return modals.isPointInsideJaclPortrait(mouseX, mouseY, envdraw, gameState.playerJacl)
 end
 
@@ -950,6 +1188,20 @@ local function drawCardStateOverlays(card, cardIndex, drawX, drawY, expansionPro
     cardpresentation.drawStateOverlays(card, cardIndex, drawX, drawY, expansionProgress, renderOptions, getCardPresentationContext())
 end
 
+local function updateHoveredSpawnPreview(card)
+    gameState.hoveredTomeSpawnPreviewCard = nil
+
+    local cardDefinition = card and cardregistry.getCard(card.setName, card.cardId) or nil
+
+    if tomerules.isSpawnTomeDefinition(cardDefinition) then
+        local targetCardId = tomerules.getFirstTargetCardId(cardDefinition)
+        gameState.hoveredTomeSpawnPreviewCard = targetCardId and cardregistry.getCardById(targetCardId) or nil
+    elseif strategyrules.isSpawnStrategyDefinition(cardDefinition) then
+        local targetCardId = strategyrules.getFirstTargetCardId(cardDefinition)
+        gameState.hoveredTomeSpawnPreviewCard = targetCardId and cardregistry.getCardById(targetCardId) or nil
+    end
+end
+
 local function updateHoveredCard()
     local previousHoveredCardIndex = gameState.hoveredCardIndex
     gameState.hoveredKeyword = nil
@@ -959,6 +1211,7 @@ local function updateHoveredCard()
         gameState.hoveredTopSlotId = nil
         gameState.hoveredJaclSpecialDefinition = nil
         gameState.hoveredJaclSpecialPreviewCard = nil
+        gameState.hoveredTomeSpawnPreviewCard = nil
         return
     end
 
@@ -966,6 +1219,7 @@ local function updateHoveredCard()
     gameState.hoveredTopSlotId = getHoveredTopSlotId(mouseX, mouseY)
     gameState.hoveredJaclSpecialDefinition = nil
     gameState.hoveredJaclSpecialPreviewCard = nil
+    gameState.hoveredTomeSpawnPreviewCard = nil
 
     if gameState.hoveredCardIndex then
         local activeCard = gameState.cards[gameState.hoveredCardIndex]
@@ -975,6 +1229,7 @@ local function updateHoveredCard()
 
             if carddraw.isPointInsideDrawnCard(mouseX, mouseY, drawX, drawY, expansionProgress, nil, renderOptions) then
                 gameState.hoveredKeyword = carddraw.getHoveredKeyword(activeCard.setName, activeCard.cardId, drawX, drawY, renderOptions, mouseX, mouseY)
+                updateHoveredSpawnPreview(activeCard)
                 return
             end
         end
@@ -989,6 +1244,7 @@ local function updateHoveredCard()
             if carddraw.isPointInsideDrawnCard(mouseX, mouseY, drawX, drawY, expansionProgress, nil, renderOptions) then
                 gameState.hoveredCardIndex = cardIndex
                 gameState.hoveredKeyword = carddraw.getHoveredKeyword(gameState.cards[cardIndex].setName, gameState.cards[cardIndex].cardId, drawX, drawY, renderOptions, mouseX, mouseY)
+                updateHoveredSpawnPreview(gameState.cards[cardIndex])
                 break
             end
         end
@@ -1033,6 +1289,7 @@ local function getInputControllerDeps()
         getCardDrawPosition = getCardDrawPosition,
         getHoveredPlayerRollBadgeCardIndex = getHoveredPlayerRollBadgeCardIndex,
         getHoveredTopSlotId = getHoveredTopSlotId,
+        getGridCardAt = getGridCardAt,
         getModalDeps = getModalDeps,
         getPhaseControllerDeps = getPhaseControllerDeps,
         getValidDropColumn = getValidDropColumn,
@@ -1042,10 +1299,14 @@ local function getInputControllerDeps()
         isPointInsideJaclPortrait = isPointInsideJaclPortrait,
         isPointInsideJaclScratchBadge = isPointInsideJaclScratchBadge,
         isSetupCard = isSetupCard,
+        isStrategyCard = isStrategyCard,
         normalizeHandCardSlots = normalizeHandCardSlots,
         normalizeSetupCardSlots = normalizeSetupCardSlots,
         payCardCosts = payCardCosts,
         primeJaclSpecial = primeJaclSpecial,
+        tryPlayStrategyCard = tryPlayStrategyCard,
+        tryUseTomeCard = tryUseTomeCard,
+        tryOpenFullArt = tryOpenFullArt,
         tryCancelSelectedEngageAttacker = tryCancelSelectedEngageAttacker,
         tryResolveEngageClick = tryResolveEngageClick,
         tryUseEngageReroll = tryUseEngageReroll,
@@ -1091,8 +1352,10 @@ function love.load()
     gameState.jaclDeckPreviewCard = nil
     gameState.activeDeckModalDeck = nil
     gameState.primedJaclSpecial = nil
+    gameState.fullArtImage = nil
     gameState.hoveredJaclSpecialDefinition = nil
     gameState.hoveredJaclSpecialPreviewCard = nil
+    gameState.hoveredTomeSpawnPreviewCard = nil
     cardinstances.reset()
     warzonecontrolrules.reset()
     topsloteffects.reset()
@@ -1272,12 +1535,14 @@ function love.draw()
         expandedGridCardIndex = gameState.expandedGridCardIndex,
         isJaclDeckModalOpen = gameState.isJaclDeckModalOpen,
         activeDeckModalDeck = gameState.activeDeckModalDeck,
+        fullArtImage = gameState.fullArtImage,
         jaclDeckModalScroll = gameState.jaclDeckModalScroll,
         jaclDeckPreviewCard = gameState.jaclDeckPreviewCard,
         isResourceExchangeModalOpen = gameState.isResourceExchangeModalOpen,
         hoveredKeyword = gameState.hoveredKeyword,
         hoveredJaclSpecialDefinition = gameState.hoveredJaclSpecialDefinition,
         hoveredJaclSpecialPreviewCard = gameState.hoveredJaclSpecialPreviewCard,
+        hoveredTomeSpawnPreviewCard = gameState.hoveredTomeSpawnPreviewCard,
         primedJaclSpecial = gameState.primedJaclSpecial,
         isWarRollSourceActive = isWarRollSourceActive,
         getDamageJitterOffset = getDamageJitterOffset,

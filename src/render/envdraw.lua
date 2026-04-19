@@ -970,6 +970,26 @@ function envdraw.preloadTopStripAssets(championDefinition, warzoneDefinition, po
     end
 end
 
+function envdraw.getJaclArtImage(jaclDefinition)
+    return jaclDefinition and getJaclImage(jaclDefinition.name) or nil
+end
+
+function envdraw.getTopSlotArtImage(slotId, championDefinition, warzoneDefinition, poiDefinition, objectiveDefinition, intelDefinition)
+    if slotId == "champion" and championDefinition and not championDefinition.hidden then
+        return getChampImage(championDefinition.id)
+    elseif slotId == "warzone" and warzoneDefinition then
+        return getWarzoneImage(warzoneDefinition.id)
+    elseif slotId == "poi" and poiDefinition then
+        return getWarzoneImage(poiDefinition.id)
+    elseif slotId == "objective" and objectiveDefinition and not objectiveDefinition.hidden then
+        return getObjectiveImage(objectiveDefinition.id)
+    elseif slotId == "intel" and intelDefinition and not intelDefinition.hidden then
+        return getObjectiveImage(intelDefinition.id)
+    end
+
+    return nil
+end
+
 function getMethodImage(resourceName)
     if not resourceName then
         return nil
@@ -1987,6 +2007,29 @@ function envdraw.drawJaclDeckPreviewModal(card)
     love.graphics.setColor(1, 1, 1, 1)
 end
 
+function envdraw.drawFullArtOverlay(image)
+    if not image then
+        return
+    end
+
+    local windowWidth, windowHeight = love.graphics.getDimensions()
+    local maxWidth = windowWidth * 0.82
+    local maxHeight = windowHeight * 0.82
+    local scale = math.min(maxWidth / image:getWidth(), maxHeight / image:getHeight())
+    local imageWidth = image:getWidth() * scale
+    local imageHeight = image:getHeight() * scale
+    local imageX = (windowWidth - imageWidth) / 2
+    local imageY = (windowHeight - imageHeight) / 2
+
+    love.graphics.setColor(0.01, 0.01, 0.02, 0.72)
+    love.graphics.rectangle("fill", 0, 0, windowWidth, windowHeight)
+    love.graphics.setColor(0.82, 0.85, 0.89, 0.9)
+    love.graphics.rectangle("line", imageX - 2, imageY - 2, imageWidth + 4, imageHeight + 4)
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.draw(image, imageX, imageY, 0, scale, scale)
+    love.graphics.setColor(1, 1, 1, 1)
+end
+
 function envdraw.getPlayerHandLayout()
     local handDefinition = envrules.getPlayerHand()
     local windowWidth, windowHeight = love.graphics.getDimensions()
@@ -2420,6 +2463,52 @@ function envdraw.drawJaclSpecialTooltip(specialDefinition, previewCardDefinition
             showBadgesInTextbox = true,
         })
     end
+
+    love.graphics.setFont(previousFont)
+    love.graphics.setColor(1, 1, 1, 1)
+end
+
+function envdraw.drawTomeSpawnTooltip(previewCardDefinition, anchorX, anchorY, anchorWidth, anchorHeight)
+    if not previewCardDefinition then
+        return
+    end
+
+    local previousFont = love.graphics.getFont()
+    local labelFont = getFont(JACL_LABEL_FONT_PATH, SPECIAL_TOOLTIP_TITLE_SIZE)
+    local previewWidth, previewHeight = carddraw.getExpandedCardSize()
+    local bubbleHeight = (SPECIAL_TOOLTIP_PADDING * 2) + labelFont:getHeight()
+    local totalWidth = previewWidth
+    local totalHeight = previewHeight + SPECIAL_TOOLTIP_PREVIEW_GAP + bubbleHeight
+    local windowWidth, windowHeight = love.graphics.getDimensions()
+    local gap = SPECIAL_TOOLTIP_OFFSET_X
+    local rightX = (anchorX or 0) + (anchorWidth or 0) + gap
+    local leftX = (anchorX or 0) - gap - totalWidth
+    local boxX = rightX + totalWidth <= windowWidth - 8 and rightX or leftX
+    local boxY = anchorY or 0
+    local bubbleY = boxY + previewHeight + SPECIAL_TOOLTIP_PREVIEW_GAP
+
+    boxX = snap(math.max(8, math.min(boxX, windowWidth - totalWidth - 8)))
+    boxY = snap(math.max(8, math.min(boxY, windowHeight - totalHeight - 8)))
+    bubbleY = boxY + previewHeight + SPECIAL_TOOLTIP_PREVIEW_GAP
+
+    carddraw.drawCardState(previewCardDefinition.setName, previewCardDefinition.id, boxX, boxY, 1, {
+        showBadgesInTextbox = true,
+    })
+
+    love.graphics.setColor(0.05, 0.05, 0.06, 0.96)
+    love.graphics.rectangle("fill", boxX, bubbleY, previewWidth, bubbleHeight, 6, 6)
+    love.graphics.setColor(0.82, 0.85, 0.89, 0.82)
+    love.graphics.rectangle("line", boxX, bubbleY, previewWidth, bubbleHeight, 6, 6)
+
+    love.graphics.setFont(labelFont)
+    love.graphics.setColor(0.95, 0.96, 0.98, 1)
+    love.graphics.printf(
+        "SUMMON",
+        boxX + SPECIAL_TOOLTIP_PADDING,
+        snap(bubbleY + ((bubbleHeight - labelFont:getHeight()) / 2)),
+        previewWidth - (SPECIAL_TOOLTIP_PADDING * 2),
+        "center"
+    )
 
     love.graphics.setFont(previousFont)
     love.graphics.setColor(1, 1, 1, 1)

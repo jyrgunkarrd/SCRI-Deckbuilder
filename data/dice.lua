@@ -82,7 +82,7 @@ local dice = {
 --- Blank Die ---
 
 {
-    id = "BLK",
+    id = "NUL",
     type = "Blank",
 },
 
@@ -108,6 +108,34 @@ local dice = {
             value = 1,
             targ = "Atk",
         },
+
+    -- Pain Damage ---
+
+    {
+        id = "PDMG3",
+        type = "PainDmg",
+        value = 3,
+        targ = "Atk",
+        pain = 1,
+    },
+
+    {
+        id = "PDMG2",
+        type = "PainDmg",
+        value = 2,
+        targ = "Atk",
+        pain = 1,
+
+    },
+
+    {
+        id = "PDMG1",
+        type = "PainDmg",
+        value = 1,
+        targ = "Atk",
+        pain = 1,
+
+    },
 
     --- Basic Block ---
 

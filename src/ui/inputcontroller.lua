@@ -27,6 +27,20 @@ function inputcontroller.mousepressed(gameState, deps, x, y, button)
         return
     end
 
+    if gameState.fullArtImage then
+        if button == 1 then
+            gameState.fullArtImage = nil
+        end
+
+        return
+    end
+
+    if button == 2
+        and (love.keyboard.isDown("lctrl") or love.keyboard.isDown("rctrl"))
+        and deps.tryOpenFullArt(x, y) then
+        return
+    end
+
     if handleModals(x, y, button, deps) then
         return
     end
@@ -79,6 +93,14 @@ function inputcontroller.mousepressed(gameState, deps, x, y, button)
 
     if button == 2 and hoveredPlayerRollBadgeCardIndex then
         deps.warrules.toggleCardLock(hoveredPlayerRollBadgeCardIndex)
+        return
+    end
+
+    if button == 1
+        and not gameState.selectedAttackerCardIndex
+        and gameState.hoveredCardIndex
+        and deps.tryUseTomeCard(gameState.hoveredCardIndex) then
+        deps.sfxrules.playResourcePlay()
         return
     end
 
@@ -151,8 +173,13 @@ function inputcontroller.mousepressed(gameState, deps, x, y, button)
         return
     end
 
-    if gameState.cards[gameState.hoveredCardIndex].location.kind == "hand" and deps.turnrules.getCurrentPhase() ~= "Prelude" then
-        return
+    if gameState.cards[gameState.hoveredCardIndex].location.kind == "hand" then
+        local hoveredCard = gameState.cards[gameState.hoveredCardIndex]
+        local canDragStrategy = deps.isStrategyCard(hoveredCard) and deps.isEngagePhase()
+
+        if deps.turnrules.getCurrentPhase() ~= "Prelude" and not canDragStrategy then
+            return
+        end
     end
 
     if deps.isGridCard(gameState.cards[gameState.hoveredCardIndex]) then
@@ -192,6 +219,31 @@ function inputcontroller.mousereleased(gameState, deps, x, y, button)
     end
 
     local draggedCard = gameState.cards[gameState.draggedCardIndex]
+    local isStrategyCard = deps.isStrategyCard(draggedCard)
+
+    if isStrategyCard then
+        local targetCardIndex = deps.getGridCardAt(x, y, gameState.draggedCardIndex)
+        local played = deps.tryPlayStrategyCard(gameState.draggedCardIndex, targetCardIndex)
+
+        if played then
+            deps.normalizeHandCardSlots()
+            deps.sfxrules.playResourcePlay()
+        else
+            gameState.cards[gameState.draggedCardIndex].location = deps.copyLocation(gameState.draggedCardOrigin)
+
+            if targetCardIndex then
+                deps.sfxrules.playPlayReject()
+            end
+        end
+
+        gameState.draggedCardIndex = nil
+        gameState.draggedCardOrigin = nil
+        gameState.expandedGridCardIndex = nil
+        gameState.hoveredCardIndex = nil
+        deps.updateHoveredCard()
+        return
+    end
+
     local dropColumn = deps.getValidDropColumn(x, y, gameState.draggedCardIndex, draggedCard)
 
     local canPlayDrop = dropColumn and deps.canPlayCard(draggedCard)

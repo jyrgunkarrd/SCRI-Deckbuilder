@@ -12,6 +12,18 @@ local function clearSelectedAttacker(ctx)
     ctx.setSelectedAttackerCardIndex(nil)
 end
 
+local function applyPain(ctx, cardIndex, rollState)
+    if not rollState or rollState.pain ~= true then
+        return
+    end
+
+    local sourceCard = cardIndex and ctx.cards[cardIndex] or nil
+
+    if sourceCard then
+        ctx.dealDamageToCard(sourceCard, rollState.damageValue or 0)
+    end
+end
+
 local function finishSelectedAttack(ctx, saviorTriggered)
     if not saviorTriggered then
         ctx.warrules.consumeCardAttack(ctx.selectedAttackerCardIndex)
@@ -22,6 +34,7 @@ end
 
 local function resolveSelectedAttack(ctx, action)
     local attackerCardIndex = ctx.selectedAttackerCardIndex
+    local attackerRollState = ctx.warrules.getCardRollState(attackerCardIndex)
     local saviorCheck = ctx.warrules.beginSaviorCheck(attackerCardIndex, ctx.cards, ctx.isWarRollSourceActive)
     local resolved = action()
 
@@ -30,10 +43,12 @@ local function resolveSelectedAttack(ctx, action)
     end
 
     finishSelectedAttack(ctx, ctx.warrules.didSaviorPreventDeath(saviorCheck, ctx.cards, ctx.isWarRollSourceActive))
+    applyPain(ctx, attackerCardIndex, attackerRollState)
     return true
 end
 
 local function resolveImmediateCardAction(ctx, cardIndex, action)
+    local rollState = ctx.warrules.getCardRollState(cardIndex)
     local saviorCheck = ctx.warrules.beginSaviorCheck(cardIndex, ctx.cards, ctx.isWarRollSourceActive)
     local resolved = action()
 
@@ -45,6 +60,7 @@ local function resolveImmediateCardAction(ctx, cardIndex, action)
         ctx.warrules.consumeCardAttack(cardIndex)
     end
 
+    applyPain(ctx, cardIndex, rollState)
     return true
 end
 
