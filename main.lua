@@ -23,6 +23,7 @@ local damagerules = require("src.system.damagerules")
 local jaclrules = require("src.system.jaclrules")
 local keywordrules = require("src.system.keywordrules")
 local temporaryeffects = require("src.system.temporaryeffects")
+local kitrules = require("src.system.kitrules")
 local resourcerules = require("src.system.resourcerules")
 local specialrules = require("src.system.specialrules")
 local infiltrationrules = require("src.system.infiltrationrules")
@@ -42,6 +43,10 @@ local CARD_ENTRANCE_MAX_DT = 1 / 60
 local DAMAGE_JITTER_DURATION = 0.28
 local DAMAGE_JITTER_MAGNITUDE = 7
 local DESTRUCTION_DURATION = 0.6
+local KIT_RETURN_FLASH_DURATION = 0.1
+local KIT_RETURN_EXPAND_DURATION = 0.14
+local KIT_RETURN_FLY_DURATION = 0.28
+local KIT_RETURN_TOTAL_DURATION = KIT_RETURN_FLASH_DURATION + KIT_RETURN_EXPAND_DURATION + KIT_RETURN_FLY_DURATION
 local PLAYER_JACL_ID = "JACL001"
 local ACTIVE_CHAMPION_ID = "CH0001"
 local ACTIVE_WARZONE_ID = "WZ0001"
@@ -93,6 +98,8 @@ local gameState = {
     hoveredJaclSpecialDefinition = nil,
     hoveredJaclSpecialPreviewCard = nil,
     hoveredTomeSpawnPreviewCard = nil,
+    pendingStrategySelection = nil,
+    kitReturnAnimations = {},
     hasRenderedFirstFrame = false,
     pendingPhaseEntry = false,
     pendingSetupCompletion = false,
@@ -332,9 +339,10 @@ local function createGeneratedGridCard(cardDefinition, rowId, column)
     return generatedCard
 end
 
-local function getClosestOpenGridColumns(rowId, anchorColumn)
+local function getClosestOpenGridColumns(rowId, anchorColumn, ignoredCardIndex, preferredColumn)
     local row = rowId and envdraw.getGridRow(rowId) or nil
     local columns = {}
+    local preferredIsOpen = false
 
     if not row or not anchorColumn then
         return columns
@@ -343,8 +351,12 @@ local function getClosestOpenGridColumns(rowId, anchorColumn)
     for _, cell in ipairs(row.cells or {}) do
         local column = cell.column
 
-        if column and not cardzones.isGridRowColumnOccupied(gameState.cards, rowId, column) then
-            columns[#columns + 1] = column
+        if column and not cardzones.isGridRowColumnOccupied(gameState.cards, rowId, column, ignoredCardIndex) then
+            if preferredColumn and column == preferredColumn then
+                preferredIsOpen = true
+            else
+                columns[#columns + 1] = column
+            end
         end
     end
 
@@ -359,10 +371,14 @@ local function getClosestOpenGridColumns(rowId, anchorColumn)
         return distanceA < distanceB
     end)
 
+    if preferredIsOpen then
+        table.insert(columns, 1, preferredColumn)
+    end
+
     return columns
 end
 
-local function spawnTokensNearCard(sourceCardIndex, tokenDefinition, count)
+local function spawnTokensNearCard(sourceCardIndex, tokenDefinition, count, options)
     local sourceCard = sourceCardIndex and gameState.cards[sourceCardIndex] or nil
 
     if not sourceCard
@@ -375,7 +391,9 @@ local function spawnTokensNearCard(sourceCardIndex, tokenDefinition, count)
 
     local spawnedCount = 0
     local rowId = sourceCard.location.rowId
-    local openColumns = getClosestOpenGridColumns(rowId, sourceCard.location.column)
+    local preferredColumn = options and options.preferredColumn or nil
+    local ignoredCardIndex = options and options.ignoredCardIndex or nil
+    local openColumns = getClosestOpenGridColumns(rowId, sourceCard.location.column, ignoredCardIndex, preferredColumn)
 
     for _, column in ipairs(openColumns) do
         if spawnedCount >= count then
@@ -390,7 +408,7 @@ local function spawnTokensNearCard(sourceCardIndex, tokenDefinition, count)
     return spawnedCount
 end
 
-local function spawnRandomTokensNearCard(sourceCardIndex, tokenDefinitions, count)
+local function spawnRandomTokensNearCard(sourceCardIndex, tokenDefinitions, count, options)
     local sourceCard = sourceCardIndex and gameState.cards[sourceCardIndex] or nil
 
     if not sourceCard
@@ -404,7 +422,9 @@ local function spawnRandomTokensNearCard(sourceCardIndex, tokenDefinitions, coun
 
     local spawnedCount = 0
     local rowId = sourceCard.location.rowId
-    local openColumns = getClosestOpenGridColumns(rowId, sourceCard.location.column)
+    local preferredColumn = options and options.preferredColumn or nil
+    local ignoredCardIndex = options and options.ignoredCardIndex or nil
+    local openColumns = getClosestOpenGridColumns(rowId, sourceCard.location.column, ignoredCardIndex, preferredColumn)
 
     for _, column in ipairs(openColumns) do
         if spawnedCount >= count then
@@ -421,7 +441,7 @@ local function spawnRandomTokensNearCard(sourceCardIndex, tokenDefinitions, coun
     return spawnedCount
 end
 
-local function spawnTokensNearPlayerCard(sourceCardIndex, tokenDefinition, count)
+local function spawnTokensNearPlayerCard(sourceCardIndex, tokenDefinition, count, options)
     local sourceCard = sourceCardIndex and gameState.cards[sourceCardIndex] or nil
 
     if not sourceCard
@@ -433,7 +453,9 @@ local function spawnTokensNearPlayerCard(sourceCardIndex, tokenDefinition, count
     end
 
     local spawnedCount = 0
-    local openColumns = getClosestOpenGridColumns("PlayerRow", sourceCard.location.column)
+    local preferredColumn = options and options.preferredColumn or nil
+    local ignoredCardIndex = options and options.ignoredCardIndex or nil
+    local openColumns = getClosestOpenGridColumns("PlayerRow", sourceCard.location.column, ignoredCardIndex, preferredColumn)
 
     for _, column in ipairs(openColumns) do
         if spawnedCount >= count then
@@ -478,6 +500,181 @@ local function drawCardFromPlayerDeck()
     return drawnCard
 end
 
+local function beginKitReturnAnimation(hostCard, attachedKit, returningCard)
+    if not hostCard or not attachedKit or not returningCard then
+        return false
+    end
+
+    local hostCardIndex = nil
+
+    for cardIndex, candidateCard in ipairs(gameState.cards) do
+        if candidateCard == hostCard then
+            hostCardIndex = cardIndex
+            break
+        end
+    end
+
+    if not hostCardIndex then
+        return false
+    end
+
+    local drawX, drawY, expansionProgress, renderOptions = getCardDrawPosition(hostCard, hostCardIndex)
+    local badgeRect = carddraw.getKeywordBadgeRect(hostCard.setName, hostCard.cardId, drawX, drawY, renderOptions, "KWKIT")
+    local handLayout = getPlayerHandLayout()
+    local slot = handLayout and handLayout.slots[returningCard.location and returningCard.location.slotIndex or 0] or nil
+
+    if not badgeRect or not slot then
+        return false
+    end
+
+    local previewOptions = {
+        width = slot.width,
+        showLabelWhenCollapsed = true,
+        showHealthOnPortrait = false,
+        showBadgesInTextbox = true,
+        displayName = returningCard.displayName,
+        portraitPath = returningCard.portraitPath,
+    }
+    local cardWidth, cardHeight = carddraw.getCardSize(previewOptions)
+
+    gameState.kitReturnAnimations[#gameState.kitReturnAnimations + 1] = {
+        elapsed = 0,
+        duration = KIT_RETURN_TOTAL_DURATION,
+        badgeRect = {
+            x = badgeRect.x,
+            y = badgeRect.y,
+            size = badgeRect.size,
+        },
+        startX = badgeRect.x + (badgeRect.size / 2),
+        startY = badgeRect.y + (badgeRect.size / 2),
+        targetX = slot.x + (cardWidth / 2),
+        targetY = slot.y + (cardHeight / 2),
+        peakY = math.min(badgeRect.y, slot.y) - math.max(34, badgeRect.size * 1.8),
+        setName = attachedKit.setName,
+        cardId = attachedKit.cardId,
+        renderOptions = previewOptions,
+        cardWidth = cardWidth,
+        cardHeight = cardHeight,
+        returningCard = returningCard,
+    }
+
+    returningCard.returningToHandAnimation = true
+    return true
+end
+
+local function updateKitReturnAnimations(dt)
+    for animationIndex = #gameState.kitReturnAnimations, 1, -1 do
+        local animation = gameState.kitReturnAnimations[animationIndex]
+        animation.elapsed = animation.elapsed + dt
+
+        if animation.elapsed >= animation.duration then
+            if animation.returningCard then
+                animation.returningCard.returningToHandAnimation = nil
+            end
+
+            table.remove(gameState.kitReturnAnimations, animationIndex)
+        end
+    end
+end
+
+local function drawKitReturnAnimations()
+    for _, animation in ipairs(gameState.kitReturnAnimations) do
+        local elapsed = math.max(0, animation.elapsed)
+        local flashProgress = math.min(1, elapsed / KIT_RETURN_FLASH_DURATION)
+        local expandProgress = math.min(1, math.max(0, elapsed - KIT_RETURN_FLASH_DURATION) / KIT_RETURN_EXPAND_DURATION)
+        local flyProgress = math.min(1, math.max(0, elapsed - KIT_RETURN_FLASH_DURATION - KIT_RETURN_EXPAND_DURATION) / KIT_RETURN_FLY_DURATION)
+
+        if flashProgress < 1 then
+            local glowAlpha = (1 - flashProgress) * 0.55
+            local glowInset = 2 + (flashProgress * 6)
+
+            love.graphics.setColor(1, 0.92, 0.52, glowAlpha)
+            love.graphics.rectangle(
+                "fill",
+                animation.badgeRect.x - glowInset,
+                animation.badgeRect.y - glowInset,
+                animation.badgeRect.size + (glowInset * 2),
+                animation.badgeRect.size + (glowInset * 2),
+                6,
+                6
+            )
+        end
+
+        local centerX = animation.startX
+        local centerY = animation.startY
+        local scale = 0.22
+
+        if flyProgress > 0 then
+            local t = 1 - ((1 - flyProgress) * (1 - flyProgress))
+            local invT = 1 - t
+            centerX = (invT * invT * animation.startX) + (2 * invT * t * ((animation.startX + animation.targetX) / 2)) + (t * t * animation.targetX)
+            centerY = (invT * invT * animation.startY) + (2 * invT * t * animation.peakY) + (t * t * animation.targetY)
+            scale = 0.5 + (0.5 * t)
+        elseif expandProgress > 0 then
+            local t = 1 - ((1 - expandProgress) * (1 - expandProgress))
+            centerY = animation.startY - (18 * t)
+            scale = 0.22 + (0.42 * t)
+        end
+
+        love.graphics.push()
+        love.graphics.translate(centerX, centerY)
+        love.graphics.scale(scale, scale)
+        carddraw.drawCardState(
+            animation.setName,
+            animation.cardId,
+            -animation.cardWidth / 2,
+            -animation.cardHeight / 2,
+            0,
+            animation.renderOptions
+        )
+        love.graphics.pop()
+    end
+
+    love.graphics.setColor(1, 1, 1, 1)
+end
+
+local function releaseAttachedKits(card)
+    if not card
+        or card.deckOwner ~= "player"
+        or not gameState.playerDeck
+        or not card.attachedKitCards
+        or #card.attachedKitCards <= 0 then
+        return false
+    end
+
+    local releasedAny = false
+
+    for _, attachedKit in ipairs(card.attachedKitCards) do
+        local nextSlotIndex = getNextOpenHandSlot()
+        local kitCard = {
+            instanceId = attachedKit.instanceId,
+            setName = attachedKit.setName,
+            cardId = attachedKit.cardId,
+            displayName = attachedKit.displayName,
+            portraitPath = attachedKit.portraitPath,
+            deckOwner = "player",
+        }
+
+        if nextSlotIndex then
+            kitCard.location = {
+                kind = "hand",
+                slotIndex = nextSlotIndex,
+            }
+            gameState.cards[#gameState.cards + 1] = kitCard
+            gameState.cardExpansion[#gameState.cards] = 0
+            gameState.cardEntranceProgress[#gameState.cards] = 1
+            beginKitReturnAnimation(card, attachedKit, kitCard)
+        else
+            deckrules.discardCard(gameState.playerDeck, kitCard)
+        end
+
+        releasedAny = true
+    end
+
+    card.attachedKitCards = nil
+    return releasedAny
+end
+
 local function discardDestroyedCard(card)
     if not card or card.sentToDiscard then
         return nil
@@ -491,6 +688,7 @@ local function discardDestroyedCard(card)
     end
 
     if card.deckOwner == "player" and gameState.playerDeck then
+        releaseAttachedKits(card)
         card.sentToDiscard = true
         return deckrules.discardCard(gameState.playerDeck, card)
     end
@@ -538,6 +736,7 @@ local function discardCardFromPlay(cardIndex)
     end
 
     if card.deckOwner == "player" and gameState.playerDeck then
+        releaseAttachedKits(card)
         deckrules.discardCard(gameState.playerDeck, card)
     elseif card.deckOwner == "champion" and gameState.championDeck then
         deckrules.discardCard(gameState.championDeck, card)
@@ -772,6 +971,7 @@ local function getPhaseControllerDeps()
         clearAllBlocking = clearAllBlocking,
         createGeneratedSupportCard = createGeneratedSupportCard,
         dealDamageToCard = dealDamageToCard,
+        dealDamageToChampion = dealDamageToChampion,
         drawCardFromPlayerDeck = drawCardFromPlayerDeck,
         getCardDrawPosition = getCardDrawPosition,
         getChampionPlayContext = getChampionPlayContext,
@@ -801,6 +1001,10 @@ local function canPlayCard(card)
     local cardDefinition = cardregistry.getCard(card.setName, card.cardId)
 
     if strategyrules.isStrategyDefinition(cardDefinition) then
+        return false
+    end
+
+    if kitrules.isKitDefinition(cardDefinition) then
         return false
     end
 
@@ -961,8 +1165,79 @@ local function tryPlayStrategyCard(strategyCardIndex, targetCardIndex)
         warrules = warrules,
         cardregistry = cardregistry,
         discardCard = discardCardFromPlay,
+        startCardDestruction = startCardDestruction,
+        dealDamageToCard = dealDamageToCard,
+        dealDamageToChampion = dealDamageToChampion,
         spawnTokensNearCard = spawnTokensNearCard,
+        beginPendingStrategySelection = function(pendingSelection)
+            local hasValidTarget = false
+
+            for cardIndex = 1, #gameState.cards do
+                if strategyrules.isValidFunccostTarget(cardIndex, pendingSelection, {
+                    cards = gameState.cards,
+                    cardregistry = cardregistry,
+                }) then
+                    hasValidTarget = true
+                    break
+                end
+            end
+
+            if not hasValidTarget then
+                notifications.push("Strategy fizzled")
+                return true
+            end
+
+            gameState.pendingStrategySelection = pendingSelection
+            notifications.push("Choose a troop or token to sacrifice")
+            return true
+        end,
     })
+end
+
+local function tryPlayKitCard(kitCardIndex, targetCardIndex)
+    return kitrules.playKit(kitCardIndex, targetCardIndex, {
+        cards = gameState.cards,
+        cardregistry = cardregistry,
+        removeCardFromPlay = removeCardFromPlay,
+    })
+end
+
+local function hasPendingStrategySelection()
+    return gameState.pendingStrategySelection ~= nil
+end
+
+local function tryResolvePendingStrategySelection(cardIndex)
+    local pendingSelection = gameState.pendingStrategySelection
+
+    if not pendingSelection then
+        return false
+    end
+
+    local resolved = strategyrules.resolvePendingSelection(cardIndex, pendingSelection, {
+        cards = gameState.cards,
+        cardregistry = cardregistry,
+        warrules = warrules,
+        discardCard = discardCardFromPlay,
+        startCardDestruction = startCardDestruction,
+        dealDamageToCard = dealDamageToCard,
+        dealDamageToChampion = dealDamageToChampion,
+    })
+
+    if resolved then
+        gameState.pendingStrategySelection = nil
+    end
+
+    return resolved
+end
+
+local function cancelPendingStrategySelection()
+    if not gameState.pendingStrategySelection then
+        return false
+    end
+
+    gameState.pendingStrategySelection = nil
+    notifications.push("Strategy fizzled")
+    return true
 end
 
 local function resolvePlayedTroopCard(troopCardIndex)
@@ -970,6 +1245,26 @@ local function resolvePlayedTroopCard(troopCardIndex)
         cards = gameState.cards,
         cardregistry = cardregistry,
         spawnTokensNearPlayerCard = spawnTokensNearPlayerCard,
+    })
+end
+
+local function resolveDestroyedTroopCard(troopCardIndex)
+    return trooprules.resolveDeath(troopCardIndex, {
+        cards = gameState.cards,
+        cardregistry = cardregistry,
+        drawCardFromPlayerDeck = drawCardFromPlayerDeck,
+        spawnTokensNearPlayerCard = function(sourceCardIndex, tokenDefinition, count)
+            local sourceCard = sourceCardIndex and gameState.cards[sourceCardIndex] or nil
+
+            if not sourceCard or not sourceCard.location or sourceCard.location.kind ~= "grid" then
+                return 0
+            end
+
+            return spawnTokensNearPlayerCard(sourceCardIndex, tokenDefinition, count, {
+                ignoredCardIndex = sourceCardIndex,
+                preferredColumn = sourceCard.location.column,
+            })
+        end,
     })
 end
 
@@ -998,6 +1293,7 @@ local function getCardPresentationContext()
         getDamageJitterOffset = getDamageJitterOffset,
         getDamageJitterKeyForCard = getDamageJitterKeyForCard,
         getTargetingContext = getTargetingContext,
+        drawKitReturnAnimations = drawKitReturnAnimations,
     }
 end
 
@@ -1197,6 +1493,7 @@ getTargetingContext = function()
         cards = gameState.cards,
         hoveredCardIndex = gameState.hoveredCardIndex,
         hoveredTopSlotId = gameState.hoveredTopSlotId,
+        pendingStrategySelection = gameState.pendingStrategySelection,
         selectedAttackerCardIndex = gameState.selectedAttackerCardIndex,
         currentPhase = turnrules.getCurrentPhase(),
         displayStates = warrules.getDisplayStates(),
@@ -1207,6 +1504,12 @@ getTargetingContext = function()
         getCardRollState = warrules.getCardRollState,
         canTargetEnemyCard = warrules.canTargetEnemyCard,
         canTargetPlayerWarzone = warrules.canTargetPlayerWarzone,
+        isPendingStrategyTarget = function(cardIndex, pendingSelection)
+            return strategyrules.isValidFunccostTarget(cardIndex, pendingSelection, {
+                cards = gameState.cards,
+                cardregistry = cardregistry,
+            })
+        end,
     }
 end
 
@@ -1245,7 +1548,7 @@ local function updateHoveredSpawnPreview(card)
     elseif strategyrules.isSpawnStrategyDefinition(cardDefinition) then
         local targetCardId = strategyrules.getFirstTargetCardId(cardDefinition)
         gameState.hoveredTomeSpawnPreviewCard = targetCardId and cardregistry.getCardById(targetCardId) or nil
-    elseif trooprules.isSpawnTroopDefinition(cardDefinition)
+    elseif trooprules.isSpawnPreviewTroopDefinition(cardDefinition)
         and not (card.location and card.location.kind == "grid") then
         local targetCardId = trooprules.getFirstTargetCardId(cardDefinition)
         gameState.hoveredTomeSpawnPreviewCard = targetCardId and cardregistry.getCardById(targetCardId) or nil
@@ -1311,7 +1614,7 @@ local function updateHoveredCard()
     if gameState.hoveredCardIndex then
         local activeCard = gameState.cards[gameState.hoveredCardIndex]
 
-        if activeCard and not isCardUnavailable(activeCard) then
+        if activeCard and not activeCard.returningToHandAnimation and not isCardUnavailable(activeCard) then
             local drawX, drawY, expansionProgress, renderOptions = getCardDrawPosition(activeCard, gameState.hoveredCardIndex)
 
             if carddraw.isPointInsideDrawnCard(mouseX, mouseY, drawX, drawY, expansionProgress, nil, renderOptions) then
@@ -1326,7 +1629,7 @@ local function updateHoveredCard()
     gameState.hoveredCardIndex = nil
 
     for cardIndex = #gameState.cards, 1, -1 do
-        if not isCardUnavailable(gameState.cards[cardIndex]) then
+        if not gameState.cards[cardIndex].returningToHandAnimation and not isCardUnavailable(gameState.cards[cardIndex]) then
             local drawX, drawY, expansionProgress, renderOptions = getCardDrawPosition(gameState.cards[cardIndex], cardIndex)
 
             if carddraw.isPointInsideDrawnCard(mouseX, mouseY, drawX, drawY, expansionProgress, nil, renderOptions) then
@@ -1387,14 +1690,23 @@ local function getInputControllerDeps()
         isHunterCard = isHunterCard,
         isPointInsideJaclPortrait = isPointInsideJaclPortrait,
         isPointInsideJaclScratchBadge = isPointInsideJaclScratchBadge,
+        isKitCard = function(card)
+            return kitrules.isKitCard(card, {
+                cardregistry = cardregistry,
+            })
+        end,
         isSetupCard = isSetupCard,
         isStrategyCard = isStrategyCard,
+        hasPendingStrategySelection = hasPendingStrategySelection,
         normalizeHandCardSlots = normalizeHandCardSlots,
         normalizeSetupCardSlots = normalizeSetupCardSlots,
         payCardCosts = payCardCosts,
         primeJaclSpecial = primeJaclSpecial,
         resolvePlayedTroopCard = resolvePlayedTroopCard,
+        cancelPendingStrategySelection = cancelPendingStrategySelection,
+        tryPlayKitCard = tryPlayKitCard,
         tryPlayStrategyCard = tryPlayStrategyCard,
+        tryResolvePendingStrategySelection = tryResolvePendingStrategySelection,
         tryUseTomeCard = tryUseTomeCard,
         tryOpenFullArt = tryOpenFullArt,
         tryCancelSelectedEngageAttacker = tryCancelSelectedEngageAttacker,
@@ -1447,6 +1759,7 @@ function love.load()
     gameState.hoveredJaclSpecialDefinition = nil
     gameState.hoveredJaclSpecialPreviewCard = nil
     gameState.hoveredTomeSpawnPreviewCard = nil
+    gameState.kitReturnAnimations = {}
     cardinstances.reset()
     warzonecontrolrules.reset()
     topsloteffects.reset()
@@ -1506,12 +1819,14 @@ function love.update(dt)
 
     gameState.cardEntranceTimer = gameState.cardEntranceTimer + entranceDt
     resourcerules.update(dt)
+    updateKitReturnAnimations(dt)
 
-    for _, card in ipairs(gameState.cards) do
+    for cardIndex, card in ipairs(gameState.cards) do
         if card.destroying then
             card.destroyElapsed = (card.destroyElapsed or 0) + dt
 
             if card.destroyElapsed >= DESTRUCTION_DURATION then
+                resolveDestroyedTroopCard(cardIndex)
                 card.destroying = false
                 card.destroyed = true
                 discardDestroyedCard(card)
@@ -1648,5 +1963,6 @@ function love.draw()
         getCardRenderOptions = getCardRenderOptions,
         drawTopSlotHoverTargetBrackets = drawTopSlotHoverTargetBrackets,
         drawInfiltrationEffect = drawInfiltrationEffect,
+        drawKitReturnAnimations = drawKitReturnAnimations,
     })
 end

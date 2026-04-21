@@ -26,6 +26,11 @@ local function hasFlyingKeyword(definition, card)
     return keywordrules.cardHasKeyword(definition, FLYING_KEYWORD_ID, card)
 end
 
+local function getCardIndexFromEntityKey(entityKey)
+    local cardIndex = entityKey and entityKey:match("^card:(%d+)$")
+    return cardIndex and tonumber(cardIndex) or nil
+end
+
 local function canAttackTarget(attackerDefinition, targetDefinition, attackerCard, targetCard)
     if targetDefinition and targetDefinition.type == TOME_CARD_TYPE then
         return false
@@ -441,7 +446,7 @@ end
 
 local function shouldRetargetPlayerAttack(cards, cardIndex, attackerDefinition, attackerCard)
     if not isAvailablePlayerAttackTarget(cards, cardIndex) then
-        return false
+        return true
     end
 
     local card = cards[cardIndex]
@@ -660,6 +665,64 @@ end
 
 function warrules.clearAllRollResults()
     warRollDisplayStates = {}
+end
+
+function warrules.triggerCounterStrikesOnTargeting(cards, activeChampion, dealDamageToCard, dealDamageToChampion)
+    if not cards or not dealDamageToCard or not dealDamageToChampion then
+        return 0
+    end
+
+    local counterStrikeCount = 0
+
+    for entityKey, rollState in pairs(warRollDisplayStates) do
+        local targetCard = rollState and rollState.targetCardIndex and cards[rollState.targetCardIndex] or nil
+
+        if rollState
+            and rollState.faceIndex
+            and canTargetEnemyCard(rollState)
+            and targetCard
+            and targetCard.location
+            and targetCard.location.kind == "grid"
+            and targetCard.location.rowId == "PlayerRow"
+            and not targetCard.destroyed
+            and not targetCard.destroying then
+            local targetDefinition = cardregistry.getCard(targetCard.setName, targetCard.cardId)
+
+            if keywordrules.cardHasKeyword(targetDefinition, "KWCNTR", targetCard) then
+                local counterDamage = math.max(
+                    0,
+                    tonumber(keywordrules.getCardKeywordValue(targetCard, targetDefinition, "KWCNTR")) or 0
+                )
+
+                if counterDamage > 0 then
+                    if entityKey == "champion" then
+                        if activeChampion and not activeChampion.hidden then
+                            dealDamageToChampion(counterDamage)
+                            counterStrikeCount = counterStrikeCount + 1
+
+                            if activeChampion.hidden or (activeChampion.health or 0) <= 0 then
+                                warrules.clearEntityRollState(entityKey)
+                            end
+                        end
+                    else
+                        local sourceCardIndex = getCardIndexFromEntityKey(entityKey)
+                        local sourceCard = sourceCardIndex and cards[sourceCardIndex] or nil
+
+                        if sourceCard and not sourceCard.destroyed and not sourceCard.destroying then
+                            dealDamageToCard(sourceCard, counterDamage)
+                            counterStrikeCount = counterStrikeCount + 1
+
+                            if sourceCard.destroyed or sourceCard.destroying then
+                                warrules.clearEntityRollState(entityKey)
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    return counterStrikeCount
 end
 
 function warrules.getIncomingDamagePreview(cardIndex, isSourceActive)

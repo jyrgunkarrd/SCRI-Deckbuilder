@@ -123,6 +123,130 @@ local function executeStrategyEffect(strategyDefinition, state)
     return true
 end
 
+local function getTargetTypeSet(targetTypes)
+    local set = {}
+
+    if type(targetTypes) == "table" then
+        for _, targetType in ipairs(targetTypes) do
+            if type(targetType) == "string" then
+                set[targetType:lower()] = true
+            end
+        end
+    elseif type(targetTypes) == "string" then
+        set[targetTypes:lower()] = true
+    end
+
+    return set
+end
+
+local function isSelectableSacrificeTarget(card, strategyDefinition, ctx)
+    if not card
+        or not card.location
+        or card.location.kind ~= "grid"
+        or card.location.rowId ~= "PlayerRow"
+        or card.destroyed
+        or card.destroying then
+        return false
+    end
+
+    local cardDefinition = ctx.cardregistry.getCard(card.setName, card.cardId)
+    local allowedTargetTypes = getTargetTypeSet(strategyDefinition and strategyDefinition.target or nil)
+
+    return cardDefinition
+        and cardDefinition.type
+        and allowedTargetTypes[tostring(cardDefinition.type):lower()] == true
+end
+
+function strategyrules.isValidFunccostTarget(cardIndex, pendingSelection, ctx)
+    local card = cardIndex and ctx.cards and ctx.cards[cardIndex] or nil
+
+    if not pendingSelection or not card then
+        return false
+    end
+
+    if tostring(pendingSelection.funccost or ""):lower() == "sactarg" then
+        return isSelectableSacrificeTarget(card, pendingSelection.definition, ctx)
+    end
+
+    return false
+end
+
+local function beginPendingStrategySelection(strategyDefinition, state)
+    if not state.ctx.beginPendingStrategySelection then
+        return false
+    end
+
+    return state.ctx.beginPendingStrategySelection({
+        strategyCardIndex = state.strategyCardIndex,
+        targetCardIndex = state.targetCardIndex,
+        strategyCard = state.strategyCard,
+        targetCard = state.targetCard,
+        definition = strategyDefinition,
+        funccost = strategyDefinition.funccost,
+    })
+end
+
+local function applyCounterstrikeDamage(selectedCardIndex, pendingSelection, ctx)
+    local strategyDefinition = pendingSelection and pendingSelection.definition or nil
+    local damageAmount = math.max(0, tonumber(strategyDefinition and strategyDefinition.value) or 0)
+    local displayStates = ctx.warrules.getDisplayStates and ctx.warrules.getDisplayStates() or {}
+    local pendingTargets = {}
+    local damagedAny = false
+
+    for entityKey, rollState in pairs(displayStates) do
+        if rollState
+            and ctx.warrules.canTargetEnemyCard(rollState)
+            and rollState.targetCardIndex == selectedCardIndex then
+            pendingTargets[#pendingTargets + 1] = {
+                entityKey = entityKey,
+                sourceCard = rollState.sourceCard,
+            }
+        end
+    end
+
+    for _, target in ipairs(pendingTargets) do
+        if target.entityKey == "champion" then
+            local damageResult = ctx.dealDamageToChampion and ctx.dealDamageToChampion(damageAmount) or nil
+            damagedAny = damagedAny or (damageResult and damageResult.changed) or false
+        elseif target.sourceCard then
+            local damageResult = ctx.dealDamageToCard and ctx.dealDamageToCard(target.sourceCard, damageAmount) or nil
+            damagedAny = damagedAny or (damageResult and damageResult.changed) or false
+        end
+    end
+
+    return damagedAny
+end
+
+function strategyrules.resolvePendingSelection(selectedCardIndex, pendingSelection, ctx)
+    if not selectedCardIndex or not pendingSelection or not ctx then
+        return false
+    end
+
+    if not strategyrules.isValidFunccostTarget(selectedCardIndex, pendingSelection, ctx) then
+        return false
+    end
+
+    if tostring(pendingSelection.funccost or ""):lower() == "sactarg" then
+        if ctx.startCardDestruction then
+            ctx.startCardDestruction(selectedCardIndex)
+        elseif ctx.discardCard then
+            ctx.discardCard(selectedCardIndex)
+        end
+
+        if tostring((pendingSelection.definition and pendingSelection.definition.func) or ""):lower() == "counterstrk" then
+            applyCounterstrikeDamage(selectedCardIndex, pendingSelection, ctx)
+        end
+
+        if ctx.warrules.retargetIllegalEnemyAttacks then
+            ctx.warrules.retargetIllegalEnemyAttacks(ctx.cards)
+        end
+
+        return true
+    end
+
+    return false
+end
+
 local function refreshEliteCards(ctx)
     for cardIndex, card in ipairs(ctx.cards or {}) do
         if card
@@ -179,7 +303,19 @@ function strategyrules.playStrategy(strategyCardIndex, targetCardIndex, ctx)
         return false
     end
 
-    if not executeStrategyEffect(strategyDefinition, {
+    local state = {
+        cards = ctx.cards,
+        strategyCardIndex = strategyCardIndex,
+        targetCardIndex = targetCardIndex,
+        strategyCard = strategyCard,
+        targetCard = ctx.cards[targetCardIndex],
+        definition = strategyDefinition,
+        ctx = ctx,
+    }
+
+    local hasPendingFunccost = strategyDefinition.funccost ~= nil
+
+    if not hasPendingFunccost and not executeStrategyEffect(strategyDefinition, {
         cards = ctx.cards,
         strategyCardIndex = strategyCardIndex,
         targetCardIndex = targetCardIndex,
@@ -207,11 +343,16 @@ function strategyrules.playStrategy(strategyCardIndex, targetCardIndex, ctx)
 
     refreshEliteCards(ctx)
 
-    if ctx.warrules.retargetIllegalEnemyAttacks then
+    if ctx.warrules.retargetIllegalEnemyAttacks and not hasPendingFunccost then
         ctx.warrules.retargetIllegalEnemyAttacks(ctx.cards)
     end
 
     ctx.discardCard(strategyCardIndex)
+
+    if hasPendingFunccost then
+        beginPendingStrategySelection(strategyDefinition, state)
+    end
+
     return true
 end
 

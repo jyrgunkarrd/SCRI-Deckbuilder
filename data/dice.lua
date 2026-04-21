@@ -226,6 +226,24 @@ local dice = {
     --- Advanced Block ---
 
     {
+        id = "DIV1",
+        type = "Divert",
+        value = 1,
+        targ = "Div",
+        facename = "Divert Attack",
+        facedesc = "Divert all attacks targeting an allied card to this card. This card gains block.",
+    },
+
+    {
+        id = "DIV2",
+        type = "Divert",
+        value = 2,
+        targ = "Div",
+        facename = "Divert Attack",
+        facedesc = "Divert all attacks targeting an allied card to this card. This card gains block.",
+    },
+  
+    {
         id = "DIV3",
         type = "Divert",
         value = 3,

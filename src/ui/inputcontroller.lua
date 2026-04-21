@@ -52,6 +52,24 @@ function inputcontroller.mousepressed(gameState, deps, x, y, button)
     local clickedJaclPortrait = deps.isPointInsideJaclPortrait(x, y)
     local clickedJaclMethodBadge = deps.envdraw.getJaclMethodBadgeAt(x, y, gameState.playerJacl)
 
+    if deps.hasPendingStrategySelection and deps.hasPendingStrategySelection() then
+        if button == 2 and deps.cancelPendingStrategySelection then
+            deps.cancelPendingStrategySelection()
+            clearHoverAndExpansion(gameState)
+            return
+        end
+
+        if button == 1 and deps.tryResolvePendingStrategySelection then
+            if deps.tryResolvePendingStrategySelection(gameState.hoveredCardIndex) then
+                clearHoverAndExpansion(gameState)
+            end
+
+            return
+        end
+
+        return
+    end
+
     if button == 1 and deps.tryUseEngageReroll(x, y) then
         return
     end
@@ -220,10 +238,34 @@ function inputcontroller.mousereleased(gameState, deps, x, y, button)
 
     local draggedCard = gameState.cards[gameState.draggedCardIndex]
     local isStrategyCard = deps.isStrategyCard(draggedCard)
+    local isKitCard = deps.isKitCard and deps.isKitCard(draggedCard)
 
     if isStrategyCard then
         local targetCardIndex = deps.getGridCardAt(x, y, gameState.draggedCardIndex)
         local played = deps.tryPlayStrategyCard(gameState.draggedCardIndex, targetCardIndex)
+
+        if played then
+            deps.normalizeHandCardSlots()
+            deps.sfxrules.playResourcePlay()
+        else
+            gameState.cards[gameState.draggedCardIndex].location = deps.copyLocation(gameState.draggedCardOrigin)
+
+            if targetCardIndex then
+                deps.sfxrules.playPlayReject()
+            end
+        end
+
+        gameState.draggedCardIndex = nil
+        gameState.draggedCardOrigin = nil
+        gameState.expandedGridCardIndex = nil
+        gameState.hoveredCardIndex = nil
+        deps.updateHoveredCard()
+        return
+    end
+
+    if isKitCard then
+        local targetCardIndex = deps.getGridCardAt(x, y, gameState.draggedCardIndex)
+        local played = deps.tryPlayKitCard and deps.tryPlayKitCard(gameState.draggedCardIndex, targetCardIndex)
 
         if played then
             deps.normalizeHandCardSlots()
@@ -283,6 +325,10 @@ function inputcontroller.mousereleased(gameState, deps, x, y, button)
 end
 
 function inputcontroller.keypressed(gameState, deps, key)
+    if deps.hasPendingStrategySelection and deps.hasPendingStrategySelection() and key == "space" then
+        return
+    end
+
     if key == "escape" then
         local modalState = deps.buildModalState()
 

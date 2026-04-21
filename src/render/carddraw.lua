@@ -325,6 +325,31 @@ local function getKeywordDefinition(keywordId)
     return keywordsById[keywordId]
 end
 
+local function appendKeywordIds(keywordIds, seenKeywordIds, sourceDefinition)
+    if not sourceDefinition then
+        return
+    end
+
+    if type(sourceDefinition.keyword) == "table" then
+        for _, keywordId in ipairs(sourceDefinition.keyword) do
+            if keywordId and not seenKeywordIds[keywordId] then
+                keywordIds[#keywordIds + 1] = keywordId
+                seenKeywordIds[keywordId] = true
+            end
+        end
+    elseif sourceDefinition.keyword ~= nil and not seenKeywordIds[sourceDefinition.keyword] then
+        keywordIds[#keywordIds + 1] = sourceDefinition.keyword
+        seenKeywordIds[sourceDefinition.keyword] = true
+    end
+end
+
+local function appendAttachedKitKeywordIds(keywordIds, seenKeywordIds, card)
+    for _, attachedKit in ipairs(card and card.attachedKitCards or {}) do
+        local attachedDefinition = attachedKit and cardregistry.getCard(attachedKit.setName, attachedKit.cardId) or nil
+        appendKeywordIds(keywordIds, seenKeywordIds, attachedDefinition)
+    end
+end
+
 local function getCardKeywordIds(cardDefinition, card)
     if not cardDefinition then
         local temporaryKeywordIds = {}
@@ -341,17 +366,7 @@ local function getCardKeywordIds(cardDefinition, card)
     local keywordIds = {}
     local seenKeywordIds = {}
 
-    if type(cardDefinition.keyword) == "table" then
-        for _, keywordId in ipairs(cardDefinition.keyword) do
-            if keywordId then
-                keywordIds[#keywordIds + 1] = keywordId
-                seenKeywordIds[keywordId] = true
-            end
-        end
-    elseif cardDefinition.keyword ~= nil then
-        keywordIds[#keywordIds + 1] = cardDefinition.keyword
-        seenKeywordIds[cardDefinition.keyword] = true
-    end
+    appendKeywordIds(keywordIds, seenKeywordIds, cardDefinition)
 
     if cardDefinition.type == "strategy" then
         local hasStrategistKeyword = false
@@ -375,6 +390,8 @@ local function getCardKeywordIds(cardDefinition, card)
             seenKeywordIds[keywordId] = true
         end
     end
+
+    appendAttachedKitKeywordIds(keywordIds, seenKeywordIds, card)
 
     return keywordIds
 end
@@ -1002,6 +1019,29 @@ local function getKeywordBadgeRects(cardDefinition, x, y, width, reservedLeftWid
     end
 
     return badgeRects
+end
+
+function carddraw.getKeywordBadgeRect(setName, cardId, drawX, drawY, options, keywordId)
+    local cardDefinition = getCardDefinition(setName, cardId)
+
+    if not cardDefinition or not keywordId then
+        return nil
+    end
+
+    local metrics = getCardMetrics(options)
+    local costBadgeLayout = cardDefinition.mcost
+        and not metrics.showHealthOnPortrait
+        and getCostBadgeLayout(cardDefinition, snap(drawX), snap(drawY), snap(metrics.width), snap(metrics.portraitHeight))
+        or nil
+    local reservedLeftWidth = costBadgeLayout and costBadgeLayout.occupiedWidth or 0
+
+    for _, badgeRect in ipairs(getKeywordBadgeRects(cardDefinition, snap(drawX), snap(drawY), snap(metrics.width), reservedLeftWidth, metrics.card)) do
+        if badgeRect.keywordId == keywordId then
+            return badgeRect
+        end
+    end
+
+    return nil
 end
 
 local function drawKeywordBadge(keywordId, badgeX, badgeY, badgeSize, keywordValue)
@@ -1736,14 +1776,30 @@ function carddraw.getHoveredKeyword(setName, cardId, drawX, drawY, options, mous
             and mouseX <= badgeRect.x + badgeRect.size
             and mouseY >= badgeRect.y
             and mouseY <= badgeRect.y + badgeRect.size then
-            return getKeywordDefinition(badgeRect.keywordId)
+            local keywordDefinition = getKeywordDefinition(badgeRect.keywordId)
+            local hoveredKeyword = {
+                definition = keywordDefinition,
+            }
+
+            if badgeRect.keywordId == "KWKIT" then
+                local attachedKit = metrics.card and metrics.card.attachedKitCards and metrics.card.attachedKitCards[1] or nil
+
+                if attachedKit then
+                    hoveredKeyword.previewCardDefinition = cardregistry.getCard(attachedKit.setName, attachedKit.cardId)
+                    hoveredKeyword.previewLabel = "KIT"
+                end
+            end
+
+            return hoveredKeyword
         end
     end
 
     return nil
 end
 
-function carddraw.drawKeywordTooltip(keywordDefinition, mouseX, mouseY)
+function carddraw.drawKeywordTooltip(keywordHover, mouseX, mouseY)
+    local keywordDefinition = keywordHover and keywordHover.definition or keywordHover
+
     if not keywordDefinition then
         return
     end

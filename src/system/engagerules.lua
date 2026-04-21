@@ -1,8 +1,10 @@
 local carddraw = require("src.render.carddraw")
 local cardregistry = require("src.system.cardregistry")
+local keywordrules = require("src.system.keywordrules")
 local sfxrules = require("src.audio.sfxrules")
 
 local engagerules = {}
+local COUNTER_STRIKE_KEYWORD_ID = "KWCNTR"
 
 function engagerules.isEngagePhase(ctx)
     return ctx.turnrules.getCurrentPhase() == "War" and ctx.turnrules.getCurrentWarSubphase() == "Engage"
@@ -72,6 +74,35 @@ local function applyAttackSideEffects(ctx, rollState)
     if ctx.warrules.hasTargetType(rollState, "TAtk") then
         ctx.addSyntac(rollState.damageValue or 0)
     end
+end
+
+local function getCounterStrikeDamage(targetCard, targetDefinition)
+    if not targetCard or not targetDefinition then
+        return 0
+    end
+
+    if not keywordrules.cardHasKeyword(targetDefinition, COUNTER_STRIKE_KEYWORD_ID, targetCard) then
+        return 0
+    end
+
+    return math.max(
+        0,
+        tonumber(keywordrules.getCardKeywordValue(targetCard, targetDefinition, COUNTER_STRIKE_KEYWORD_ID)) or 0
+    )
+end
+
+local function applyCounterStrikeToAttacker(ctx, attackerCard, targetCard, targetDefinition)
+    if not attackerCard then
+        return
+    end
+
+    local counterDamage = getCounterStrikeDamage(targetCard, targetDefinition)
+
+    if counterDamage <= 0 then
+        return
+    end
+
+    ctx.dealDamageToCard(attackerCard, counterDamage)
 end
 
 local function applyPlayerWarzoneSideEffects(ctx, rollState)
@@ -181,6 +212,12 @@ function engagerules.tryResolveClick(hoveredTopSlotId, ctx)
 
         if hoveredTopSlotId == "champion" and ctx.warrules.canTargetEnemyCard(attackerRollState) then
             resolveSelectedAttack(ctx, function()
+                applyCounterStrikeToAttacker(ctx, attackerCard, ctx.activeChampion, ctx.activeChampion)
+
+                if ctx.isCardUnavailable(attackerCard) then
+                    return true
+                end
+
                 ctx.dealDamageToChampion(attackerRollState.damageValue or 0)
                 applyAttackSideEffects(ctx, attackerRollState)
                 return true
@@ -200,6 +237,12 @@ function engagerules.tryResolveClick(hoveredTopSlotId, ctx)
 
                 if ctx.warrules.canAttackTarget(attackerDefinition, targetDefinition, attackerCard, targetCard) then
                     resolveSelectedAttack(ctx, function()
+                        applyCounterStrikeToAttacker(ctx, attackerCard, targetCard, targetDefinition)
+
+                        if ctx.isCardUnavailable(attackerCard) then
+                            return true
+                        end
+
                         ctx.dealDamageToCard(targetCard, attackerRollState.damageValue or 0)
                         applyAttackSideEffects(ctx, attackerRollState)
                         return true

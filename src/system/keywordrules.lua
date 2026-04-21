@@ -14,6 +14,38 @@ local enemyChampionHandlers = {
 
 local keywordsById = nil
 
+local function appendKeywordIds(keywordIds, seenKeywordIds, sourceDefinition)
+    if not sourceDefinition then
+        return
+    end
+
+    if type(sourceDefinition.keyword) == "table" then
+        for _, keywordId in ipairs(sourceDefinition.keyword) do
+            if keywordId and not seenKeywordIds[keywordId] then
+                keywordIds[#keywordIds + 1] = keywordId
+                seenKeywordIds[keywordId] = true
+            end
+        end
+    elseif sourceDefinition.keyword ~= nil and not seenKeywordIds[sourceDefinition.keyword] then
+        keywordIds[#keywordIds + 1] = sourceDefinition.keyword
+        seenKeywordIds[sourceDefinition.keyword] = true
+    end
+end
+
+local function getAttachedKitDefinitions(card)
+    local attachedDefinitions = {}
+
+    for _, attachedKit in ipairs(card and card.attachedKitCards or {}) do
+        local attachedDefinition = attachedKit and cardregistry.getCard(attachedKit.setName, attachedKit.cardId) or nil
+
+        if attachedDefinition then
+            attachedDefinitions[#attachedDefinitions + 1] = attachedDefinition
+        end
+    end
+
+    return attachedDefinitions
+end
+
 local function loadKeywords()
     if keywordsById ~= nil then
         return
@@ -29,40 +61,20 @@ local function loadKeywords()
 end
 
 function keywordrules.getCardKeywordIds(cardDefinition, card)
-    if type(cardDefinition and cardDefinition.keyword) == "table" then
-        local keywordIds = {}
-        local seenKeywordIds = {}
-
-        for _, keywordId in ipairs(cardDefinition.keyword) do
-            if keywordId then
-                keywordIds[#keywordIds + 1] = keywordId
-                seenKeywordIds[keywordId] = true
-            end
-        end
-
-        for keywordId in pairs(card and card.tempKeywords or {}) do
-            if not seenKeywordIds[keywordId] and temporaryeffects.hasTemporaryKeyword(card, keywordId) then
-                keywordIds[#keywordIds + 1] = keywordId
-                seenKeywordIds[keywordId] = true
-            end
-        end
-
-        return keywordIds
-    end
-
     local keywordIds = {}
     local seenKeywordIds = {}
 
-    if cardDefinition and cardDefinition.keyword ~= nil then
-        keywordIds[#keywordIds + 1] = cardDefinition.keyword
-        seenKeywordIds[cardDefinition.keyword] = true
-    end
+    appendKeywordIds(keywordIds, seenKeywordIds, cardDefinition)
 
     for keywordId in pairs(card and card.tempKeywords or {}) do
         if not seenKeywordIds[keywordId] and temporaryeffects.hasTemporaryKeyword(card, keywordId) then
             keywordIds[#keywordIds + 1] = keywordId
             seenKeywordIds[keywordId] = true
         end
+    end
+
+    for _, attachedDefinition in ipairs(getAttachedKitDefinitions(card)) do
+        appendKeywordIds(keywordIds, seenKeywordIds, attachedDefinition)
     end
 
     return keywordIds
@@ -92,6 +104,18 @@ local function getDefinitionKeywordValue(cardDefinition, keywordId)
     end
 
     return tonumber(cardDefinition.kwval) or 0
+end
+
+local function getKeywordValueFromSource(card, sourceDefinition, keywordId)
+    if not sourceDefinition or not keywordrules.cardHasKeyword(sourceDefinition, keywordId) then
+        return nil
+    end
+
+    if card and card.keywordValues and card.keywordValues[keywordId] ~= nil then
+        return tonumber(card.keywordValues[keywordId]) or 0
+    end
+
+    return tonumber(getDefinitionKeywordValue(sourceDefinition, keywordId)) or 0
 end
 
 function keywordrules.getEnemyChampionPlayEffect(cardDefinition)
@@ -150,7 +174,7 @@ function keywordrules.initializeCardKeywordState(card, cardDefinition)
 end
 
 function keywordrules.getCardKeywordValue(card, cardDefinition, keywordId)
-    if not cardDefinition or not keywordId then
+    if not keywordId then
         return nil
     end
 
@@ -160,17 +184,43 @@ function keywordrules.getCardKeywordValue(card, cardDefinition, keywordId)
         return nil
     end
 
-    if card and card.keywordValues and card.keywordValues[keywordId] ~= nil then
-        return card.keywordValues[keywordId]
+    local keywordValue = 0
+    local hasKeywordValue = false
+
+    local baseKeywordValue = getKeywordValueFromSource(card, cardDefinition, keywordId)
+
+    if baseKeywordValue ~= nil then
+        keywordValue = keywordValue + baseKeywordValue
+        hasKeywordValue = true
     end
 
-    return getDefinitionKeywordValue(cardDefinition, keywordId)
+    local temporaryKeywordValue = temporaryeffects.getTemporaryKeywordValue(card, keywordId)
+
+    if temporaryKeywordValue ~= nil then
+        keywordValue = keywordValue + temporaryKeywordValue
+        hasKeywordValue = true
+    end
+
+    for _, attachedDefinition in ipairs(getAttachedKitDefinitions(card)) do
+        local attachedKeywordValue = getKeywordValueFromSource(nil, attachedDefinition, keywordId)
+
+        if attachedKeywordValue ~= nil then
+            keywordValue = keywordValue + attachedKeywordValue
+            hasKeywordValue = true
+        end
+    end
+
+    if not hasKeywordValue then
+        return nil
+    end
+
+    return keywordValue
 end
 
 function keywordrules.getCardKeywordValues(card, cardDefinition)
     local keywordValues = {}
 
-    for _, keywordId in ipairs(keywordrules.getCardKeywordIds(cardDefinition)) do
+    for _, keywordId in ipairs(keywordrules.getCardKeywordIds(cardDefinition, card)) do
         local keywordValue = keywordrules.getCardKeywordValue(card, cardDefinition, keywordId)
 
         if keywordValue ~= nil then

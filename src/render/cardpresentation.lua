@@ -226,9 +226,15 @@ function cardpresentation.drawStateOverlays(card, cardIndex, drawX, drawY, expan
     local cardWidth, collapsedHeight = carddraw.getCardSize(renderOptions)
     local _, expandedHeight = carddraw.getExpandedCardSize(renderOptions)
     local cardHeight = collapsedHeight + ((expandedHeight - collapsedHeight) * expansionProgress)
+    local targetingContext = ctx.getTargetingContext()
 
-    if targetingrules.shouldBracketCard(cardIndex, ctx.getTargetingContext()) then
-        targetoverlays.drawBrackets(drawX, drawY, cardWidth, cardHeight)
+    if targetingrules.shouldBracketCard(cardIndex, targetingContext) then
+        local bracketColorName = targetingrules.getCardBracketColor(cardIndex, targetingContext)
+        local bracketColor = bracketColorName == "strategy"
+            and targetoverlays.getStrategyBracketColor()
+            or targetoverlays.getDefaultBracketColor()
+
+        targetoverlays.drawBrackets(drawX, drawY, cardWidth, cardHeight, bracketColor)
     end
 
     if renderOptions.selected then

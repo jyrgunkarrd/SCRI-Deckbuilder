@@ -95,6 +95,7 @@ function gamestatedraw.draw(ctx)
 
     for cardIndex, card in ipairs(ctx.cards) do
         if not ctx.isCardDestroyed(card)
+            and not card.returningToHandAnimation
             and cardIndex ~= ctx.hoveredCardIndex
             and cardIndex ~= ctx.draggedCardIndex
             and cardIndex ~= ctx.expandedGridCardIndex then
@@ -106,6 +107,7 @@ function gamestatedraw.draw(ctx)
 
     if ctx.hoveredCardIndex
         and ctx.hoveredCardIndex ~= ctx.expandedGridCardIndex
+        and not ctx.cards[ctx.hoveredCardIndex].returningToHandAnimation
         and not ctx.isCardDestroyed(ctx.cards[ctx.hoveredCardIndex]) then
         local hoveredCard = ctx.cards[ctx.hoveredCardIndex]
         local drawX, drawY, expansionProgress, renderOptions = ctx.getCardDrawPosition(hoveredCard, ctx.hoveredCardIndex)
@@ -115,6 +117,7 @@ function gamestatedraw.draw(ctx)
 
     if ctx.expandedGridCardIndex
         and ctx.expandedGridCardIndex ~= ctx.draggedCardIndex
+        and not ctx.cards[ctx.expandedGridCardIndex].returningToHandAnimation
         and not ctx.isCardDestroyed(ctx.cards[ctx.expandedGridCardIndex]) then
         local expandedCard = ctx.cards[ctx.expandedGridCardIndex]
 
@@ -145,6 +148,10 @@ function gamestatedraw.draw(ctx)
             0,
             ctx.getCardRenderOptions(draggedCard, ctx.draggedCardIndex)
         )
+    end
+
+    if ctx.drawKitReturnAnimations then
+        ctx.drawKitReturnAnimations()
     end
 
     if drawTopStripOnTop then
@@ -235,6 +242,24 @@ function gamestatedraw.draw(ctx)
             local cardHeight = collapsedHeight + ((expandedHeight - collapsedHeight) * (expansionProgress or 0))
 
             ctx.envdraw.drawTomeSpawnTooltip(ctx.hoveredTomeSpawnPreviewCard, drawX, drawY, cardWidth, cardHeight)
+        end
+    elseif ctx.hoveredKeyword and ctx.hoveredKeyword.previewCardDefinition then
+        local hoveredCard = ctx.hoveredCardIndex and ctx.cards[ctx.hoveredCardIndex] or nil
+
+        if hoveredCard then
+            local drawX, drawY, expansionProgress, renderOptions = ctx.getCardDrawPosition(hoveredCard, ctx.hoveredCardIndex)
+            local cardWidth, collapsedHeight = ctx.carddraw.getCardSize(renderOptions)
+            local _, expandedHeight = ctx.carddraw.getExpandedCardSize(renderOptions)
+            local cardHeight = collapsedHeight + ((expandedHeight - collapsedHeight) * (expansionProgress or 0))
+
+            ctx.envdraw.drawSummonPreviewTooltip(
+                { ctx.hoveredKeyword.previewCardDefinition },
+                drawX,
+                drawY,
+                cardWidth,
+                cardHeight,
+                ctx.hoveredKeyword.previewLabel or "KIT"
+            )
         end
     elseif ctx.hoveredKeyword then
         local mouseX, mouseY = love.mouse.getPosition()

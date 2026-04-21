@@ -2577,7 +2577,7 @@ function envdraw.drawJaclSpecialTooltip(specialDefinition, previewCardDefinition
     love.graphics.setColor(1, 1, 1, 1)
 end
 
-function envdraw.drawSummonPreviewTooltip(previewCardDefinitions, anchorX, anchorY, anchorWidth, anchorHeight)
+function envdraw.drawSummonPreviewTooltip(previewCardDefinitions, anchorX, anchorY, anchorWidth, anchorHeight, labelText)
     if not previewCardDefinitions or #previewCardDefinitions <= 0 then
         return
     end
@@ -2628,7 +2628,7 @@ function envdraw.drawSummonPreviewTooltip(previewCardDefinitions, anchorX, ancho
     love.graphics.setFont(labelFont)
     love.graphics.setColor(0.95, 0.96, 0.98, 1)
     love.graphics.printf(
-        "SUMMON",
+        labelText or "SUMMON",
         boxX + SPECIAL_TOOLTIP_PADDING,
         snap(bubbleY + ((bubbleHeight - labelFont:getHeight()) / 2)),
         totalWidth - (SPECIAL_TOOLTIP_PADDING * 2),

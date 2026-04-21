@@ -151,6 +151,12 @@ end
 function phasecontroller.beginRetaliateFromEngage(gameState, deps)
     gameState.selectedAttackerCardIndex = nil
     deps.turnrules.advanceWarSubphase()
+    deps.warrules.triggerCounterStrikesOnTargeting(
+        gameState.cards,
+        gameState.activeChampion,
+        deps.dealDamageToCard,
+        deps.dealDamageToChampion
+    )
     deps.warrules.beginRetaliatePhase(deps.getTopSlotRollTargets(), gameState.cards)
 end
 

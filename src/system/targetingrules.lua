@@ -91,6 +91,10 @@ function targetingrules.shouldBracketCard(cardIndex, context)
         return false
     end
 
+    if context.pendingStrategySelection and context.isPendingStrategyTarget then
+        return context.isPendingStrategyTarget(cardIndex, context.pendingStrategySelection)
+    end
+
     local displayStates = context.displayStates or {}
 
     if context.hoveredTopSlotId then
@@ -209,6 +213,18 @@ function targetingrules.shouldBracketTopSlot(slotId, context)
     end
 
     return false
+end
+
+function targetingrules.getCardBracketColor(cardIndex, context)
+    context = context or {}
+
+    if context.pendingStrategySelection
+        and context.isPendingStrategyTarget
+        and context.isPendingStrategyTarget(cardIndex, context.pendingStrategySelection) then
+        return "strategy"
+    end
+
+    return "default"
 end
 
 return targetingrules

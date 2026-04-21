@@ -42,6 +42,19 @@ local keywords = {
             text = "This card becomes unexhausted and rerolls its action die every time a Strategy card is played.",
 
         },
+
+        {
+            id = "KWCNTR",
+            name = "Counter-Strike",
+            hasvalue = 1,
+            text = "When this card is attacked it deals damage to its attackers.",
+        },
+
+        {
+            id = "KWKIT",
+            name = "Kit",
+
+        },
 }
 
 return keywords
