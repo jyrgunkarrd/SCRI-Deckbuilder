@@ -3,9 +3,12 @@ local keywordrules = require("src.system.keywordrules")
 local strategyrules = {}
 
 local STRATEGIST_KEYWORD_ID = "KWSTRAT"
+local ELITE_KEYWORD_ID = "KWELITE"
+local CARD_SCRIPT_MODULE_PREFIX = "data.cards.scripts."
 
 local effectHandlers = {}
 local funcHandlers = {}
+local cardScriptHandlers = {}
 
 local function getFirstTargetCardId(strategyDefinition)
     if type(strategyDefinition.target) == "table" then
@@ -58,6 +61,42 @@ function strategyrules.isStrategistDefinition(cardDefinition)
     return keywordrules.cardHasKeyword(cardDefinition, STRATEGIST_KEYWORD_ID)
 end
 
+local function getCardScriptHandler(funcName)
+    if not funcName then
+        return nil
+    end
+
+    local scriptName = tostring(funcName)
+
+    if cardScriptHandlers[scriptName] ~= nil then
+        return cardScriptHandlers[scriptName]
+    end
+
+    local ok, handler = pcall(require, CARD_SCRIPT_MODULE_PREFIX .. scriptName)
+
+    if ok and type(handler) == "table" then
+        cardScriptHandlers[scriptName] = handler
+        return handler
+    end
+
+    if not ok and not tostring(handler):find("module '" .. CARD_SCRIPT_MODULE_PREFIX .. scriptName .. "' not found", 1, true) then
+        error(handler)
+    end
+
+    cardScriptHandlers[scriptName] = false
+    return nil
+end
+
+local function triggerStrategistExhaust(targetCardIndex, state)
+    local targetCard = targetCardIndex and state.ctx.cards[targetCardIndex] or nil
+    local targetDefinition = targetCard and state.ctx.cardregistry.getCard(targetCard.setName, targetCard.cardId) or nil
+    local handler = targetDefinition and getCardScriptHandler(targetDefinition.func) or nil
+
+    if handler and type(handler.onStrategistExhaust) == "function" then
+        handler.onStrategistExhaust(targetCardIndex, state)
+    end
+end
+
 local function executeStrategyEffect(strategyDefinition, state)
     for _, fieldName in ipairs({ "onPlay", "play", "execute" }) do
         if type(strategyDefinition[fieldName]) == "function" then
@@ -82,6 +121,23 @@ local function executeStrategyEffect(strategyDefinition, state)
     end
 
     return true
+end
+
+local function refreshEliteCards(ctx)
+    for cardIndex, card in ipairs(ctx.cards or {}) do
+        if card
+            and card.location
+            and card.location.kind == "grid"
+            and card.location.rowId == "PlayerRow"
+            and not card.destroyed
+            and not card.destroying then
+            local definition = ctx.cardregistry.getCard(card.setName, card.cardId)
+
+            if keywordrules.cardHasKeyword(definition, ELITE_KEYWORD_ID, card) then
+                ctx.warrules.rerollEntity(ctx.warrules.getCardEntityKey(cardIndex), definition, false, card)
+            end
+        end
+    end
 end
 
 function strategyrules.registerEffectHandler(effectName, handler)
@@ -137,6 +193,22 @@ function strategyrules.playStrategy(strategyCardIndex, targetCardIndex, ctx)
 
     if not ctx.warrules.consumeCardAttack(targetCardIndex) then
         return false
+    end
+
+    triggerStrategistExhaust(targetCardIndex, {
+        cards = ctx.cards,
+        strategyCardIndex = strategyCardIndex,
+        targetCardIndex = targetCardIndex,
+        strategyCard = strategyCard,
+        targetCard = ctx.cards[targetCardIndex],
+        definition = strategyDefinition,
+        ctx = ctx,
+    })
+
+    refreshEliteCards(ctx)
+
+    if ctx.warrules.retargetIllegalEnemyAttacks then
+        ctx.warrules.retargetIllegalEnemyAttacks(ctx.cards)
     end
 
     ctx.discardCard(strategyCardIndex)

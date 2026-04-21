@@ -1,6 +1,7 @@
 local keywordrules = {}
 local keywordDefinitions = require("data.keywords")
 local cardregistry = require("src.system.cardregistry")
+local temporaryeffects = require("src.system.temporaryeffects")
 local TIME_LIMIT_KEYWORD_ID = "KWTIME"
 
 local enemyChampionHandlers = {
@@ -27,32 +28,52 @@ local function loadKeywords()
     end
 end
 
-function keywordrules.getCardKeywordIds(cardDefinition)
-    if not cardDefinition or cardDefinition.keyword == nil then
-        return {}
-    end
-
-    if type(cardDefinition.keyword) == "table" then
+function keywordrules.getCardKeywordIds(cardDefinition, card)
+    if type(cardDefinition and cardDefinition.keyword) == "table" then
         local keywordIds = {}
+        local seenKeywordIds = {}
 
         for _, keywordId in ipairs(cardDefinition.keyword) do
             if keywordId then
                 keywordIds[#keywordIds + 1] = keywordId
+                seenKeywordIds[keywordId] = true
+            end
+        end
+
+        for keywordId in pairs(card and card.tempKeywords or {}) do
+            if not seenKeywordIds[keywordId] and temporaryeffects.hasTemporaryKeyword(card, keywordId) then
+                keywordIds[#keywordIds + 1] = keywordId
+                seenKeywordIds[keywordId] = true
             end
         end
 
         return keywordIds
     end
 
-    return { cardDefinition.keyword }
+    local keywordIds = {}
+    local seenKeywordIds = {}
+
+    if cardDefinition and cardDefinition.keyword ~= nil then
+        keywordIds[#keywordIds + 1] = cardDefinition.keyword
+        seenKeywordIds[cardDefinition.keyword] = true
+    end
+
+    for keywordId in pairs(card and card.tempKeywords or {}) do
+        if not seenKeywordIds[keywordId] and temporaryeffects.hasTemporaryKeyword(card, keywordId) then
+            keywordIds[#keywordIds + 1] = keywordId
+            seenKeywordIds[keywordId] = true
+        end
+    end
+
+    return keywordIds
 end
 
-function keywordrules.cardHasKeyword(cardDefinition, keywordId)
+function keywordrules.cardHasKeyword(cardDefinition, keywordId, card)
     if not cardDefinition or not keywordId then
         return false
     end
 
-    for _, cardKeywordId in ipairs(keywordrules.getCardKeywordIds(cardDefinition)) do
+    for _, cardKeywordId in ipairs(keywordrules.getCardKeywordIds(cardDefinition, card)) do
         if cardKeywordId == keywordId then
             return true
         end

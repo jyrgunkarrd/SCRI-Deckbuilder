@@ -68,10 +68,25 @@ local function applyAttackSideEffects(ctx, rollState)
     if ctx.warrules.hasTargetType(rollState, "AtkSab") and ctx.activePrimaryObjective then
         ctx.addObjectiveProgress(ctx.activePrimaryObjective, -(rollState.damageValue or 0), "objective")
     end
+
+    if ctx.warrules.hasTargetType(rollState, "TAtk") then
+        ctx.addSyntac(rollState.damageValue or 0)
+    end
 end
 
 local function applyPlayerWarzoneSideEffects(ctx, rollState)
     if ctx.warrules.hasTargetType(rollState, "InfTac") then
+        ctx.addSyntac(rollState.damageValue or 0)
+    end
+end
+
+local function canTargetSabotage(ctx, rollState)
+    return ctx.warrules.hasTargetType(rollState, "Sab")
+        or ctx.warrules.hasTargetType(rollState, "TacSab")
+end
+
+local function applySabotageSideEffects(ctx, rollState)
+    if ctx.warrules.hasTargetType(rollState, "TacSab") then
         ctx.addSyntac(rollState.damageValue or 0)
     end
 end
@@ -130,16 +145,18 @@ function engagerules.tryResolveClick(hoveredTopSlotId, ctx)
             return true
         end
 
-        if ctx.warrules.hasTargetType(attackerRollState, "Sab") then
+        if canTargetSabotage(ctx, attackerRollState) then
             if hoveredTopSlotId == "objective" and ctx.activePrimaryObjective then
                 resolveSelectedAttack(ctx, function()
                     ctx.addObjectiveProgress(ctx.activePrimaryObjective, -(attackerRollState.damageValue or 0), "objective")
+                    applySabotageSideEffects(ctx, attackerRollState)
                     return true
                 end)
                 return true
             elseif hoveredTopSlotId == "intel" and ctx.activeIntel then
                 resolveSelectedAttack(ctx, function()
                     ctx.addObjectiveProgress(ctx.activeIntel, -(attackerRollState.damageValue or 0), "intel")
+                    applySabotageSideEffects(ctx, attackerRollState)
                     return true
                 end)
                 return true
@@ -181,7 +198,7 @@ function engagerules.tryResolveClick(hoveredTopSlotId, ctx)
                 local attackerDefinition = cardregistry.getCard(attackerCard.setName, attackerCard.cardId)
                 local targetDefinition = cardregistry.getCard(targetCard.setName, targetCard.cardId)
 
-                if ctx.warrules.canAttackTarget(attackerDefinition, targetDefinition) then
+                if ctx.warrules.canAttackTarget(attackerDefinition, targetDefinition, attackerCard, targetCard) then
                     resolveSelectedAttack(ctx, function()
                         ctx.dealDamageToCard(targetCard, attackerRollState.damageValue or 0)
                         applyAttackSideEffects(ctx, attackerRollState)
@@ -211,6 +228,42 @@ function engagerules.tryResolveClick(hoveredTopSlotId, ctx)
                 if generatedCardDefinition then
                     resolveImmediateCardAction(ctx, ctx.hoveredCardIndex, function()
                         return ctx.beginInfiltrationEffect(ctx.warrules.getCardEntityKey(ctx.hoveredCardIndex), generatedCardDefinition, hoveredRollState.damageValue or 0)
+                    end)
+                end
+
+                return true
+            end
+
+            if hoveredRollState and ctx.warrules.hasTargetType(hoveredRollState, "smn") then
+                local generatedCardDefinition = cardregistry.getCardById(hoveredRollState.cardgen)
+                local spawnCount = math.max(0, math.floor(tonumber(hoveredRollState.damageValue) or 0))
+
+                if generatedCardDefinition and spawnCount > 0 and ctx.spawnTokensNearCard then
+                    resolveImmediateCardAction(ctx, ctx.hoveredCardIndex, function()
+                        ctx.spawnTokensNearCard(ctx.hoveredCardIndex, generatedCardDefinition, spawnCount)
+                        return true
+                    end)
+                end
+
+                return true
+            end
+
+            if hoveredRollState and ctx.warrules.hasTargetType(hoveredRollState, "rsmn") then
+                local generatedCardDefinitions = {}
+                local spawnCount = math.max(0, math.floor(tonumber(hoveredRollState.damageValue) or 0))
+
+                for _, cardId in ipairs(hoveredRollState.cardgenPool or {}) do
+                    local generatedCardDefinition = cardregistry.getCardById(cardId)
+
+                    if generatedCardDefinition then
+                        generatedCardDefinitions[#generatedCardDefinitions + 1] = generatedCardDefinition
+                    end
+                end
+
+                if #generatedCardDefinitions > 0 and spawnCount > 0 and ctx.spawnRandomTokensNearCard then
+                    resolveImmediateCardAction(ctx, ctx.hoveredCardIndex, function()
+                        ctx.spawnRandomTokensNearCard(ctx.hoveredCardIndex, generatedCardDefinitions, spawnCount)
+                        return true
                     end)
                 end
 

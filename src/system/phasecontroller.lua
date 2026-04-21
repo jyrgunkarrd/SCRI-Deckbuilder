@@ -115,6 +115,7 @@ function phasecontroller.enterCurrentPhase(gameState, deps)
         deps.warrules.clearBlankResults()
         deps.warrules.clearAllRollResults()
         deps.clearAllBlocking()
+        deps.temporaryeffects.clearAllEndPhaseEffects()
         for _, expiredCardIndex in ipairs(deps.keywordrules.decrementEndPhaseKeywords(gameState.cards)) do
             deps.removeCardFromPlay(expiredCardIndex)
         end
@@ -223,6 +224,12 @@ function phasecontroller.update(gameState, deps, dt)
     deps.updateInfiltrationEffect(dt)
 
     deps.warrules.update(dt, deps.turnrules.getCurrentPhase())
+
+    if deps.turnrules.getCurrentPhase() == "War"
+        and deps.turnrules.getCurrentWarSubphase() == "Engage"
+        and deps.warrules.retargetIllegalEnemyAttacks then
+        deps.warrules.retargetIllegalEnemyAttacks(gameState.cards)
+    end
 
     local retaliation = deps.warrules.updateRetaliate(dt, deps.turnrules.getCurrentPhase(), deps.turnrules.getCurrentWarSubphase())
 

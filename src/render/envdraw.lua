@@ -1481,6 +1481,82 @@ function envdraw.getTopSlotHit(mouseX, mouseY, currentPhase, championDefinition,
     return nil
 end
 
+function envdraw.getHoveredTopSlotDiceFace(mouseX, mouseY, currentPhase, championDefinition, warzoneDefinition, poiDefinition, objectiveDefinition, intelDefinition, rollStates, expandedSlotId, expandedSlotProgress)
+    local slots = buildTopStripLayout(championDefinition, currentPhase, warzoneDefinition, poiDefinition, objectiveDefinition, intelDefinition)
+
+    if not slots then
+        return nil
+    end
+
+    if expandedSlotId and expandedSlotProgress and expandedSlotProgress > 0 then
+        for _, slot in ipairs(slots) do
+            if slot.id == expandedSlotId and slot.textbox and slot.definition then
+                local textboxHeight = snap(slot.height * expandedSlotProgress)
+
+                if textboxHeight > slot.labelHeight and carddraw.definitionHasDice(slot.definition) then
+                    local textboxX = snap(slot.x)
+                    local textboxY = snap(slot.y + slot.labelHeight + slot.height)
+                    local textboxWidth = snap(slot.width)
+                    local textboxPadding = snap(TOP_SLOT_TEXTBOX_PADDING * (slot.width / CHAMP_DISPLAY_WIDTH))
+                    local anchorHeight = slot.labelHeight + slot.height + textboxHeight
+                    local tooltip = carddraw.getHoveredDefinitionTextboxDiceFace(
+                        slot.definition,
+                        textboxX,
+                        textboxY,
+                        textboxWidth,
+                        textboxHeight,
+                        textboxPadding,
+                        0,
+                        false,
+                        true,
+                        0.9,
+                        mouseX,
+                        mouseY,
+                        slot.x,
+                        slot.y,
+                        slot.width,
+                        anchorHeight
+                    )
+
+                    if tooltip then
+                        return tooltip
+                    end
+                end
+            end
+        end
+    end
+
+    for _, slot in ipairs(slots) do
+        local rollState = rollStates and rollStates[slot.id] or nil
+        local imageRect = slot.imageRect
+
+        if slot.definition and imageRect and rollState and rollState.faceIndex then
+            local badgeInset = math.max(4, snap(imageRect.width * 0.035))
+            local badgeWidth = math.max(20, snap(imageRect.width * 0.115 * 1.12))
+            local badgeHeaderHeight = snap(badgeWidth * 0.44)
+            local badgeBodyHeight = badgeWidth
+            local badgeHeight = badgeHeaderHeight + badgeBodyHeight
+            local badgeX = snap(imageRect.x + imageRect.width - badgeInset - badgeWidth)
+            local badgeY = snap(imageRect.y + badgeInset)
+
+            if mouseX >= badgeX
+                and mouseX <= badgeX + badgeWidth
+                and mouseY >= badgeY
+                and mouseY <= badgeY + badgeHeight then
+                return carddraw.buildDiceFaceTooltip(
+                    carddraw.getDefinitionFaceBadge(slot.definition, rollState.faceIndex),
+                    imageRect.x,
+                    imageRect.y,
+                    imageRect.width,
+                    imageRect.height
+                )
+            end
+        end
+    end
+
+    return nil
+end
+
 function envdraw.getTopSlotLayouts(currentPhase, championDefinition, warzoneDefinition, poiDefinition, objectiveDefinition, intelDefinition, warzonePreviewState, objectivePreviewPips, intelPreviewPips)
     return buildTopStripLayout(championDefinition, currentPhase, warzoneDefinition, poiDefinition, objectiveDefinition, intelDefinition, warzonePreviewState, objectivePreviewPips, intelPreviewPips) or {}
 end
@@ -2253,6 +2329,19 @@ function envdraw.drawSyntacBox(jaclDefinition, syntacCount)
     local startX = snap(trackerRight - totalGridWidth)
     local startY = snap(layout.y + ((layout.height - totalGridHeight) / 2))
 
+    local function drawDiamondPip(mode, x, y, size)
+        local centerX = x + (size / 2)
+        local centerY = y + (size / 2)
+
+        love.graphics.polygon(
+            mode,
+            centerX, y,
+            x + size, centerY,
+            centerX, y + size,
+            x, centerY
+        )
+    end
+
     love.graphics.setColor(0.58, 0.9, 0.96, 0.45)
 
     for pipIndex = 0, maxCount - 1 do
@@ -2261,7 +2350,7 @@ function envdraw.drawSyntacBox(jaclDefinition, syntacCount)
         local pipX = startX + (column * (pipSize + pipGap))
         local pipY = startY + (row * (pipSize + pipGap))
 
-        love.graphics.rectangle("line", pipX, pipY, pipSize, pipSize)
+        drawDiamondPip("line", pipX, pipY, pipSize)
     end
 
     love.graphics.setColor(0.58, 0.9, 0.96, 1)
@@ -2272,7 +2361,7 @@ function envdraw.drawSyntacBox(jaclDefinition, syntacCount)
         local pipX = startX + (column * (pipSize + pipGap))
         local pipY = startY + (row * (pipSize + pipGap))
 
-        love.graphics.rectangle("fill", pipX, pipY, pipSize, pipSize)
+        drawDiamondPip("fill", pipX, pipY, pipSize)
     end
 
     love.graphics.setColor(1, 1, 1, 1)
@@ -2488,8 +2577,8 @@ function envdraw.drawJaclSpecialTooltip(specialDefinition, previewCardDefinition
     love.graphics.setColor(1, 1, 1, 1)
 end
 
-function envdraw.drawTomeSpawnTooltip(previewCardDefinition, anchorX, anchorY, anchorWidth, anchorHeight)
-    if not previewCardDefinition then
+function envdraw.drawSummonPreviewTooltip(previewCardDefinitions, anchorX, anchorY, anchorWidth, anchorHeight)
+    if not previewCardDefinitions or #previewCardDefinitions <= 0 then
         return
     end
 
@@ -2497,7 +2586,8 @@ function envdraw.drawTomeSpawnTooltip(previewCardDefinition, anchorX, anchorY, a
     local labelFont = getFont(JACL_LABEL_FONT_PATH, SPECIAL_TOOLTIP_TITLE_SIZE)
     local previewWidth, previewHeight = carddraw.getExpandedCardSize()
     local bubbleHeight = (SPECIAL_TOOLTIP_PADDING * 2) + labelFont:getHeight()
-    local totalWidth = previewWidth
+    local previewGap = SPECIAL_TOOLTIP_PREVIEW_GAP
+    local totalWidth = (#previewCardDefinitions * previewWidth) + ((#previewCardDefinitions - 1) * previewGap)
     local totalHeight = previewHeight + SPECIAL_TOOLTIP_PREVIEW_GAP + bubbleHeight
     local windowWidth, windowHeight = love.graphics.getDimensions()
     local gap = SPECIAL_TOOLTIP_OFFSET_X
@@ -2522,14 +2612,18 @@ function envdraw.drawTomeSpawnTooltip(previewCardDefinition, anchorX, anchorY, a
         8
     )
 
-    carddraw.drawCardState(previewCardDefinition.setName, previewCardDefinition.id, boxX, boxY, 1, {
-        showBadgesInTextbox = true,
-    })
+    for previewIndex, previewCardDefinition in ipairs(previewCardDefinitions) do
+        local previewX = boxX + ((previewIndex - 1) * (previewWidth + previewGap))
+
+        carddraw.drawCardState(previewCardDefinition.setName, previewCardDefinition.id, previewX, boxY, 1, {
+            showBadgesInTextbox = true,
+        })
+    end
 
     love.graphics.setColor(0.05, 0.05, 0.06, 0.96)
-    love.graphics.rectangle("fill", boxX, bubbleY, previewWidth, bubbleHeight, 6, 6)
+    love.graphics.rectangle("fill", boxX, bubbleY, totalWidth, bubbleHeight, 6, 6)
     love.graphics.setColor(0.82, 0.85, 0.89, 0.82)
-    love.graphics.rectangle("line", boxX, bubbleY, previewWidth, bubbleHeight, 6, 6)
+    love.graphics.rectangle("line", boxX, bubbleY, totalWidth, bubbleHeight, 6, 6)
 
     love.graphics.setFont(labelFont)
     love.graphics.setColor(0.95, 0.96, 0.98, 1)
@@ -2537,12 +2631,20 @@ function envdraw.drawTomeSpawnTooltip(previewCardDefinition, anchorX, anchorY, a
         "SUMMON",
         boxX + SPECIAL_TOOLTIP_PADDING,
         snap(bubbleY + ((bubbleHeight - labelFont:getHeight()) / 2)),
-        previewWidth - (SPECIAL_TOOLTIP_PADDING * 2),
+        totalWidth - (SPECIAL_TOOLTIP_PADDING * 2),
         "center"
     )
 
     love.graphics.setFont(previousFont)
     love.graphics.setColor(1, 1, 1, 1)
+end
+
+function envdraw.drawTomeSpawnTooltip(previewCardDefinition, anchorX, anchorY, anchorWidth, anchorHeight)
+    if not previewCardDefinition then
+        return
+    end
+
+    envdraw.drawSummonPreviewTooltip({ previewCardDefinition }, anchorX, anchorY, anchorWidth, anchorHeight)
 end
 
 function envdraw.drawResourceTransfers(transfers)

@@ -23,7 +23,7 @@ local function canTargetEnemyCard(rollState, context)
         return context.canTargetEnemyCard(rollState)
     end
 
-    return hasTargetType(rollState, "Atk") or hasTargetType(rollState, "AtkSab")
+    return hasTargetType(rollState, "Atk") or hasTargetType(rollState, "AtkSab") or hasTargetType(rollState, "TAtk")
 end
 
 local function canTargetPlayerWarzone(rollState, context)

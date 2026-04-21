@@ -205,6 +205,26 @@ function gamestatedraw.draw(ctx)
         end
     elseif ctx.isResourceExchangeModalOpen then
         ctx.envdraw.drawResourceExchangeModal(ctx.resourcerules.getResourceCounts())
+    elseif ctx.hoveredDiceFace then
+        ctx.carddraw.drawDiceFaceTooltip(ctx.hoveredDiceFace)
+
+        if ctx.hoveredDiceFace.previewCardDefinitions and #ctx.hoveredDiceFace.previewCardDefinitions > 0 then
+            ctx.envdraw.drawSummonPreviewTooltip(
+                ctx.hoveredDiceFace.previewCardDefinitions,
+                ctx.hoveredDiceFace.cardX,
+                ctx.hoveredDiceFace.cardY,
+                ctx.hoveredDiceFace.cardWidth,
+                ctx.hoveredDiceFace.cardHeight
+            )
+        elseif ctx.hoveredDiceFace.previewCardDefinition then
+            ctx.envdraw.drawTomeSpawnTooltip(
+                ctx.hoveredDiceFace.previewCardDefinition,
+                ctx.hoveredDiceFace.cardX,
+                ctx.hoveredDiceFace.cardY,
+                ctx.hoveredDiceFace.cardWidth,
+                ctx.hoveredDiceFace.cardHeight
+            )
+        end
     elseif ctx.hoveredTomeSpawnPreviewCard then
         local hoveredCard = ctx.hoveredCardIndex and ctx.cards[ctx.hoveredCardIndex] or nil
 

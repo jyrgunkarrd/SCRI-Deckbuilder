@@ -255,6 +255,10 @@ function inputcontroller.mousereleased(gameState, deps, x, y, button)
             rowId = targetRowId,
             column = dropColumn,
         }
+        if deps.resolvePlayedTroopCard then
+            deps.resolvePlayedTroopCard(gameState.draggedCardIndex)
+        end
+
         if gameState.draggedCardOrigin.kind == "hand" then
             deps.normalizeHandCardSlots()
         end

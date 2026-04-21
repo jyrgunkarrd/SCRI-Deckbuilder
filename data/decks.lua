@@ -10,12 +10,12 @@ local decks = {
             name = "Demo",
             cards = {
                 {
-                    cardId = "AEGBLK",
+                    cardId = "AEGPSYRAP",
                     quantity = 3,
                 },
 
                 {
-                    cardId = "AEGPSYRAP",
+                    cardId = "AEGTMINGO",
                     quantity = 3,
                 },
 

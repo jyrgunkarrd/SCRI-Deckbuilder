@@ -35,6 +35,13 @@ local keywords = {
             text = "Strategy cards may be played by dragging them onto this card. This card exhausts and its die face is cleared.",
 
         },
+
+        {
+            id = "KWELITE",
+            name = "Elite",
+            text = "This card becomes unexhausted and rerolls its action die every time a Strategy card is played.",
+
+        },
 }
 
 return keywords

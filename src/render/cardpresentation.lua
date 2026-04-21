@@ -26,6 +26,7 @@ local function buildCommonRenderOptions(card, ctx)
     return {
         currentHealth = card.currentHealth,
         maxHealth = card.maxHealth,
+        card = card,
         blocking = card.blocking,
         keywordValues = keywordrules.getCardKeywordValues(card, getCardDefinition(card)),
         displayName = card.displayName,

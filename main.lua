@@ -22,11 +22,13 @@ local deckrules = require("src.system.deckrules")
 local damagerules = require("src.system.damagerules")
 local jaclrules = require("src.system.jaclrules")
 local keywordrules = require("src.system.keywordrules")
+local temporaryeffects = require("src.system.temporaryeffects")
 local resourcerules = require("src.system.resourcerules")
 local specialrules = require("src.system.specialrules")
 local infiltrationrules = require("src.system.infiltrationrules")
 local strategyrules = require("src.system.strategyrules")
 local tomerules = require("src.system.tomerules")
+local trooprules = require("src.system.trooprules")
 local targetoverlays = require("src.render.targetoverlays")
 local gamestatedraw = require("src.render.gamestate_draw")
 local inputcontroller = require("src.ui.inputcontroller")
@@ -61,6 +63,7 @@ local gameState = {
     hoveredCardIndex = nil,
     hoveredTopSlotId = nil,
     hoveredKeyword = nil,
+    hoveredDiceFace = nil,
     expandedGridCardIndex = nil,
     expandedTopSlotId = nil,
     selectedAttackerCardIndex = nil,
@@ -378,6 +381,37 @@ local function spawnTokensNearCard(sourceCardIndex, tokenDefinition, count)
         if spawnedCount >= count then
             break
         end
+
+        if createGeneratedGridCard(tokenDefinition, rowId, column) then
+            spawnedCount = spawnedCount + 1
+        end
+    end
+
+    return spawnedCount
+end
+
+local function spawnRandomTokensNearCard(sourceCardIndex, tokenDefinitions, count)
+    local sourceCard = sourceCardIndex and gameState.cards[sourceCardIndex] or nil
+
+    if not sourceCard
+        or not sourceCard.location
+        or sourceCard.location.kind ~= "grid"
+        or not tokenDefinitions
+        or #tokenDefinitions <= 0
+        or (count or 0) <= 0 then
+        return 0
+    end
+
+    local spawnedCount = 0
+    local rowId = sourceCard.location.rowId
+    local openColumns = getClosestOpenGridColumns(rowId, sourceCard.location.column)
+
+    for _, column in ipairs(openColumns) do
+        if spawnedCount >= count then
+            break
+        end
+
+        local tokenDefinition = tokenDefinitions[love.math.random(1, #tokenDefinitions)]
 
         if createGeneratedGridCard(tokenDefinition, rowId, column) then
             spawnedCount = spawnedCount + 1
@@ -728,6 +762,7 @@ local function getPhaseControllerDeps()
         sfxrules = sfxrules,
         topsloteffects = topsloteffects,
         turnrules = turnrules,
+        temporaryeffects = temporaryeffects,
         warrules = warrules,
         addObjectiveProgress = addObjectiveProgress,
         addSetupAgents = addSetupAgents,
@@ -930,6 +965,14 @@ local function tryPlayStrategyCard(strategyCardIndex, targetCardIndex)
     })
 end
 
+local function resolvePlayedTroopCard(troopCardIndex)
+    return trooprules.resolvePlay(troopCardIndex, {
+        cards = gameState.cards,
+        cardregistry = cardregistry,
+        spawnTokensNearPlayerCard = spawnTokensNearPlayerCard,
+    })
+end
+
 local function getCardPresentationContext()
     return {
         envdraw = envdraw,
@@ -1035,6 +1078,7 @@ local function getEngageContext()
         turnrules = turnrules,
         warrules = warrules,
         envdraw = envdraw,
+        cardregistry = cardregistry,
         cards = gameState.cards,
         hoveredCardIndex = gameState.hoveredCardIndex,
         selectedAttackerCardIndex = gameState.selectedAttackerCardIndex,
@@ -1053,6 +1097,8 @@ local function getEngageContext()
         dealDamageToChampion = dealDamageToChampion,
         dealDamageToCard = dealDamageToCard,
         beginInfiltrationEffect = beginInfiltrationEffect,
+        spawnTokensNearCard = spawnTokensNearCard,
+        spawnRandomTokensNearCard = spawnRandomTokensNearCard,
         addSyntac = function(amount)
             gameState.syntacCount = math.min(10, math.max(0, (gameState.syntacCount or 0) + math.max(0, tonumber(amount) or 0)))
         end,
@@ -1199,12 +1245,37 @@ local function updateHoveredSpawnPreview(card)
     elseif strategyrules.isSpawnStrategyDefinition(cardDefinition) then
         local targetCardId = strategyrules.getFirstTargetCardId(cardDefinition)
         gameState.hoveredTomeSpawnPreviewCard = targetCardId and cardregistry.getCardById(targetCardId) or nil
+    elseif trooprules.isSpawnTroopDefinition(cardDefinition)
+        and not (card.location and card.location.kind == "grid") then
+        local targetCardId = trooprules.getFirstTargetCardId(cardDefinition)
+        gameState.hoveredTomeSpawnPreviewCard = targetCardId and cardregistry.getCardById(targetCardId) or nil
     end
+end
+
+local function attachDiceFaceSummonPreview(tooltip)
+    if tooltip and tooltip.summonCardId then
+        tooltip.previewCardDefinition = cardregistry.getCardById(tooltip.summonCardId)
+    end
+
+    if tooltip and tooltip.summonCardIds then
+        tooltip.previewCardDefinitions = {}
+
+        for _, summonCardId in ipairs(tooltip.summonCardIds) do
+            local previewCardDefinition = cardregistry.getCardById(summonCardId)
+
+            if previewCardDefinition then
+                tooltip.previewCardDefinitions[#tooltip.previewCardDefinitions + 1] = previewCardDefinition
+            end
+        end
+    end
+
+    return tooltip
 end
 
 local function updateHoveredCard()
     local previousHoveredCardIndex = gameState.hoveredCardIndex
     gameState.hoveredKeyword = nil
+    gameState.hoveredDiceFace = nil
 
     if gameState.draggedCardIndex or gameState.isResourceExchangeModalOpen or gameState.isJaclDeckModalOpen then
         gameState.hoveredCardIndex = nil
@@ -1212,6 +1283,7 @@ local function updateHoveredCard()
         gameState.hoveredJaclSpecialDefinition = nil
         gameState.hoveredJaclSpecialPreviewCard = nil
         gameState.hoveredTomeSpawnPreviewCard = nil
+        gameState.hoveredDiceFace = nil
         return
     end
 
@@ -1220,6 +1292,21 @@ local function updateHoveredCard()
     gameState.hoveredJaclSpecialDefinition = nil
     gameState.hoveredJaclSpecialPreviewCard = nil
     gameState.hoveredTomeSpawnPreviewCard = nil
+    gameState.hoveredDiceFace = nil
+
+    gameState.hoveredDiceFace = attachDiceFaceSummonPreview(envdraw.getHoveredTopSlotDiceFace(
+        mouseX,
+        mouseY,
+        turnrules.getCurrentPhase(),
+        gameState.activeChampion,
+        gameState.activeWarzone,
+        gameState.activePoi,
+        gameState.activePrimaryObjective,
+        gameState.activeIntel,
+        warrules.getDisplayStates(),
+        gameState.expandedTopSlotId,
+        gameState.topSlotExpansion[gameState.expandedTopSlotId] or 0
+    ))
 
     if gameState.hoveredCardIndex then
         local activeCard = gameState.cards[gameState.hoveredCardIndex]
@@ -1228,6 +1315,7 @@ local function updateHoveredCard()
             local drawX, drawY, expansionProgress, renderOptions = getCardDrawPosition(activeCard, gameState.hoveredCardIndex)
 
             if carddraw.isPointInsideDrawnCard(mouseX, mouseY, drawX, drawY, expansionProgress, nil, renderOptions) then
+                gameState.hoveredDiceFace = attachDiceFaceSummonPreview(carddraw.getHoveredDiceFace(activeCard.setName, activeCard.cardId, drawX, drawY, expansionProgress, renderOptions, mouseX, mouseY, warrules.getCardRollState(gameState.hoveredCardIndex))) or gameState.hoveredDiceFace
                 gameState.hoveredKeyword = carddraw.getHoveredKeyword(activeCard.setName, activeCard.cardId, drawX, drawY, renderOptions, mouseX, mouseY)
                 updateHoveredSpawnPreview(activeCard)
                 return
@@ -1243,6 +1331,7 @@ local function updateHoveredCard()
 
             if carddraw.isPointInsideDrawnCard(mouseX, mouseY, drawX, drawY, expansionProgress, nil, renderOptions) then
                 gameState.hoveredCardIndex = cardIndex
+                gameState.hoveredDiceFace = attachDiceFaceSummonPreview(carddraw.getHoveredDiceFace(gameState.cards[cardIndex].setName, gameState.cards[cardIndex].cardId, drawX, drawY, expansionProgress, renderOptions, mouseX, mouseY, warrules.getCardRollState(cardIndex))) or gameState.hoveredDiceFace
                 gameState.hoveredKeyword = carddraw.getHoveredKeyword(gameState.cards[cardIndex].setName, gameState.cards[cardIndex].cardId, drawX, drawY, renderOptions, mouseX, mouseY)
                 updateHoveredSpawnPreview(gameState.cards[cardIndex])
                 break
@@ -1304,6 +1393,7 @@ local function getInputControllerDeps()
         normalizeSetupCardSlots = normalizeSetupCardSlots,
         payCardCosts = payCardCosts,
         primeJaclSpecial = primeJaclSpecial,
+        resolvePlayedTroopCard = resolvePlayedTroopCard,
         tryPlayStrategyCard = tryPlayStrategyCard,
         tryUseTomeCard = tryUseTomeCard,
         tryOpenFullArt = tryOpenFullArt,
@@ -1322,6 +1412,7 @@ function love.load()
     gameState.hoveredCardIndex = nil
     gameState.hoveredTopSlotId = nil
     gameState.hoveredKeyword = nil
+    gameState.hoveredDiceFace = nil
     gameState.expandedGridCardIndex = nil
     gameState.expandedTopSlotId = nil
     gameState.selectedAttackerCardIndex = nil
@@ -1540,6 +1631,7 @@ function love.draw()
         jaclDeckPreviewCard = gameState.jaclDeckPreviewCard,
         isResourceExchangeModalOpen = gameState.isResourceExchangeModalOpen,
         hoveredKeyword = gameState.hoveredKeyword,
+        hoveredDiceFace = gameState.hoveredDiceFace,
         hoveredJaclSpecialDefinition = gameState.hoveredJaclSpecialDefinition,
         hoveredJaclSpecialPreviewCard = gameState.hoveredJaclSpecialPreviewCard,
         hoveredTomeSpawnPreviewCard = gameState.hoveredTomeSpawnPreviewCard,

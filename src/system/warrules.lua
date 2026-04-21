@@ -19,19 +19,19 @@ local warzoneTargetPreview = nil
 local FLYING_KEYWORD_ID = "KWFLY"
 local SAVIOR_KEYWORD_ID = "KWSAV"
 local TOME_CARD_TYPE = "tome"
-local ENEMY_CARD_TARGET_TYPES = { "Atk", "AtkSab" }
+local ENEMY_CARD_TARGET_TYPES = { "Atk", "AtkSab", "TAtk" }
 local PLAYER_WARZONE_TARGET_TYPES = { "WZPlayer", "InfTac" }
 
-local function hasFlyingKeyword(definition)
-    return keywordrules.cardHasKeyword(definition, FLYING_KEYWORD_ID)
+local function hasFlyingKeyword(definition, card)
+    return keywordrules.cardHasKeyword(definition, FLYING_KEYWORD_ID, card)
 end
 
-local function canAttackTarget(attackerDefinition, targetDefinition)
+local function canAttackTarget(attackerDefinition, targetDefinition, attackerCard, targetCard)
     if targetDefinition and targetDefinition.type == TOME_CARD_TYPE then
         return false
     end
 
-    if hasFlyingKeyword(targetDefinition) and not hasFlyingKeyword(attackerDefinition) then
+    if hasFlyingKeyword(targetDefinition, targetCard) and not hasFlyingKeyword(attackerDefinition, attackerCard) then
         return false
     end
 
@@ -58,6 +58,10 @@ local function getTargetTypes(targetType)
     return {}
 end
 
+local function normalizeTargetType(targetType)
+    return type(targetType) == "string" and targetType:lower() or targetType
+end
+
 local function hasTargetType(rollStateOrTargetType, targetType)
     local availableTargetType = rollStateOrTargetType
 
@@ -65,13 +69,51 @@ local function hasTargetType(rollStateOrTargetType, targetType)
         availableTargetType = rollStateOrTargetType.targetType
     end
 
+    local normalizedTargetType = normalizeTargetType(targetType)
+
     for _, candidate in ipairs(getTargetTypes(availableTargetType)) do
-        if candidate == targetType then
+        if normalizeTargetType(candidate) == normalizedTargetType then
             return true
         end
     end
 
     return false
+end
+
+local function getFirstTargetCardId(definition)
+    if not definition then
+        return nil
+    end
+
+    if type(definition.target) == "table" then
+        return definition.target[1]
+    end
+
+    return definition.target
+end
+
+local function getTargetCardIds(definition)
+    if not definition then
+        return {}
+    end
+
+    if type(definition.target) == "table" then
+        local targetCardIds = {}
+
+        for _, targetCardId in ipairs(definition.target) do
+            if targetCardId then
+                targetCardIds[#targetCardIds + 1] = targetCardId
+            end
+        end
+
+        return targetCardIds
+    end
+
+    if definition.target then
+        return { definition.target }
+    end
+
+    return {}
 end
 
 local function firstTargetTypeMatching(rollStateOrTargetType, allowedTargetTypes)
@@ -89,7 +131,7 @@ local function canTargetEnemyCard(rollStateOrTargetType)
 end
 
 local function firstEnemyCardTargetType(rollStateOrTargetType)
-    return firstTargetTypeMatching(rollStateOrTargetType, { "AtkSab", "Atk" })
+    return firstTargetTypeMatching(rollStateOrTargetType, { "AtkSab", "TAtk", "Atk" })
         or firstTargetTypeMatching(rollStateOrTargetType, ENEMY_CARD_TARGET_TYPES)
 end
 
@@ -97,7 +139,7 @@ local function canTargetPlayerWarzone(rollStateOrTargetType)
     return firstTargetTypeMatching(rollStateOrTargetType, PLAYER_WARZONE_TARGET_TYPES) ~= nil
 end
 
-local function buildRollState(entityKey, definition, faceIndices, isEnemy, preserveState)
+local function buildRollState(entityKey, definition, faceIndices, isEnemy, preserveState, sourceCard)
     if not definition or not faceIndices or #faceIndices == 0 then
         return nil
     end
@@ -106,9 +148,11 @@ local function buildRollState(entityKey, definition, faceIndices, isEnemy, prese
     local selectedFaceDefinition = carddraw.getDefinitionFaceBadge(definition, selectedFaceIndex)
     local targetCard = nil
     local targetCardIndex = nil
+    local targetColumn = nil
     local damageValue = math.max(0, tonumber(selectedFaceDefinition and selectedFaceDefinition.value) or 0)
     local targetType = selectedFaceDefinition and selectedFaceDefinition.targ or nil
-    local cardgen = selectedFaceDefinition and selectedFaceDefinition.cardgen or nil
+    local cardgen = selectedFaceDefinition and (selectedFaceDefinition.cardgen or getFirstTargetCardId(selectedFaceDefinition)) or nil
+    local cardgenPool = selectedFaceDefinition and getTargetCardIds(selectedFaceDefinition) or {}
     local pain = (tonumber(selectedFaceDefinition and selectedFaceDefinition.pain) or 0) > 0
 
     if isEnemy
@@ -118,7 +162,7 @@ local function buildRollState(entityKey, definition, faceIndices, isEnemy, prese
         local validTargets = {}
 
         for _, target in ipairs(playerAttackTargets) do
-            if canAttackTarget(definition, target.definition) then
+            if canAttackTarget(definition, target.definition, sourceCard, target.card) then
                 validTargets[#validTargets + 1] = target
             end
         end
@@ -128,6 +172,7 @@ local function buildRollState(entityKey, definition, faceIndices, isEnemy, prese
             local target = validTargets[targetIndex]
 
             targetCardIndex = target.cardIndex
+            targetColumn = target.column
             targetCard = {
                 kind = "card",
                 setName = target.setName,
@@ -169,11 +214,15 @@ local function buildRollState(entityKey, definition, faceIndices, isEnemy, prese
     return {
         faceIndex = selectedFaceIndex,
         pulseScale = 1,
+        sourceDefinition = definition,
+        sourceCard = sourceCard,
         damageValue = damageValue,
         targetType = targetType,
         targetCard = targetCard,
         targetCardIndex = targetCardIndex,
+        targetColumn = targetColumn,
         cardgen = cardgen,
+        cardgenPool = cardgenPool,
         pain = pain,
         exhausted = preserveState and preserveState.exhausted or false,
         locked = preserveState and preserveState.locked or false,
@@ -192,7 +241,9 @@ local function resolveNextWarRoll()
         activeWarRoll.entityKey,
         activeWarRoll.definition,
         activeWarRoll.faceIndices,
-        activeWarRoll.isEnemy
+        activeWarRoll.isEnemy,
+        nil,
+        activeWarRoll.sourceCard
     )
 
     return true
@@ -232,8 +283,11 @@ function warrules.canCardAttack(cardIndex)
             or hasTargetType(rollState, "Blk")
             or hasTargetType(rollState, "Div")
             or hasTargetType(rollState, "Inf")
+            or hasTargetType(rollState, "rsmn")
             or hasTargetType(rollState, "Sab")
+            or hasTargetType(rollState, "smn")
             or hasTargetType(rollState, "Tac")
+            or hasTargetType(rollState, "TacSab")
             or canTargetPlayerWarzone(rollState)
         )
         and (rollState.damageValue or 0) > 0
@@ -364,6 +418,96 @@ local function buildTargetCardPreview(card)
     }
 end
 
+local function isAvailablePlayerAttackTarget(cards, cardIndex)
+    local card = cards and cards[cardIndex] or nil
+
+    return card
+        and card.location
+        and card.location.kind == "grid"
+        and card.location.rowId == "PlayerRow"
+        and not card.destroyed
+        and not card.destroying
+end
+
+local function isLegalPlayerAttackTarget(cards, cardIndex, attackerDefinition, attackerCard)
+    if not isAvailablePlayerAttackTarget(cards, cardIndex) then
+        return false
+    end
+
+    local card = cards[cardIndex]
+    local definition = cardregistry.getCard(card.setName, card.cardId)
+    return canAttackTarget(attackerDefinition, definition, attackerCard, card)
+end
+
+local function shouldRetargetPlayerAttack(cards, cardIndex, attackerDefinition, attackerCard)
+    if not isAvailablePlayerAttackTarget(cards, cardIndex) then
+        return false
+    end
+
+    local card = cards[cardIndex]
+    local definition = cardregistry.getCard(card.setName, card.cardId)
+
+    return not canAttackTarget(attackerDefinition, definition, attackerCard, card)
+end
+
+local function findClosestLegalPlayerAttackTarget(cards, sourceDefinition, sourceCard, originalColumn)
+    local bestCardIndex = nil
+    local bestDistance = math.huge
+    local bestColumn = math.huge
+
+    for cardIndex, card in ipairs(cards or {}) do
+        if isLegalPlayerAttackTarget(cards, cardIndex, sourceDefinition, sourceCard) then
+            local column = card.location.column or 0
+            local distance = math.abs(column - originalColumn)
+
+            if distance < bestDistance or (distance == bestDistance and column < bestColumn) then
+                bestCardIndex = cardIndex
+                bestDistance = distance
+                bestColumn = column
+            end
+        end
+    end
+
+    return bestCardIndex
+end
+
+function warrules.retargetIllegalEnemyAttacks(cards)
+    local retargetedCount = 0
+
+    for _, rollState in pairs(warRollDisplayStates) do
+        if rollState
+            and rollState.faceIndex
+            and canTargetEnemyCard(rollState)
+            and rollState.targetCardIndex then
+            local sourceDefinition = rollState.sourceDefinition
+            local sourceCard = rollState.sourceCard
+
+            if shouldRetargetPlayerAttack(cards, rollState.targetCardIndex, sourceDefinition, sourceCard) then
+                local targetCard = cards and cards[rollState.targetCardIndex] or nil
+                local originalColumn = rollState.targetColumn
+                    or (targetCard and targetCard.location and targetCard.location.column)
+                    or 0
+                local newTargetCardIndex = findClosestLegalPlayerAttackTarget(cards, sourceDefinition, sourceCard, originalColumn)
+
+                if newTargetCardIndex then
+                    local newTargetCard = cards[newTargetCardIndex]
+                    rollState.targetCardIndex = newTargetCardIndex
+                    rollState.targetCard = buildTargetCardPreview(newTargetCard)
+                    rollState.targetColumn = newTargetCard.location.column
+                else
+                    rollState.targetCardIndex = nil
+                    rollState.targetCard = nil
+                    rollState.targetColumn = nil
+                end
+
+                retargetedCount = retargetedCount + 1
+            end
+        end
+    end
+
+    return retargetedCount
+end
+
 function warrules.redirectIncomingAttacks(cards, fromCardIndex, toCardIndex)
     if not cards or not fromCardIndex or not toCardIndex or fromCardIndex == toCardIndex then
         return 0
@@ -393,9 +537,11 @@ function warrules.redirectIncomingAttacks(cards, fromCardIndex, toCardIndex)
         if rollState
             and rollState.faceIndex
             and canTargetEnemyCard(rollState)
-            and rollState.targetCardIndex == fromCardIndex then
+            and rollState.targetCardIndex == fromCardIndex
+            and canAttackTarget(rollState.sourceDefinition, targetDefinition, rollState.sourceCard, targetCard) then
             rollState.targetCardIndex = toCardIndex
             rollState.targetCard = targetPreview
+            rollState.targetColumn = targetCard.location.column
             redirectedCount = redirectedCount + 1
         end
     end
@@ -447,7 +593,7 @@ function warrules.rerollUnlockedPlayerCards(cards)
             local faceIndices = carddraw.getAssignedFaceIndices(definition)
 
             if #faceIndices > 0 then
-                warRollDisplayStates[entityKey] = buildRollState(entityKey, definition, faceIndices, false, existingState)
+                warRollDisplayStates[entityKey] = buildRollState(entityKey, definition, faceIndices, false, existingState, rowCard.card)
                 rerolledAny = true
             end
         end
@@ -468,7 +614,7 @@ function warrules.clearCardRollState(cardIndex)
     warrules.clearEntityRollState(warrules.getCardEntityKey(cardIndex))
 end
 
-function warrules.rerollEntity(entityKey, definition, isEnemy)
+function warrules.rerollEntity(entityKey, definition, isEnemy, sourceCard)
     if not entityKey or not definition then
         return false
     end
@@ -480,7 +626,7 @@ function warrules.rerollEntity(entityKey, definition, isEnemy)
         return false
     end
 
-    warRollDisplayStates[entityKey] = buildRollState(entityKey, definition, faceIndices, isEnemy == true)
+    warRollDisplayStates[entityKey] = buildRollState(entityKey, definition, faceIndices, isEnemy == true, nil, sourceCard)
     sfxrules.playDice()
     return true
 end
@@ -802,6 +948,7 @@ function warrules.beginPhase(topSlotTargets, cards, primaryObjectiveDefinition, 
                 definition = target.definition,
                 isEnemy = true,
                 faceIndices = faceIndices,
+                sourceCard = nil,
             }
         end
     end
@@ -826,6 +973,7 @@ function warrules.beginPhase(topSlotTargets, cards, primaryObjectiveDefinition, 
                         displayName = card.displayName,
                         portraitPath = card.portraitPath,
                         definition = definition,
+                        card = card,
                     }
                 end
             end
@@ -846,6 +994,7 @@ function warrules.beginPhase(topSlotTargets, cards, primaryObjectiveDefinition, 
                     displayName = rowCard.displayName,
                     portraitPath = rowCard.portraitPath,
                     definition = rowCard.definition,
+                    card = rowCard.card,
                 }
             end
 
@@ -855,6 +1004,7 @@ function warrules.beginPhase(topSlotTargets, cards, primaryObjectiveDefinition, 
                     definition = rowCard.definition,
                     isEnemy = rowId == "OppRow",
                     faceIndices = faceIndices,
+                    sourceCard = rowCard.card,
                 }
             end
         end
@@ -886,8 +1036,8 @@ function warrules.update(dt, currentPhase)
     end
 end
 
-function warrules.canAttackTarget(attackerDefinition, targetDefinition)
-    return canAttackTarget(attackerDefinition, targetDefinition)
+function warrules.canAttackTarget(attackerDefinition, targetDefinition, attackerCard, targetCard)
+    return canAttackTarget(attackerDefinition, targetDefinition, attackerCard, targetCard)
 end
 
 return warrules

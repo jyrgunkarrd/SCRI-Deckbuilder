@@ -8,9 +8,13 @@ local tomes = {
         {
             id = "BOOKVAL",
             name = "Book of Valshamr",
+            classname = "Starter",
+            subclass = "Tome",
             type = "tome",
-            syncost = 1,
+            syncost = 5,
             func = "Spawn",
+            textbox = "Summon a Freyja token.",
+            flavor = "Contact with the ship is intermittent and difficult to maintain. All successful Lexurgical phrases shall be logged here.", 
             value = 1,
             target = { "AEGFREYTOK" }
         },
