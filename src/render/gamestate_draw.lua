@@ -232,7 +232,7 @@ function gamestatedraw.draw(ctx)
                 ctx.hoveredDiceFace.cardHeight
             )
         end
-    elseif ctx.hoveredTomeSpawnPreviewCard then
+    elseif ctx.hoveredTomeSpawnPreviewCards and #ctx.hoveredTomeSpawnPreviewCards > 0 then
         local hoveredCard = ctx.hoveredCardIndex and ctx.cards[ctx.hoveredCardIndex] or nil
 
         if hoveredCard then
@@ -241,7 +241,14 @@ function gamestatedraw.draw(ctx)
             local _, expandedHeight = ctx.carddraw.getExpandedCardSize(renderOptions)
             local cardHeight = collapsedHeight + ((expandedHeight - collapsedHeight) * (expansionProgress or 0))
 
-            ctx.envdraw.drawTomeSpawnTooltip(ctx.hoveredTomeSpawnPreviewCard, drawX, drawY, cardWidth, cardHeight)
+            ctx.envdraw.drawSummonPreviewTooltip(
+                ctx.hoveredTomeSpawnPreviewCards,
+                drawX,
+                drawY,
+                cardWidth,
+                cardHeight,
+                ctx.hoveredTomeSpawnPreviewLabel or "SUMMON"
+            )
         end
     elseif ctx.hoveredKeyword and ctx.hoveredKeyword.previewCardDefinition then
         local hoveredCard = ctx.hoveredCardIndex and ctx.cards[ctx.hoveredCardIndex] or nil

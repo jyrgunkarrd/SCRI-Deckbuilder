@@ -53,6 +53,21 @@ local keywords = {
         {
             id = "KWKIT",
             name = "Kit",
+        },
+
+        {
+            id = "KWRLD",
+            name = "Reloading",
+            text = "All of this card's die faces are blank while it is reloading.",
+            hasvalue = 1,
+
+        },
+
+        {
+            id = "KWGRO",
+            name = "Growth",
+            text = "Increase this card's health and all of its die values.",
+            hasvalue = 1,
 
         },
 }

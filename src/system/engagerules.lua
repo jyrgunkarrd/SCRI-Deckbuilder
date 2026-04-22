@@ -5,6 +5,8 @@ local sfxrules = require("src.audio.sfxrules")
 
 local engagerules = {}
 local COUNTER_STRIKE_KEYWORD_ID = "KWCNTR"
+local RELOADING_KEYWORD_ID = "KWRLD"
+local RELOADING_KEYWORD_VALUE = 2
 
 function engagerules.isEngagePhase(ctx)
     return ctx.turnrules.getCurrentPhase() == "War" and ctx.turnrules.getCurrentWarSubphase() == "Engage"
@@ -23,6 +25,18 @@ local function applyPain(ctx, cardIndex, rollState)
 
     if sourceCard then
         ctx.dealDamageToCard(sourceCard, rollState.damageValue or 0)
+    end
+end
+
+local function applyReloading(ctx, cardIndex, rollState)
+    if not rollState or rollState.autoReload ~= true then
+        return
+    end
+
+    local sourceCard = cardIndex and ctx.cards[cardIndex] or nil
+
+    if sourceCard then
+        keywordrules.setTemporaryKeywordValue(sourceCard, RELOADING_KEYWORD_ID, RELOADING_KEYWORD_VALUE)
     end
 end
 
@@ -45,6 +59,7 @@ local function resolveSelectedAttack(ctx, action)
     end
 
     finishSelectedAttack(ctx, ctx.warrules.didSaviorPreventDeath(saviorCheck, ctx.cards, ctx.isWarRollSourceActive))
+    applyReloading(ctx, attackerCardIndex, attackerRollState)
     applyPain(ctx, attackerCardIndex, attackerRollState)
     return true
 end
@@ -62,6 +77,7 @@ local function resolveImmediateCardAction(ctx, cardIndex, action)
         ctx.warrules.consumeCardAttack(cardIndex)
     end
 
+    applyReloading(ctx, cardIndex, rollState)
     applyPain(ctx, cardIndex, rollState)
     return true
 end
@@ -73,6 +89,22 @@ local function applyAttackSideEffects(ctx, rollState)
 
     if ctx.warrules.hasTargetType(rollState, "TAtk") then
         ctx.addSyntac(rollState.damageValue or 0)
+    end
+
+    if ctx.warrules.hasTargetType(rollState, "closeatk") and ctx.selectedAttackerCardIndex then
+        local attackerCard = ctx.cards[ctx.selectedAttackerCardIndex]
+
+        if attackerCard then
+            ctx.addBlockingToCard(attackerCard, rollState.damageValue or 0)
+        end
+    end
+
+    if ctx.warrules.hasTargetType(rollState, "maulatk") and ctx.selectedAttackerCardIndex and ctx.healCard then
+        local attackerCard = ctx.cards[ctx.selectedAttackerCardIndex]
+
+        if attackerCard then
+            ctx.healCard(attackerCard, rollState.damageValue or 0)
+        end
     end
 end
 
@@ -243,7 +275,12 @@ function engagerules.tryResolveClick(hoveredTopSlotId, ctx)
                             return true
                         end
 
-                        ctx.dealDamageToCard(targetCard, attackerRollState.damageValue or 0)
+                        local damageResult = ctx.dealDamageToCard(targetCard, attackerRollState.damageValue or 0)
+
+                        if damageResult and damageResult.killed and ctx.resolveKilledEnemyByPlayerCard then
+                            ctx.resolveKilledEnemyByPlayerCard(ctx.selectedAttackerCardIndex, ctx.hoveredCardIndex)
+                        end
+
                         applyAttackSideEffects(ctx, attackerRollState)
                         return true
                     end)

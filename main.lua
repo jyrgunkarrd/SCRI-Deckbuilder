@@ -98,7 +98,11 @@ local gameState = {
     hoveredJaclSpecialDefinition = nil,
     hoveredJaclSpecialPreviewCard = nil,
     hoveredTomeSpawnPreviewCard = nil,
+    hoveredTomeSpawnPreviewCards = nil,
+    hoveredTomeSpawnPreviewLabel = nil,
     pendingStrategySelection = nil,
+    pendingSacrificeSelection = nil,
+    endPhaseSacrificeHandled = false,
     kitReturnAnimations = {},
     hasRenderedFirstFrame = false,
     pendingPhaseEntry = false,
@@ -116,6 +120,8 @@ local dealDamageToChampion
 local addBlockingToCard
 local clearAllBlocking
 local beginInfiltrationEffect
+local addCardKeywordValue
+local beginEndPhaseSacrificeSelection
 local getNextOpenHandSlot
 local preloadWarzoneFamily
 local updateInfiltrationEffect
@@ -470,6 +476,57 @@ local function spawnTokensNearPlayerCard(sourceCardIndex, tokenDefinition, count
     return spawnedCount
 end
 
+local function findPlayerCacheCard(cacheCardId)
+    for cardIndex, card in ipairs(gameState.cards) do
+        if card
+            and not isCardUnavailable(card)
+            and card.location
+            and card.location.kind == "grid"
+            and card.location.rowId == "PlayerRow"
+            and card.cardId == cacheCardId then
+            return cardIndex, card
+        end
+    end
+
+    return nil, nil
+end
+
+local function createOrStackPlayerCacheNearCard(sourceCardIndex, cacheDefinition, count)
+    local sourceCard = sourceCardIndex and gameState.cards[sourceCardIndex] or nil
+    local stackCount = math.max(0, math.floor(tonumber(count) or 0))
+
+    if not sourceCard
+        or not sourceCard.location
+        or sourceCard.location.kind ~= "grid"
+        or not cacheDefinition
+        or stackCount <= 0 then
+        return 0
+    end
+
+    local _, existingCache = findPlayerCacheCard(cacheDefinition.id)
+
+    if existingCache then
+        existingCache.currentHealth = math.max(0, tonumber(existingCache.currentHealth) or 0) + stackCount
+        existingCache.maxHealth = math.max(existingCache.currentHealth, math.max(0, tonumber(existingCache.maxHealth) or 0))
+        return stackCount
+    end
+
+    local spawnedCache = nil
+    local openColumns = getClosestOpenGridColumns("PlayerRow", sourceCard.location.column)
+
+    for _, column in ipairs(openColumns) do
+        spawnedCache = createGeneratedGridCard(cacheDefinition, "PlayerRow", column)
+
+        if spawnedCache then
+            spawnedCache.currentHealth = stackCount
+            spawnedCache.maxHealth = stackCount
+            break
+        end
+    end
+
+    return spawnedCache and stackCount or 0
+end
+
 local function drawCardFromPlayerDeck()
     local nextSlotIndex = getNextOpenHandSlot()
 
@@ -682,7 +739,7 @@ local function discardDestroyedCard(card)
 
     local cardDefinition = cardregistry.getCard(card.setName, card.cardId)
 
-    if cardDefinition and cardDefinition.type == "token" then
+    if cardDefinition and (cardDefinition.type == "token" or cardDefinition.type == "cache") then
         card.sentToDiscard = true
         return nil
     end
@@ -906,6 +963,31 @@ addBlockingToCard = function(card, amount)
     return damagerules.addBlockingToCard(card, amount)
 end
 
+local function healCard(card, amount)
+    if not card or amount == nil then
+        return nil
+    end
+
+    initializeCardHealthState(card)
+
+    if card.currentHealth == nil then
+        return nil
+    end
+
+    local previousHealth = math.max(0, tonumber(card.currentHealth) or 0)
+    local maxHealth = math.max(previousHealth, math.max(0, tonumber(card.maxHealth) or 0))
+    local healAmount = math.max(0, tonumber(amount) or 0)
+
+    card.currentHealth = math.min(maxHealth, previousHealth + healAmount)
+
+    return {
+        previousHealth = previousHealth,
+        currentHealth = card.currentHealth,
+        healed = card.currentHealth - previousHealth,
+        changed = card.currentHealth > previousHealth,
+    }
+end
+
 clearAllBlocking = function()
     return damagerules.clearAllBlocking(gameState.cards)
 end
@@ -967,12 +1049,22 @@ local function getPhaseControllerDeps()
         addSetupAgents = addSetupAgents,
         addWarzoneControl = addWarzoneControl,
         beginInfiltrationEffect = beginInfiltrationEffect,
+        beginEndPhaseSacrificeSelection = beginEndPhaseSacrificeSelection,
         beginPoiGeneratedCardTransformation = beginPoiGeneratedCardTransformation,
         clearAllBlocking = clearAllBlocking,
         createGeneratedSupportCard = createGeneratedSupportCard,
         dealDamageToCard = dealDamageToCard,
         dealDamageToChampion = dealDamageToChampion,
         drawCardFromPlayerDeck = drawCardFromPlayerDeck,
+        healCard = healCard,
+        notifyMeatCacheDecayed = function(cacheCardIndex)
+            trooprules.notifyMeatCacheDecayed(cacheCardIndex, {
+                cards = gameState.cards,
+                cardregistry = cardregistry,
+                isCardUnavailable = isCardUnavailable,
+                addCardKeywordValue = addCardKeywordValue,
+            })
+        end,
         getCardDrawPosition = getCardDrawPosition,
         getChampionPlayContext = getChampionPlayContext,
         getEndPhaseObjectiveProgress = getEndPhaseObjectiveProgress,
@@ -1202,15 +1294,35 @@ local function tryPlayKitCard(kitCardIndex, targetCardIndex)
     })
 end
 
+local function getPendingSelection()
+    return gameState.pendingStrategySelection or gameState.pendingSacrificeSelection
+end
+
 local function hasPendingStrategySelection()
-    return gameState.pendingStrategySelection ~= nil
+    return getPendingSelection() ~= nil
 end
 
 local function tryResolvePendingStrategySelection(cardIndex)
-    local pendingSelection = gameState.pendingStrategySelection
+    local pendingSelection = getPendingSelection()
 
     if not pendingSelection then
         return false
+    end
+
+    if pendingSelection.kind == "troop_script_sacrifice" then
+        local resolved = trooprules.isValidPendingSacrificeTarget(cardIndex, pendingSelection, {
+            cards = gameState.cards,
+            cardregistry = cardregistry,
+        })
+
+        if not resolved then
+            return false
+        end
+
+        startCardDestruction(cardIndex)
+        gameState.pendingSacrificeSelection = nil
+        phasecontroller.enterCurrentPhase(gameState, getPhaseControllerDeps())
+        return true
     end
 
     local resolved = strategyrules.resolvePendingSelection(cardIndex, pendingSelection, {
@@ -1266,6 +1378,53 @@ local function resolveDestroyedTroopCard(troopCardIndex)
             })
         end,
     })
+end
+
+local function resolveKilledEnemyByPlayerCard(attackerCardIndex, targetCardIndex)
+    return trooprules.resolveKill(attackerCardIndex, targetCardIndex, {
+        cards = gameState.cards,
+        cardregistry = cardregistry,
+        createOrStackPlayerCacheNearCard = createOrStackPlayerCacheNearCard,
+    })
+end
+
+addCardKeywordValue = function(cardIndex, keywordId, amount)
+    local card = cardIndex and gameState.cards[cardIndex] or nil
+    local cardDefinition = card and cardregistry.getCard(card.setName, card.cardId) or nil
+
+    if not card or not cardDefinition then
+        return nil
+    end
+
+    local nextValue = keywordrules.addCardKeywordValue(card, cardDefinition, keywordId, amount)
+
+    if nextValue ~= nil then
+        warrules.refreshCardRollValue(cardIndex, gameState.cards)
+    end
+
+    return nextValue
+end
+
+beginEndPhaseSacrificeSelection = function()
+    if gameState.endPhaseSacrificeHandled then
+        return gameState.pendingSacrificeSelection ~= nil
+    end
+
+    gameState.endPhaseSacrificeHandled = true
+
+    local pendingSelection = trooprules.beginEndPhaseSelection({
+        cards = gameState.cards,
+        cardregistry = cardregistry,
+        isCardUnavailable = isCardUnavailable,
+    })
+
+    if not pendingSelection then
+        return false
+    end
+
+    gameState.pendingSacrificeSelection = pendingSelection
+    notifications.push(pendingSelection.prompt or "Choose a troop or token to sacrifice")
+    return true
 end
 
 local function getCardPresentationContext()
@@ -1390,8 +1549,10 @@ local function getEngageContext()
         addBlockingToCard = addBlockingToCard,
         addObjectiveProgress = addObjectiveProgress,
         addWarzoneControl = addWarzoneControl,
+        healCard = healCard,
         dealDamageToChampion = dealDamageToChampion,
         dealDamageToCard = dealDamageToCard,
+        resolveKilledEnemyByPlayerCard = resolveKilledEnemyByPlayerCard,
         beginInfiltrationEffect = beginInfiltrationEffect,
         spawnTokensNearCard = spawnTokensNearCard,
         spawnRandomTokensNearCard = spawnRandomTokensNearCard,
@@ -1493,7 +1654,7 @@ getTargetingContext = function()
         cards = gameState.cards,
         hoveredCardIndex = gameState.hoveredCardIndex,
         hoveredTopSlotId = gameState.hoveredTopSlotId,
-        pendingStrategySelection = gameState.pendingStrategySelection,
+        pendingStrategySelection = getPendingSelection(),
         selectedAttackerCardIndex = gameState.selectedAttackerCardIndex,
         currentPhase = turnrules.getCurrentPhase(),
         displayStates = warrules.getDisplayStates(),
@@ -1505,6 +1666,13 @@ getTargetingContext = function()
         canTargetEnemyCard = warrules.canTargetEnemyCard,
         canTargetPlayerWarzone = warrules.canTargetPlayerWarzone,
         isPendingStrategyTarget = function(cardIndex, pendingSelection)
+            if pendingSelection and pendingSelection.kind == "troop_script_sacrifice" then
+                return trooprules.isValidPendingSacrificeTarget(cardIndex, pendingSelection, {
+                    cards = gameState.cards,
+                    cardregistry = cardregistry,
+                })
+            end
+
             return strategyrules.isValidFunccostTarget(cardIndex, pendingSelection, {
                 cards = gameState.cards,
                 cardregistry = cardregistry,
@@ -1539,6 +1707,8 @@ end
 
 local function updateHoveredSpawnPreview(card)
     gameState.hoveredTomeSpawnPreviewCard = nil
+    gameState.hoveredTomeSpawnPreviewCards = nil
+    gameState.hoveredTomeSpawnPreviewLabel = nil
 
     local cardDefinition = card and cardregistry.getCard(card.setName, card.cardId) or nil
 
@@ -1548,10 +1718,23 @@ local function updateHoveredSpawnPreview(card)
     elseif strategyrules.isSpawnStrategyDefinition(cardDefinition) then
         local targetCardId = strategyrules.getFirstTargetCardId(cardDefinition)
         gameState.hoveredTomeSpawnPreviewCard = targetCardId and cardregistry.getCardById(targetCardId) or nil
-    elseif trooprules.isSpawnPreviewTroopDefinition(cardDefinition)
-        and not (card.location and card.location.kind == "grid") then
-        local targetCardId = trooprules.getFirstTargetCardId(cardDefinition)
-        gameState.hoveredTomeSpawnPreviewCard = targetCardId and cardregistry.getCardById(targetCardId) or nil
+    elseif not (card.location and card.location.kind == "grid") then
+        local previewCardIds, previewLabel = trooprules.getPreviewCardIds(cardDefinition)
+
+        if previewCardIds and #previewCardIds > 0 then
+            gameState.hoveredTomeSpawnPreviewCards = {}
+            gameState.hoveredTomeSpawnPreviewLabel = previewLabel
+
+            for _, previewCardId in ipairs(previewCardIds) do
+                local previewCardDefinition = previewCardId and cardregistry.getCardById(previewCardId) or nil
+
+                if previewCardDefinition then
+                    gameState.hoveredTomeSpawnPreviewCards[#gameState.hoveredTomeSpawnPreviewCards + 1] = previewCardDefinition
+                end
+            end
+
+            gameState.hoveredTomeSpawnPreviewCard = gameState.hoveredTomeSpawnPreviewCards[1] or nil
+        end
     end
 end
 
@@ -1586,6 +1769,8 @@ local function updateHoveredCard()
         gameState.hoveredJaclSpecialDefinition = nil
         gameState.hoveredJaclSpecialPreviewCard = nil
         gameState.hoveredTomeSpawnPreviewCard = nil
+        gameState.hoveredTomeSpawnPreviewCards = nil
+        gameState.hoveredTomeSpawnPreviewLabel = nil
         gameState.hoveredDiceFace = nil
         return
     end
@@ -1595,6 +1780,8 @@ local function updateHoveredCard()
     gameState.hoveredJaclSpecialDefinition = nil
     gameState.hoveredJaclSpecialPreviewCard = nil
     gameState.hoveredTomeSpawnPreviewCard = nil
+    gameState.hoveredTomeSpawnPreviewCards = nil
+    gameState.hoveredTomeSpawnPreviewLabel = nil
     gameState.hoveredDiceFace = nil
 
     gameState.hoveredDiceFace = attachDiceFaceSummonPreview(envdraw.getHoveredTopSlotDiceFace(
@@ -1759,6 +1946,11 @@ function love.load()
     gameState.hoveredJaclSpecialDefinition = nil
     gameState.hoveredJaclSpecialPreviewCard = nil
     gameState.hoveredTomeSpawnPreviewCard = nil
+    gameState.hoveredTomeSpawnPreviewCards = nil
+    gameState.hoveredTomeSpawnPreviewLabel = nil
+    gameState.pendingStrategySelection = nil
+    gameState.pendingSacrificeSelection = nil
+    gameState.endPhaseSacrificeHandled = false
     gameState.kitReturnAnimations = {}
     cardinstances.reset()
     warzonecontrolrules.reset()
@@ -1827,6 +2019,12 @@ function love.update(dt)
 
             if card.destroyElapsed >= DESTRUCTION_DURATION then
                 resolveDestroyedTroopCard(cardIndex)
+                trooprules.notifyPlayerRowUnitDefeated(cardIndex, {
+                    cards = gameState.cards,
+                    cardregistry = cardregistry,
+                    isCardUnavailable = isCardUnavailable,
+                    addCardKeywordValue = addCardKeywordValue,
+                })
                 card.destroying = false
                 card.destroyed = true
                 discardDestroyedCard(card)
@@ -1950,6 +2148,8 @@ function love.draw()
         hoveredJaclSpecialDefinition = gameState.hoveredJaclSpecialDefinition,
         hoveredJaclSpecialPreviewCard = gameState.hoveredJaclSpecialPreviewCard,
         hoveredTomeSpawnPreviewCard = gameState.hoveredTomeSpawnPreviewCard,
+        hoveredTomeSpawnPreviewCards = gameState.hoveredTomeSpawnPreviewCards,
+        hoveredTomeSpawnPreviewLabel = gameState.hoveredTomeSpawnPreviewLabel,
         primedJaclSpecial = gameState.primedJaclSpecial,
         isWarRollSourceActive = isWarRollSourceActive,
         getDamageJitterOffset = getDamageJitterOffset,

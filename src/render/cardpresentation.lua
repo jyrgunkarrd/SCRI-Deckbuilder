@@ -251,7 +251,7 @@ function cardpresentation.drawStateOverlays(card, cardIndex, drawX, drawY, expan
 
     if rollState and rollState.faceIndex then
         local badgeX, badgeY, badgeWidth, badgeHeight = carddraw.getCardRollBadgeRect(drawX, drawY, renderOptions)
-        carddraw.drawDefinitionRollBadge(getCardDefinition(card), badgeX, badgeY, badgeWidth, badgeHeight, rollState.faceIndex, rollState.pulseScale)
+        carddraw.drawDefinitionRollBadge(getCardDefinition(card), badgeX, badgeY, badgeWidth, badgeHeight, rollState.faceIndex, rollState.pulseScale, card)
 
         if rollState.locked then
             love.graphics.setColor(1, 0.847, 0.219, 0.95)

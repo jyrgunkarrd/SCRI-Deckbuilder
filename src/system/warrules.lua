@@ -18,12 +18,18 @@ local intelTargetPreview = nil
 local warzoneTargetPreview = nil
 local FLYING_KEYWORD_ID = "KWFLY"
 local SAVIOR_KEYWORD_ID = "KWSAV"
+local RELOADING_KEYWORD_ID = "KWRLD"
 local TOME_CARD_TYPE = "tome"
-local ENEMY_CARD_TARGET_TYPES = { "Atk", "AtkSab", "TAtk" }
+local CACHE_CARD_TYPE = "cache"
+local ENEMY_CARD_TARGET_TYPES = { "Atk", "AtkSab", "TAtk", "closeatk", "maulatk" }
 local PLAYER_WARZONE_TARGET_TYPES = { "WZPlayer", "InfTac" }
 
 local function hasFlyingKeyword(definition, card)
     return keywordrules.cardHasKeyword(definition, FLYING_KEYWORD_ID, card)
+end
+
+local function hasReloadingKeyword(definition, card)
+    return keywordrules.cardHasKeyword(definition, RELOADING_KEYWORD_ID, card)
 end
 
 local function getCardIndexFromEntityKey(entityKey)
@@ -32,7 +38,7 @@ local function getCardIndexFromEntityKey(entityKey)
 end
 
 local function canAttackTarget(attackerDefinition, targetDefinition, attackerCard, targetCard)
-    if targetDefinition and targetDefinition.type == TOME_CARD_TYPE then
+    if targetDefinition and (targetDefinition.type == TOME_CARD_TYPE or targetDefinition.type == CACHE_CARD_TYPE) then
         return false
     end
 
@@ -136,12 +142,34 @@ local function canTargetEnemyCard(rollStateOrTargetType)
 end
 
 local function firstEnemyCardTargetType(rollStateOrTargetType)
-    return firstTargetTypeMatching(rollStateOrTargetType, { "AtkSab", "TAtk", "Atk" })
+    return firstTargetTypeMatching(rollStateOrTargetType, { "AtkSab", "TAtk", "Atk", "closeatk", "maulatk" })
         or firstTargetTypeMatching(rollStateOrTargetType, ENEMY_CARD_TARGET_TYPES)
 end
 
 local function canTargetPlayerWarzone(rollStateOrTargetType)
     return firstTargetTypeMatching(rollStateOrTargetType, PLAYER_WARZONE_TARGET_TYPES) ~= nil
+end
+
+local function getEffectiveTargetType(targetType)
+    if type(targetType) == "table" then
+        local mappedTargetTypes = {}
+
+        for _, candidate in ipairs(targetType) do
+            if normalizeTargetType(candidate) == "exoatk" then
+                mappedTargetTypes[#mappedTargetTypes + 1] = "Atk"
+            else
+                mappedTargetTypes[#mappedTargetTypes + 1] = candidate
+            end
+        end
+
+        return mappedTargetTypes
+    end
+
+    if normalizeTargetType(targetType) == "exoatk" then
+        return "Atk"
+    end
+
+    return targetType
 end
 
 local function buildRollState(entityKey, definition, faceIndices, isEnemy, preserveState, sourceCard)
@@ -150,19 +178,29 @@ local function buildRollState(entityKey, definition, faceIndices, isEnemy, prese
     end
 
     local selectedFaceIndex = faceIndices[love.math.random(1, #faceIndices)]
-    local selectedFaceDefinition = carddraw.getDefinitionFaceBadge(definition, selectedFaceIndex)
+    local selectedFaceDefinition = carddraw.getCardFaceBadge(definition, selectedFaceIndex, sourceCard)
+    local effectiveTargetType = getEffectiveTargetType(selectedFaceDefinition and selectedFaceDefinition.targ or nil)
+    local autoReload = selectedFaceDefinition and hasTargetType(selectedFaceDefinition.targ, "exoatk") or false
+    local isReloading = hasReloadingKeyword(definition, sourceCard)
     local targetCard = nil
     local targetCardIndex = nil
     local targetColumn = nil
-    local damageValue = math.max(0, tonumber(selectedFaceDefinition and selectedFaceDefinition.value) or 0)
-    local targetType = selectedFaceDefinition and selectedFaceDefinition.targ or nil
+    local damageValue = isReloading and 0 or math.max(0, tonumber(selectedFaceDefinition and selectedFaceDefinition.value) or 0)
+    local targetType = isReloading and nil or effectiveTargetType
     local cardgen = selectedFaceDefinition and (selectedFaceDefinition.cardgen or getFirstTargetCardId(selectedFaceDefinition)) or nil
     local cardgenPool = selectedFaceDefinition and getTargetCardIds(selectedFaceDefinition) or {}
-    local pain = (tonumber(selectedFaceDefinition and selectedFaceDefinition.pain) or 0) > 0
+    local pain = not isReloading and (tonumber(selectedFaceDefinition and selectedFaceDefinition.pain) or 0) > 0
+
+    if isReloading then
+        cardgen = nil
+        cardgenPool = {}
+        autoReload = false
+    end
 
     if isEnemy
         and selectedFaceDefinition
-        and canTargetEnemyCard(selectedFaceDefinition.targ)
+        and not isReloading
+        and canTargetEnemyCard(effectiveTargetType)
         and #playerAttackTargets > 0 then
         local validTargets = {}
 
@@ -185,34 +223,39 @@ local function buildRollState(entityKey, definition, faceIndices, isEnemy, prese
                 displayName = target.displayName,
                 portraitPath = target.portraitPath,
             }
-            targetType = firstTargetTypeMatching(selectedFaceDefinition.targ, ENEMY_CARD_TARGET_TYPES)
+            targetType = firstTargetTypeMatching(effectiveTargetType, ENEMY_CARD_TARGET_TYPES)
         end
     elseif selectedFaceDefinition
-        and hasTargetType(selectedFaceDefinition.targ, "Inf") then
+        and not isReloading
+        and hasTargetType(effectiveTargetType, "Inf") then
         targetType = "Inf"
         targetCard = {
             kind = "deck",
         }
     elseif selectedFaceDefinition
-        and hasTargetType(selectedFaceDefinition.targ, "Obj")
+        and not isReloading
+        and hasTargetType(effectiveTargetType, "Obj")
         and objectiveTargetPreview then
         targetType = "Obj"
         targetCard = objectiveTargetPreview
     elseif selectedFaceDefinition
-        and hasTargetType(selectedFaceDefinition.targ, "IntCD")
+        and not isReloading
+        and hasTargetType(effectiveTargetType, "IntCD")
         and entityKey == "intel"
         and intelTargetPreview then
         targetType = "IntCD"
         targetCard = intelTargetPreview
     elseif selectedFaceDefinition
-        and hasTargetType(selectedFaceDefinition.targ, "WZOpp")
+        and not isReloading
+        and hasTargetType(effectiveTargetType, "WZOpp")
         and warzoneTargetPreview then
         targetType = "WZOpp"
         targetCard = warzoneTargetPreview
     elseif selectedFaceDefinition
-        and canTargetPlayerWarzone(selectedFaceDefinition.targ)
+        and not isReloading
+        and canTargetPlayerWarzone(effectiveTargetType)
         and warzoneTargetPreview then
-        targetType = firstTargetTypeMatching(selectedFaceDefinition.targ, PLAYER_WARZONE_TARGET_TYPES)
+        targetType = firstTargetTypeMatching(effectiveTargetType, PLAYER_WARZONE_TARGET_TYPES)
         targetCard = warzoneTargetPreview
     end
 
@@ -229,6 +272,7 @@ local function buildRollState(entityKey, definition, faceIndices, isEnemy, prese
         cardgen = cardgen,
         cardgenPool = cardgenPool,
         pain = pain,
+        autoReload = autoReload,
         exhausted = preserveState and preserveState.exhausted or false,
         locked = preserveState and preserveState.locked or false,
     }
@@ -617,6 +661,26 @@ end
 
 function warrules.clearCardRollState(cardIndex)
     warrules.clearEntityRollState(warrules.getCardEntityKey(cardIndex))
+end
+
+function warrules.refreshCardRollValue(cardIndex, cards)
+    local entityKey = warrules.getCardEntityKey(cardIndex)
+    local rollState = warRollDisplayStates[entityKey]
+    local card = cards and cards[cardIndex] or nil
+
+    if not rollState or not rollState.faceIndex or not card then
+        return false
+    end
+
+    local definition = cardregistry.getCard(card.setName, card.cardId)
+    local badgeDefinition = definition and carddraw.getCardFaceBadge(definition, rollState.faceIndex, card) or nil
+
+    if not badgeDefinition then
+        return false
+    end
+
+    rollState.damageValue = math.max(0, tonumber(badgeDefinition.value) or 0)
+    return true
 end
 
 function warrules.rerollEntity(entityKey, definition, isEnemy, sourceCard)

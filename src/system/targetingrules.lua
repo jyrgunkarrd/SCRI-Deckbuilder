@@ -23,7 +23,11 @@ local function canTargetEnemyCard(rollState, context)
         return context.canTargetEnemyCard(rollState)
     end
 
-    return hasTargetType(rollState, "Atk") or hasTargetType(rollState, "AtkSab") or hasTargetType(rollState, "TAtk")
+    return hasTargetType(rollState, "Atk")
+        or hasTargetType(rollState, "AtkSab")
+        or hasTargetType(rollState, "TAtk")
+        or hasTargetType(rollState, "closeatk")
+        or hasTargetType(rollState, "maulatk")
 end
 
 local function canTargetPlayerWarzone(rollState, context)
@@ -87,12 +91,16 @@ end
 function targetingrules.shouldBracketCard(cardIndex, context)
     context = context or {}
 
-    if cardIndex == context.hoveredCardIndex or context.currentPhase ~= "War" then
+    if cardIndex == context.hoveredCardIndex then
         return false
     end
 
     if context.pendingStrategySelection and context.isPendingStrategyTarget then
         return context.isPendingStrategyTarget(cardIndex, context.pendingStrategySelection)
+    end
+
+    if context.currentPhase ~= "War" then
+        return false
     end
 
     local displayStates = context.displayStates or {}

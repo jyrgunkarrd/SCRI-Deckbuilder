@@ -3,6 +3,8 @@ local keywordDefinitions = require("data.keywords")
 local cardregistry = require("src.system.cardregistry")
 local temporaryeffects = require("src.system.temporaryeffects")
 local TIME_LIMIT_KEYWORD_ID = "KWTIME"
+local RELOADING_KEYWORD_ID = "KWRLD"
+local GROWTH_KEYWORD_ID = "KWGRO"
 
 local enemyChampionHandlers = {
     enemy_champion_play_another_card = function()
@@ -66,6 +68,13 @@ function keywordrules.getCardKeywordIds(cardDefinition, card)
 
     appendKeywordIds(keywordIds, seenKeywordIds, cardDefinition)
 
+    for keywordId, keywordValue in pairs(card and card.keywordValues or {}) do
+        if (tonumber(keywordValue) or 0) > 0 and not seenKeywordIds[keywordId] then
+            keywordIds[#keywordIds + 1] = keywordId
+            seenKeywordIds[keywordId] = true
+        end
+    end
+
     for keywordId in pairs(card and card.tempKeywords or {}) do
         if not seenKeywordIds[keywordId] and temporaryeffects.hasTemporaryKeyword(card, keywordId) then
             keywordIds[#keywordIds + 1] = keywordId
@@ -107,12 +116,12 @@ local function getDefinitionKeywordValue(cardDefinition, keywordId)
 end
 
 local function getKeywordValueFromSource(card, sourceDefinition, keywordId)
-    if not sourceDefinition or not keywordrules.cardHasKeyword(sourceDefinition, keywordId) then
-        return nil
-    end
-
     if card and card.keywordValues and card.keywordValues[keywordId] ~= nil then
         return tonumber(card.keywordValues[keywordId]) or 0
+    end
+
+    if not sourceDefinition or not keywordrules.cardHasKeyword(sourceDefinition, keywordId) then
+        return nil
     end
 
     return tonumber(getDefinitionKeywordValue(sourceDefinition, keywordId)) or 0
@@ -171,6 +180,67 @@ function keywordrules.initializeCardKeywordState(card, cardDefinition)
             end
         end
     end
+end
+
+function keywordrules.setTemporaryKeywordValue(card, keywordId, keywordValue)
+    if not card or not keywordId then
+        return false
+    end
+
+    card.tempKeywords = card.tempKeywords or {}
+    card.tempKeywordValues = card.tempKeywordValues or {}
+    card.tempKeywords[keywordId] = 1
+    card.tempKeywordValues[keywordId] = math.max(0, tonumber(keywordValue) or 0)
+    return true
+end
+
+function keywordrules.removeTemporaryKeyword(card, keywordId)
+    if not card or not keywordId then
+        return false
+    end
+
+    if card.tempKeywords then
+        card.tempKeywords[keywordId] = nil
+    end
+
+    if card.tempKeywordValues then
+        card.tempKeywordValues[keywordId] = nil
+    end
+
+    return true
+end
+
+function keywordrules.addCardKeywordValue(card, cardDefinition, keywordId, amount)
+    if not card or not keywordId then
+        return nil
+    end
+
+    local keywordDefinition = keywordrules.getKeywordDefinition(keywordId)
+    local incrementAmount = math.max(0, tonumber(amount) or 0)
+
+    if not keywordDefinition or keywordDefinition.hasvalue ~= 1 or incrementAmount <= 0 then
+        return nil
+    end
+
+    keywordrules.initializeCardKeywordState(card, cardDefinition)
+    card.keywordValues = card.keywordValues or {}
+
+    local currentValue = card.keywordValues[keywordId]
+
+    if currentValue == nil then
+        currentValue = keywordrules.cardHasKeyword(cardDefinition, keywordId, card)
+            and (tonumber(getDefinitionKeywordValue(cardDefinition, keywordId)) or 0)
+            or 0
+    end
+
+    card.keywordValues[keywordId] = math.max(0, tonumber(currentValue) or 0) + incrementAmount
+
+    if keywordId == GROWTH_KEYWORD_ID and card.currentHealth ~= nil then
+        card.maxHealth = math.max(0, tonumber(card.maxHealth) or 0) + incrementAmount
+        card.currentHealth = math.max(0, tonumber(card.currentHealth) or 0) + incrementAmount
+    end
+
+    return card.keywordValues[keywordId]
 end
 
 function keywordrules.getCardKeywordValue(card, cardDefinition, keywordId)
@@ -253,6 +323,15 @@ function keywordrules.decrementEndPhaseKeywords(cards)
 
                 if card.keywordValues[TIME_LIMIT_KEYWORD_ID] <= 0 then
                     expiredCardIndices[#expiredCardIndices + 1] = cardIndex
+                end
+            end
+
+            if temporaryeffects.hasTemporaryKeyword(card, RELOADING_KEYWORD_ID) then
+                card.tempKeywordValues = card.tempKeywordValues or {}
+                card.tempKeywordValues[RELOADING_KEYWORD_ID] = (tonumber(card.tempKeywordValues[RELOADING_KEYWORD_ID]) or 0) - 1
+
+                if card.tempKeywordValues[RELOADING_KEYWORD_ID] <= 0 then
+                    keywordrules.removeTemporaryKeyword(card, RELOADING_KEYWORD_ID)
                 end
             end
         end

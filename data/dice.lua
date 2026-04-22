@@ -149,6 +149,42 @@ local dice = {
             facedesc = "Deal damage to a target troop or Champion. Gain SynTac.",
         },
 
+        {
+            id = "EXODMG5",
+            type = "ExWeap",
+            value = 5,
+            targ = "exoatk",
+            facename = "Exotic Weapon Attack",
+            facedesc = "Deal damage to a target troop or Champion. This card gains Reloading.",
+        },
+
+        {
+            id = "CQDMG2",
+            type = "MeleeWeap",
+            value = 2,
+            targ = "closeatk",
+            facename = "Close Quarters Attack",
+            facedesc = "Deal damage to a target troop or Champion. This card gains block.",
+        },
+
+        {
+            id = "CQDMG1",
+            type = "MeleeWeap",
+            value = 1,
+            targ = "closeatk",
+            facename = "Close Quarters Attack",
+            facedesc = "Deal damage to a target troop or Champion. This card gains block.",
+        },
+
+        {
+            id = "MLDMG3",
+            type = "Maul",
+            value = 3,
+            targ = "maulatk",
+            facename = "Mauling Attack",
+            facedesc = "Deal damage to a target troop or Champion. This card heals.",
+        },
+
     -- Pain Damage ---
 
 

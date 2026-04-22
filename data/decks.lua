@@ -11,17 +11,22 @@ local decks = {
             cards = {
                 {
                     cardId = "AEGSPMSL",
+                    quantity = 2,
+                },
+
+                {
+                    cardId = "B6VIC",
                     quantity = 3,
                 },
 
                 {
-                    cardId = "B6CYBLD",
+                    cardId = "MAMHNT",
                     quantity = 3,
                 },
 
                 {
-                    cardId = "B6DEP",
-                    quantity = 3,
+                    cardId = "MAMGRZ",
+                    quantity = 1,
                 },
             },
         },

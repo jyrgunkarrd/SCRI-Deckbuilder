@@ -1,4 +1,6 @@
 local phasecontroller = {}
+local CACHE_CARD_TYPE = "cache"
+local MEAT_CACHE_CARD_ID = "MEATTOK"
 
 local function getCardIndexFromEntityKey(entityKey)
     local cardIndex = entityKey and entityKey:match("^card:(%d+)$")
@@ -88,8 +90,64 @@ local function resolveRetaliation(gameState, deps, retaliation)
     deps.warrules.clearEntityRollState(retaliation.entityKey)
 end
 
+local function resolveEndPhaseCaches(gameState, deps)
+    local expiredCacheIndexes = {}
+
+    for cardIndex, card in ipairs(gameState.cards or {}) do
+        if card
+            and not deps.isCardUnavailable(card)
+            and card.location
+            and card.location.kind == "grid"
+            and card.location.rowId == "PlayerRow" then
+            local cardDefinition = deps.cardregistry.getCard(card.setName, card.cardId)
+
+            if cardDefinition and cardDefinition.type == CACHE_CARD_TYPE then
+                if card.cardId == MEAT_CACHE_CARD_ID then
+                    local previousHealth = math.max(0, tonumber(card.currentHealth) or 0)
+                    card.currentHealth = math.max(0, previousHealth - 1)
+
+                    if card.currentHealth < previousHealth and deps.sfxrules and deps.sfxrules.playEat then
+                        deps.sfxrules.playEat()
+                    end
+
+                    if card.currentHealth < previousHealth and deps.notifyMeatCacheDecayed then
+                        deps.notifyMeatCacheDecayed(cardIndex)
+                    end
+
+                    for _, playerRowCard in ipairs(gameState.cards or {}) do
+                        if playerRowCard
+                            and playerRowCard ~= card
+                            and not deps.isCardUnavailable(playerRowCard)
+                            and playerRowCard.location
+                            and playerRowCard.location.kind == "grid"
+                            and playerRowCard.location.rowId == "PlayerRow" then
+                            local playerRowDefinition = deps.cardregistry.getCard(playerRowCard.setName, playerRowCard.cardId)
+
+                            if playerRowDefinition and playerRowDefinition.type ~= CACHE_CARD_TYPE then
+                                deps.healCard(playerRowCard, 1)
+                            end
+                        end
+                    end
+                end
+
+                if math.max(0, tonumber(card.currentHealth) or 0) <= 0 then
+                    expiredCacheIndexes[#expiredCacheIndexes + 1] = cardIndex
+                end
+            end
+        end
+    end
+
+    for _, cardIndex in ipairs(expiredCacheIndexes) do
+        deps.removeCardFromPlay(cardIndex)
+    end
+end
+
 function phasecontroller.enterCurrentPhase(gameState, deps)
     local currentPhase = deps.turnrules.getCurrentPhase()
+
+    if currentPhase ~= "End" then
+        gameState.endPhaseSacrificeHandled = false
+    end
 
     if currentPhase == deps.turnrules.getSetupPhase() then
         gameState.cards = deps.deckrules.assignCardsToHand(gameState.playerDeck, deps.envrules.getPlayerHand().slots, {
@@ -112,6 +170,11 @@ function phasecontroller.enterCurrentPhase(gameState, deps)
         deps.sfxrules.playPhaseEnd()
         deps.warrules.beginPhase(deps.getTopSlotRollTargets(), gameState.cards, gameState.activePrimaryObjective, gameState.activeIntel, gameState.activeWarzone)
     elseif currentPhase == "End" then
+        if deps.beginEndPhaseSacrificeSelection
+            and deps.beginEndPhaseSacrificeSelection(gameState) then
+            return
+        end
+
         deps.warrules.clearBlankResults()
         deps.warrules.clearAllRollResults()
         deps.clearAllBlocking()
@@ -119,6 +182,7 @@ function phasecontroller.enterCurrentPhase(gameState, deps)
         for _, expiredCardIndex in ipairs(deps.keywordrules.decrementEndPhaseKeywords(gameState.cards)) do
             deps.removeCardFromPlay(expiredCardIndex)
         end
+        resolveEndPhaseCaches(gameState, deps)
         deps.drawCardFromPlayerDeck()
         if gameState.activePoi
             and gameState.activePoi.id

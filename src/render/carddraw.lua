@@ -3,6 +3,7 @@ local diceDefinitions = require("data.dice")
 local keywordDefinitions = require("data.keywords")
 local jaclDefinitions = require("data.jacl")
 local cardregistry = require("src.system.cardregistry")
+local keywordrules = require("src.system.keywordrules")
 local temporaryeffects = require("src.system.temporaryeffects")
 
 local CARD_IMAGE_DIRECTORY = "assets/images/cards/"
@@ -59,8 +60,10 @@ local BADGE_PIP_COLOR_TWENTY_FIVE = { 1, 0.369, 0.369, 1 }
 local DAMAGE_PREVIEW_PIP_COLOR = { 1, 0.298, 0.298, 1 }
 local KIA_BADGE_TEXT_COLOR = { 0.902, 0.2, 0.416, 1 }
 local STRATEGIST_KEYWORD_ID = "KWSTRAT"
+local RELOADING_KEYWORD_ID = "KWRLD"
 local TOME_CARD_TYPE = "tome"
 local TROOP_HEALTH_PIP_COLOR = { 0, 1, 0.839 }
+local CACHE_PIP_COLOR = { 1, 0.486, 0.694 }
 local SYNTAC_PIP_COLOR = { 0.58, 0.9, 0.96 }
 local HUNTER_OUTLINE_COLOR = { 0.82, 0.16, 0.16, 1 }
 local HUNTER_LABEL_FILL_COLOR = { 0.02, 0.02, 0.03, 1 }
@@ -368,6 +371,13 @@ local function getCardKeywordIds(cardDefinition, card)
 
     appendKeywordIds(keywordIds, seenKeywordIds, cardDefinition)
 
+    for keywordId, keywordValue in pairs(card and card.keywordValues or {}) do
+        if (tonumber(keywordValue) or 0) > 0 and not seenKeywordIds[keywordId] then
+            keywordIds[#keywordIds + 1] = keywordId
+            seenKeywordIds[keywordId] = true
+        end
+    end
+
     if cardDefinition.type == "strategy" then
         local hasStrategistKeyword = false
 
@@ -408,11 +418,44 @@ local function getCardKeywordDefaultValue(cardDefinition, keywordId)
     return tonumber(cardDefinition.kwval) or 0
 end
 
-local function getBadgeDefinitions(cardDefinition)
+local function getEffectiveFaceDefinition(cardDefinition, faceIndex, card)
+    if not cardDefinition or not faceIndex then
+        return nil
+    end
+
+    local baseFaceDefinition = getDiceDefinition(cardDefinition["D" .. tostring(faceIndex)])
+
+    if not baseFaceDefinition then
+        return nil
+    end
+
+    if card and keywordrules.cardHasKeyword(cardDefinition, RELOADING_KEYWORD_ID, card) then
+        return getDiceDefinition("NUL")
+    end
+
+    local growthValue = card
+        and math.max(0, tonumber(keywordrules.getCardKeywordValue(card, cardDefinition, "KWGRO")) or 0)
+        or 0
+
+    if growthValue <= 0 or baseFaceDefinition.value == nil then
+        return baseFaceDefinition
+    end
+
+    local effectiveFaceDefinition = {}
+
+    for key, value in pairs(baseFaceDefinition) do
+        effectiveFaceDefinition[key] = value
+    end
+
+    effectiveFaceDefinition.value = math.max(0, tonumber(baseFaceDefinition.value) or 0) + growthValue
+    return effectiveFaceDefinition
+end
+
+local function getBadgeDefinitions(cardDefinition, card)
     local badgeDefinitions = {}
 
     for faceIndex = 1, 6 do
-        badgeDefinitions[faceIndex] = getDiceDefinition(cardDefinition["D" .. faceIndex])
+        badgeDefinitions[faceIndex] = getEffectiveFaceDefinition(cardDefinition, faceIndex, card)
     end
 
     return badgeDefinitions
@@ -798,12 +841,14 @@ local function drawHealthFooter(x, y, width, height, padding, footerHeight, foot
                 centerX, pipY + pipSize,
                 pipX, centerY
             )
+        elseif pipShape == "circle" then
+            love.graphics.circle(mode, pipX + (pipSize / 2), pipY + (pipSize / 2), pipSize / 2)
         else
             love.graphics.rectangle(mode, pipX, pipY, pipSize, pipSize)
         end
     end
 
-    if maxPipCount > 0 then
+    if maxPipCount > 0 and pipShape ~= "circle" then
         love.graphics.setColor(footerPipColor[1], footerPipColor[2], footerPipColor[3], alpha * 0.65)
 
         for pipIndex = 0, maxPipCount - 1 do
@@ -1050,7 +1095,13 @@ local function drawKeywordBadge(keywordId, badgeX, badgeY, badgeSize, keywordVal
     local hasKeywordValue = keywordDefinition and keywordDefinition.hasvalue == 1
     local displayedKeywordValue = hasKeywordValue and math.max(0, tonumber(keywordValue) or 0) or 0
     local reservedTopHeight = 0
-    local pipGap = math.max(1, snap(badgeSize * 0.03))
+    local reservedBottomHeight = 0
+    local pipLanePadding = math.max(1, snap(badgeSize * 0.04))
+    local onePipGap = math.max(1, snap(badgeSize * 0.03))
+    local bottomPipGap = math.max(1, snap(badgeSize * 0.03))
+    local onePipCount = 0
+    local fivePipCount = 0
+    local twentyFivePipCount = 0
 
     love.graphics.setColor(0.12, 0.13, 0.16, 0.95)
     love.graphics.rectangle("fill", badgeX, badgeY, badgeSize, badgeSize, 4, 4)
@@ -1058,20 +1109,62 @@ local function drawKeywordBadge(keywordId, badgeX, badgeY, badgeSize, keywordVal
     love.graphics.rectangle("line", badgeX, badgeY, badgeSize, badgeSize, 4, 4)
 
     if hasKeywordValue and displayedKeywordValue > 0 then
-        local maxPipSizeByWidth = (badgeSize - 4 - (math.max(0, displayedKeywordValue - 1) * pipGap)) / math.max(1, displayedKeywordValue)
-        local pipSize = math.max(1, snap(math.min(badgeSize * BADGE_TOP_PIP_MAX_SIZE_RATIO, maxPipSizeByWidth)))
-        reservedTopHeight = pipSize + (math.max(1, snap(badgeSize * 0.04)) * 2)
+        local remainingValue = displayedKeywordValue
+        twentyFivePipCount = math.floor(remainingValue / 25)
+        remainingValue = remainingValue % 25
+        fivePipCount = math.floor(remainingValue / 5)
+        onePipCount = remainingValue % 5
 
-        if pipSize > 0 and reservedTopHeight > 0 then
-            local totalPipWidth = (displayedKeywordValue * pipSize) + (math.max(0, displayedKeywordValue - 1) * pipGap)
+        if onePipCount > 0 then
+            local oneMaxSizeByWidth = (badgeSize - 4 - (math.max(0, onePipCount - 1) * onePipGap)) / math.max(1, onePipCount)
+            local pipSize = math.max(1, snap(math.min(badgeSize * BADGE_TOP_PIP_MAX_SIZE_RATIO, oneMaxSizeByWidth)))
+            reservedTopHeight = pipSize + (pipLanePadding * 2)
+        end
+
+        if twentyFivePipCount > 0 or fivePipCount > 0 then
+            local bottomPipCount = twentyFivePipCount + fivePipCount
+            local totalBottomUnits = (twentyFivePipCount * 2) + fivePipCount
+            local bottomMaxUnitSizeByWidth = (badgeSize - 4 - (math.max(0, bottomPipCount - 1) * bottomPipGap)) / math.max(1, totalBottomUnits)
+            local bottomUnitSize = math.max(1, snap(math.min(badgeSize * BADGE_BOTTOM_PIP_MAX_SIZE_RATIO, bottomMaxUnitSizeByWidth)))
+            reservedBottomHeight = (bottomUnitSize * 2) + (pipLanePadding * 2)
+        end
+
+        if onePipCount > 0 and reservedTopHeight > 0 then
+            local oneMaxSizeByWidth = (badgeSize - 4 - (math.max(0, onePipCount - 1) * onePipGap)) / math.max(1, onePipCount)
+            local pipSize = math.max(1, snap(math.min(badgeSize * BADGE_TOP_PIP_MAX_SIZE_RATIO, oneMaxSizeByWidth)))
+            local totalPipWidth = (onePipCount * pipSize) + (math.max(0, onePipCount - 1) * onePipGap)
             local pipStartX = snap(badgeX + ((badgeSize - totalPipWidth) / 2))
             local pipY = snap(badgeY + ((reservedTopHeight - pipSize) / 2))
 
             love.graphics.setColor(BADGE_PIP_COLOR_ONE)
 
-            for pipIndex = 0, displayedKeywordValue - 1 do
-                local pipX = pipStartX + (pipIndex * (pipSize + pipGap))
+            for pipIndex = 0, onePipCount - 1 do
+                local pipX = pipStartX + (pipIndex * (pipSize + onePipGap))
                 love.graphics.rectangle("fill", pipX, pipY, pipSize, pipSize)
+            end
+        end
+
+        if twentyFivePipCount > 0 or fivePipCount > 0 then
+            local bottomPipCount = twentyFivePipCount + fivePipCount
+            local totalBottomUnits = (twentyFivePipCount * 2) + fivePipCount
+            local bottomMaxUnitSizeByWidth = (badgeSize - 4 - (math.max(0, bottomPipCount - 1) * bottomPipGap)) / math.max(1, totalBottomUnits)
+            local bottomUnitSize = math.max(1, snap(math.min(badgeSize * BADGE_BOTTOM_PIP_MAX_SIZE_RATIO, bottomMaxUnitSizeByWidth)))
+            local bottomPipHeight = bottomUnitSize * 2
+            local totalBottomWidth = (totalBottomUnits * bottomUnitSize) + (math.max(0, bottomPipCount - 1) * bottomPipGap)
+            local pipX = snap(badgeX + ((badgeSize - totalBottomWidth) / 2))
+            local bottomLaneY = badgeY + badgeSize - reservedBottomHeight
+            local bottomPipY = snap(bottomLaneY + ((reservedBottomHeight - bottomPipHeight) / 2))
+
+            for pipIndex = 1, twentyFivePipCount do
+                love.graphics.setColor(BADGE_PIP_COLOR_TWENTY_FIVE)
+                love.graphics.rectangle("fill", pipX, bottomPipY, bottomUnitSize * 2, bottomPipHeight)
+                pipX = pipX + (bottomUnitSize * 2) + bottomPipGap
+            end
+
+            for pipIndex = 1, fivePipCount do
+                love.graphics.setColor(BADGE_PIP_COLOR_FIVE)
+                love.graphics.rectangle("fill", pipX, bottomPipY, bottomUnitSize, bottomPipHeight)
+                pipX = pipX + bottomUnitSize + bottomPipGap
             end
         end
     end
@@ -1080,7 +1173,7 @@ local function drawKeywordBadge(keywordId, badgeX, badgeY, badgeSize, keywordVal
         local imageInset = math.max(2, snap(badgeSize * 0.1))
         local availableSize = math.max(1, badgeSize - (imageInset * 2))
         local imageAreaY = badgeY + imageInset + reservedTopHeight
-        local imageAreaHeight = math.max(1, badgeSize - (imageInset * 2) - reservedTopHeight)
+        local imageAreaHeight = math.max(1, badgeSize - (imageInset * 2) - reservedTopHeight - reservedBottomHeight)
         local imageScale = math.min(availableSize / keywordImage:getWidth(), imageAreaHeight / keywordImage:getHeight())
         local imageWidth = keywordImage:getWidth() * imageScale
         local imageHeight = keywordImage:getHeight() * imageScale
@@ -1235,7 +1328,7 @@ local function drawBadge(x, y, width, height, headerHeight, badgeDefinition, bot
     end
 end
 
-local function drawPortraitBadges(cardDefinition, x, y, width, height, footerHeight)
+local function drawPortraitBadges(cardDefinition, card, x, y, width, height, footerHeight)
     if not hasDefinitionFaceBadges(cardDefinition) then
         return
     end
@@ -1251,7 +1344,7 @@ local function drawPortraitBadges(cardDefinition, x, y, width, height, footerHei
     local startY = snap(y + ((availableHeight - totalBadgeHeight) / 2))
     local leftX = x + badgeInset
     local rightX = x + width - badgeInset - badgeSize
-    local badgeDefinitions = getBadgeDefinitions(cardDefinition)
+    local badgeDefinitions = getBadgeDefinitions(cardDefinition, card)
 
     for badgeIndex = 0, 2 do
         local badgeY = startY + (badgeIndex * (badgeHeight + badgeGap))
@@ -1261,7 +1354,7 @@ local function drawPortraitBadges(cardDefinition, x, y, width, height, footerHei
     end
 end
 
-local function drawTextboxBadges(cardDefinition, x, y, width, height, padding, footerHeight, reserveFooterSpace, expandToWidth, badgeScale)
+local function drawTextboxBadges(cardDefinition, card, x, y, width, height, padding, footerHeight, reserveFooterSpace, expandToWidth, badgeScale)
     if not hasDefinitionFaceBadges(cardDefinition) then
         return nil
     end
@@ -1285,7 +1378,7 @@ local function drawTextboxBadges(cardDefinition, x, y, width, height, padding, f
     local startX = snap(x + ((width - totalBadgeWidth) / 2))
     local footerReserve = reserveFooterSpace ~= false and footerHeight or 0
     local badgeY = snap(y + height - footerReserve - badgeHeight - snap(padding * 0.5))
-    local badgeDefinitions = getBadgeDefinitions(cardDefinition)
+    local badgeDefinitions = getBadgeDefinitions(cardDefinition, card)
     local bottomPipMaxScale = reserveFooterSpace ~= false and HAND_BADGE_BOTTOM_PIP_MAX_SCALE or 1
 
     for badgeIndex = 0, 5 do
@@ -1296,7 +1389,7 @@ local function drawTextboxBadges(cardDefinition, x, y, width, height, padding, f
     return badgeY
 end
 
-local function getTextboxBadgeRects(cardDefinition, x, y, width, height, padding, footerHeight, reserveFooterSpace, expandToWidth, badgeScale)
+local function getTextboxBadgeRects(cardDefinition, card, x, y, width, height, padding, footerHeight, reserveFooterSpace, expandToWidth, badgeScale)
     if not hasDefinitionFaceBadges(cardDefinition) then
         return {}
     end
@@ -1340,7 +1433,7 @@ function carddraw.drawDefinitionTextboxBadges(cardDefinition, x, y, width, heigh
         return nil
     end
 
-    return drawTextboxBadges(cardDefinition, x, y, width, height, padding, footerHeight, reserveFooterSpace, expandToWidth, badgeScale)
+    return drawTextboxBadges(cardDefinition, nil, x, y, width, height, padding, footerHeight, reserveFooterSpace, expandToWidth, badgeScale)
 end
 
 function carddraw.getHoveredDefinitionTextboxDiceFace(cardDefinition, x, y, width, height, padding, footerHeight, reserveFooterSpace, expandToWidth, badgeScale, mouseX, mouseY, anchorX, anchorY, anchorWidth, anchorHeight)
@@ -1348,7 +1441,7 @@ function carddraw.getHoveredDefinitionTextboxDiceFace(cardDefinition, x, y, widt
         return nil
     end
 
-    for _, badgeRect in ipairs(getTextboxBadgeRects(cardDefinition, x, y, width, height, padding, footerHeight, reserveFooterSpace, expandToWidth, badgeScale)) do
+    for _, badgeRect in ipairs(getTextboxBadgeRects(cardDefinition, nil, x, y, width, height, padding, footerHeight, reserveFooterSpace, expandToWidth, badgeScale)) do
         if mouseX >= badgeRect.x
             and mouseX <= badgeRect.x + badgeRect.width
             and mouseY >= badgeRect.y
@@ -1379,7 +1472,11 @@ function carddraw.getDefinitionFaceBadge(cardDefinition, faceIndex)
         return nil
     end
 
-    return getDiceDefinition(cardDefinition["D" .. tostring(faceIndex)])
+    return getEffectiveFaceDefinition(cardDefinition, faceIndex, nil)
+end
+
+function carddraw.getCardFaceBadge(cardDefinition, faceIndex, card)
+    return getEffectiveFaceDefinition(cardDefinition, faceIndex, card)
 end
 
 function carddraw.getCardRollBadgeRect(drawX, drawY, options)
@@ -1498,19 +1595,19 @@ function carddraw.getHoveredDiceFace(setName, cardId, drawX, drawY, expansionPro
             and mouseX <= badgeX + badgeWidth
             and mouseY >= badgeY
             and mouseY <= badgeY + badgeHeight then
-            return carddraw.buildDiceFaceTooltip(carddraw.getDefinitionFaceBadge(cardDefinition, rollState.faceIndex), cardX, cardY, renderWidth, cardHeight)
+            return carddraw.buildDiceFaceTooltip(carddraw.getCardFaceBadge(cardDefinition, rollState.faceIndex, metrics.card), cardX, cardY, renderWidth, cardHeight)
         end
     end
 
     if textboxHeight > 0 and metrics.showBadgesInTextbox and hasDefinitionFaceBadges(cardDefinition) then
         local textY = cardY + portraitHeight + labelHeight
 
-        for _, badgeRect in ipairs(getTextboxBadgeRects(cardDefinition, cardX, textY, renderWidth, textboxHeight, snap(metrics.padding), snap(metrics.footerHeight), not metrics.showHealthOnPortrait, metrics.showHealthOnPortrait)) do
+        for _, badgeRect in ipairs(getTextboxBadgeRects(cardDefinition, metrics.card, cardX, textY, renderWidth, textboxHeight, snap(metrics.padding), snap(metrics.footerHeight), not metrics.showHealthOnPortrait, metrics.showHealthOnPortrait)) do
             if mouseX >= badgeRect.x
                 and mouseX <= badgeRect.x + badgeRect.width
                 and mouseY >= badgeRect.y
                 and mouseY <= badgeRect.y + badgeRect.height then
-                return carddraw.buildDiceFaceTooltip(carddraw.getDefinitionFaceBadge(cardDefinition, badgeRect.faceIndex), cardX, cardY, renderWidth, cardHeight)
+                return carddraw.buildDiceFaceTooltip(carddraw.getCardFaceBadge(cardDefinition, badgeRect.faceIndex, metrics.card), cardX, cardY, renderWidth, cardHeight)
             end
         end
     end
@@ -1534,11 +1631,11 @@ function carddraw.getHoveredDiceFace(setName, cardId, drawX, drawY, expansionPro
             local rightFaceIndex = badgeIndex + 4
 
             if mouseX >= leftX and mouseX <= leftX + badgeSize and mouseY >= badgeY and mouseY <= badgeY + badgeHeight then
-                return carddraw.buildDiceFaceTooltip(carddraw.getDefinitionFaceBadge(cardDefinition, leftFaceIndex), cardX, cardY, renderWidth, cardHeight)
+                return carddraw.buildDiceFaceTooltip(carddraw.getCardFaceBadge(cardDefinition, leftFaceIndex, metrics.card), cardX, cardY, renderWidth, cardHeight)
             end
 
             if mouseX >= rightX and mouseX <= rightX + badgeSize and mouseY >= badgeY and mouseY <= badgeY + badgeHeight then
-                return carddraw.buildDiceFaceTooltip(carddraw.getDefinitionFaceBadge(cardDefinition, rightFaceIndex), cardX, cardY, renderWidth, cardHeight)
+                return carddraw.buildDiceFaceTooltip(carddraw.getCardFaceBadge(cardDefinition, rightFaceIndex, metrics.card), cardX, cardY, renderWidth, cardHeight)
             end
         end
     end
@@ -1737,8 +1834,8 @@ local function drawLethalPreviewBadge(drawX, drawY, portraitWidth, portraitHeigh
     love.graphics.pop()
 end
 
-function carddraw.drawDefinitionRollBadge(cardDefinition, badgeX, badgeY, badgeWidth, badgeHeight, faceIndex, pulseScale)
-    local badgeDefinition = carddraw.getDefinitionFaceBadge(cardDefinition, faceIndex)
+function carddraw.drawDefinitionRollBadge(cardDefinition, badgeX, badgeY, badgeWidth, badgeHeight, faceIndex, pulseScale, card)
+    local badgeDefinition = carddraw.getCardFaceBadge(cardDefinition, faceIndex, card)
 
     if not badgeDefinition then
         return
@@ -2009,6 +2106,9 @@ function carddraw.drawCardState(setName, cardId, x, y, expansionProgress, option
         displayedMaxHealth = displayedHealth
         footerPipColor = SYNTAC_PIP_COLOR
         footerPipShape = "diamond"
+    elseif cardDefinition.type == "cache" then
+        footerPipColor = CACHE_PIP_COLOR
+        footerPipShape = "circle"
     end
 
     love.graphics.setColor(0.15, 0.15, 0.18, 0.96)
@@ -2039,7 +2139,7 @@ function carddraw.drawCardState(setName, cardId, x, y, expansionProgress, option
 
     if displayedHealth ~= nil and metrics.showHealthOnPortrait then
         if not metrics.showBadgesInTextbox then
-            drawPortraitBadges(cardDefinition, drawX, portraitY, renderWidth, portraitHeight, snap(metrics.footerHeight))
+            drawPortraitBadges(cardDefinition, metrics.card, drawX, portraitY, renderWidth, portraitHeight, snap(metrics.footerHeight))
         end
 
         drawHealthFooter(drawX, portraitY, renderWidth, portraitHeight, snap(metrics.padding), snap(metrics.footerHeight), footerFont, displayedHealth, displayedMaxHealth, metrics.damagePreviewCount, metrics.blockedDamagePreviewCount, metrics.blocking, 1, cardDefinition.method, footerPipColor, footerPipShape)
@@ -2112,7 +2212,7 @@ function carddraw.drawCardState(setName, cardId, x, y, expansionProgress, option
             local textStartY = snap(textY + metrics.padding)
 
             if metrics.showBadgesInTextbox and hasDefinitionFaceBadges(cardDefinition) and textboxHeight > snap(metrics.footerHeight) then
-                local badgeTopY = drawTextboxBadges(cardDefinition, drawX, textY, renderWidth, textboxHeight, snap(metrics.padding), snap(metrics.footerHeight), not metrics.showHealthOnPortrait, metrics.showHealthOnPortrait)
+                local badgeTopY = drawTextboxBadges(cardDefinition, metrics.card, drawX, textY, renderWidth, textboxHeight, snap(metrics.padding), snap(metrics.footerHeight), not metrics.showHealthOnPortrait, metrics.showHealthOnPortrait)
 
                 if badgeTopY then
                     textBottomY = badgeTopY - snap(metrics.padding * 0.75)

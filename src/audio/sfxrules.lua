@@ -17,6 +17,7 @@ local SABOTAGE_SFX_PATH = "assets/audio/sfx/sabotage.wav"
 local INFLUENCE_SFX_PATH = "assets/audio/sfx/inf.wav"
 local FLIP_SFX_PATH = "assets/audio/sfx/flip.wav"
 local HUNT_SFX_PATH = "assets/audio/sfx/hunt.wav"
+local EAT_SFX_PATH = "assets/audio/sfx/eat.wav"
 
 local hoverSource = nil
 local resourceMoveSource = nil
@@ -35,6 +36,7 @@ local sabotageSource = nil
 local influenceSource = nil
 local flipSource = nil
 local huntSource = nil
+local eatSource = nil
 
 local function getHoverSource()
     if hoverSource ~= nil then
@@ -189,6 +191,15 @@ local function getHuntSource()
     return huntSource
 end
 
+local function getEatSource()
+    if eatSource ~= nil then
+        return eatSource
+    end
+
+    eatSource = love.audio.newSource(EAT_SFX_PATH, "static")
+    return eatSource
+end
+
 function sfxrules.playHover()
     local source = getHoverSource():clone()
     source:play()
@@ -256,6 +267,11 @@ end
 
 function sfxrules.playSabotage()
     local source = getSabotageSource():clone()
+    source:play()
+end
+
+function sfxrules.playEat()
+    local source = getEatSource():clone()
     source:play()
 end
 

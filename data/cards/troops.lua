@@ -255,7 +255,7 @@ local troops = {
     --- === Betty Six Troops === ---
 
     {
-        id = "B6DEP",
+        id = "B6VIC",
         type = "troop",
         name = "Vicky",
         classname = "Starter",
@@ -274,6 +274,48 @@ local troops = {
         D5 = "NUL",
         D6 = "NUL",
     },
+
+    --- === Mammoth Troops === ---
+
+    {
+        id = "MAMHNT",
+        type = "troop",
+        name = "Huntress",
+        classname = "Starter",
+        subclass = "Troop",
+        health = 2,
+        max = 2,
+        func = "killmeattok",
+        value = 1,
+        textbox = "When this card defeats an enemy, establish a Meat cache.",
+        flavor = "\"...Sure, tell you what - you get a saddle on me without losing your hair, teeth and eyeballs, and then you can ride me all day long. Deal?\"", 
+        D1 = "EXODMG5",
+        D2 = "EXODMG5",
+        D3 = "CQDMG2",
+        D4 = "CQDMG2",
+        D5 = "NUL",
+        D6 = "NUL",
+    },
+
+    {
+        id = "MAMGRZ",
+        type = "troop",
+        name = "Onikuma",
+        classname = "Starter",
+        subclass = "Troop",
+        health = 2,
+        max = 2,
+        func = "ONIKUMAFUNC",
+        textbox = "END: Sacrifice a troop.\n\nWhenever a friendly troop is defeated, this card gains Growth.",
+        flavor = "Out here, every week is fat bear week.", 
+        D1 = "MLDMG3",
+        D2 = "CQDMG1",
+        D3 = "CQDMG1",
+        D4 = "CQDMG1",
+        D5 = "NUL",
+        D6 = "NUL",
+    },
+
 
     --- === Token Troops === ---
 
