@@ -1,6 +1,7 @@
 local warrules = {}
 local carddraw = require("src.render.carddraw")
 local cardregistry = require("src.system.cardregistry")
+local cardinstances = require("src.system.cardinstances")
 local keywordrules = require("src.system.keywordrules")
 local sfxrules = require("src.audio.sfxrules")
 
@@ -32,17 +33,52 @@ local function hasReloadingKeyword(definition, card)
     return keywordrules.cardHasKeyword(definition, RELOADING_KEYWORD_ID, card)
 end
 
+local function isSourceAtFullHealth(definition, sourceCard)
+    if sourceCard then
+        cardinstances.initializeHealth(sourceCard)
+
+        local currentHealth = tonumber(sourceCard.currentHealth)
+        local maxHealth = tonumber(sourceCard.maxHealth)
+        return currentHealth ~= nil and maxHealth ~= nil and currentHealth >= maxHealth
+    end
+
+    local currentHealth = tonumber(definition and definition.health)
+    local maxHealth = tonumber(definition and (definition.max or definition.health))
+    return currentHealth ~= nil and maxHealth ~= nil and currentHealth >= maxHealth
+end
+
 local function getCardIndexFromEntityKey(entityKey)
     local cardIndex = entityKey and entityKey:match("^card:(%d+)$")
     return cardIndex and tonumber(cardIndex) or nil
 end
 
-local function canAttackTarget(attackerDefinition, targetDefinition, attackerCard, targetCard)
+local function findGridCardIndexAt(cards, rowId, column, ignoredCardIndex)
+    for cardIndex, card in ipairs(cards or {}) do
+        if cardIndex ~= ignoredCardIndex
+            and card
+            and not card.destroyed
+            and not card.destroying
+            and card.location
+            and card.location.kind == "grid"
+            and card.location.rowId == rowId
+            and card.location.column == column then
+            return cardIndex
+        end
+    end
+
+    return nil
+end
+
+local function canAttackTarget(attackerDefinition, targetDefinition, attackerCard, targetCard, attackContext)
     if targetDefinition and (targetDefinition.type == TOME_CARD_TYPE or targetDefinition.type == CACHE_CARD_TYPE) then
         return false
     end
 
-    if hasFlyingKeyword(targetDefinition, targetCard) and not hasFlyingKeyword(attackerDefinition, attackerCard) then
+    local hasLongRange = attackContext and attackContext.lrange == true or false
+
+    if hasFlyingKeyword(targetDefinition, targetCard)
+        and not hasLongRange
+        and not hasFlyingKeyword(attackerDefinition, attackerCard) then
         return false
     end
 
@@ -138,6 +174,12 @@ local function firstTargetTypeMatching(rollStateOrTargetType, allowedTargetTypes
 end
 
 local function canTargetEnemyCard(rollStateOrTargetType)
+    if type(rollStateOrTargetType) == "table"
+        and rollStateOrTargetType.action == "attack"
+        and rollStateOrTargetType.targetClass == "enemy_card" then
+        return true
+    end
+
     return firstTargetTypeMatching(rollStateOrTargetType, ENEMY_CARD_TARGET_TYPES) ~= nil
 end
 
@@ -147,7 +189,48 @@ local function firstEnemyCardTargetType(rollStateOrTargetType)
 end
 
 local function canTargetPlayerWarzone(rollStateOrTargetType)
+    if type(rollStateOrTargetType) == "table"
+        and rollStateOrTargetType.action == "influence"
+        and rollStateOrTargetType.targetClass == "player_warzone" then
+        return true
+    end
+
     return firstTargetTypeMatching(rollStateOrTargetType, PLAYER_WARZONE_TARGET_TYPES) ~= nil
+end
+
+local function buildLegacyTargetTypeFromNormalizedFace(faceDefinition)
+    if not faceDefinition then
+        return nil
+    end
+
+    local action = faceDefinition.action
+    local targetClass = faceDefinition.target
+
+    if action == "attack" and targetClass == "enemy_card" then
+        return "Atk"
+    elseif action == "sabotage" and targetClass == "objective_or_intel" then
+        return "Sab"
+    elseif action == "sabotage" and targetClass == "objective" then
+        return "Obj"
+    elseif action == "sabotage" and targetClass == "intel" then
+        return "IntCD"
+    elseif action == "influence" and targetClass == "player_warzone" then
+        return "WZPlayer"
+    elseif action == "influence" and targetClass == "enemy_warzone" then
+        return "WZOpp"
+    elseif action == "block" and targetClass == "ally_card" then
+        return "Blk"
+    elseif action == "divert" and targetClass == "ally_card" then
+        return "Div"
+    elseif action == "infiltrate" then
+        return "Inf"
+    elseif action == "summon" then
+        return "smn"
+    elseif action == "random_summon" then
+        return "rsmn"
+    end
+
+    return nil
 end
 
 local function getEffectiveTargetType(targetType)
@@ -172,6 +255,117 @@ local function getEffectiveTargetType(targetType)
     return targetType
 end
 
+local function getNormalizedFaceBehavior(faceDefinition)
+    if not faceDefinition then
+        return {
+            action = nil,
+            targetClass = nil,
+            effectiveTargetType = nil,
+            autoReload = false,
+            gainSyntac = false,
+            immac = false,
+            lrange = false,
+            selfBlock = false,
+            selfHeal = false,
+            sabotageObjective = false,
+        }
+    end
+
+    local action = faceDefinition.action
+    local targetClass = faceDefinition.target
+    local effectiveTargetType = nil
+
+    if action and targetClass then
+        effectiveTargetType = getEffectiveTargetType(buildLegacyTargetTypeFromNormalizedFace(faceDefinition))
+    else
+        effectiveTargetType = getEffectiveTargetType(faceDefinition.targ or nil)
+
+        if hasTargetType(faceDefinition.targ, "exoatk") then
+            action = "attack"
+            targetClass = "enemy_card"
+        elseif hasTargetType(faceDefinition.targ, "tatk") then
+            action = "attack"
+            targetClass = "enemy_card"
+        elseif hasTargetType(faceDefinition.targ, "closeatk") then
+            action = "attack"
+            targetClass = "enemy_card"
+        elseif hasTargetType(faceDefinition.targ, "maulatk") then
+            action = "attack"
+            targetClass = "enemy_card"
+        elseif hasTargetType(faceDefinition.targ, "AtkSab") then
+            action = "attack"
+            targetClass = "enemy_card"
+        elseif hasTargetType(faceDefinition.targ, "Atk") then
+            action = "attack"
+            targetClass = "enemy_card"
+        elseif hasTargetType(faceDefinition.targ, "TacSab") then
+            action = "sabotage"
+            targetClass = "objective_or_intel"
+        elseif hasTargetType(faceDefinition.targ, "Sab") then
+            action = "sabotage"
+            targetClass = "objective_or_intel"
+        elseif hasTargetType(faceDefinition.targ, "Obj") then
+            action = "sabotage"
+            targetClass = "objective"
+        elseif hasTargetType(faceDefinition.targ, "IntCD") then
+            action = "sabotage"
+            targetClass = "intel"
+        elseif hasTargetType(faceDefinition.targ, "InfTac") then
+            action = "influence"
+            targetClass = "player_warzone"
+        elseif hasTargetType(faceDefinition.targ, "WZPlayer") then
+            action = "influence"
+            targetClass = "player_warzone"
+        elseif hasTargetType(faceDefinition.targ, "WZOpp") then
+            action = "influence"
+            targetClass = "enemy_warzone"
+        elseif hasTargetType(faceDefinition.targ, "Blk") then
+            action = "block"
+            targetClass = "ally_card"
+        elseif hasTargetType(faceDefinition.targ, "Div") then
+            action = "divert"
+            targetClass = "ally_card"
+        elseif hasTargetType(faceDefinition.targ, "Inf") then
+            action = "infiltrate"
+            targetClass = "none"
+        elseif hasTargetType(faceDefinition.targ, "smn") then
+            action = "summon"
+            targetClass = "none"
+        elseif hasTargetType(faceDefinition.targ, "rsmn") then
+            action = "random_summon"
+            targetClass = "none"
+        elseif hasTargetType(faceDefinition.targ, "Tac") then
+            action = "utility"
+            targetClass = "none"
+        end
+    end
+
+    local autoReload = faceDefinition.autoReload == true or hasTargetType(faceDefinition.targ, "exoatk")
+    local gainSyntac = faceDefinition.gainSyntac == true
+        or hasTargetType(faceDefinition.targ, "tatk")
+        or hasTargetType(faceDefinition.targ, "TacSab")
+        or hasTargetType(faceDefinition.targ, "InfTac")
+        or hasTargetType(faceDefinition.targ, "Tac")
+    local immac = faceDefinition.immac == true
+    local lrange = faceDefinition.lrange == true
+    local selfBlock = faceDefinition.selfBlock == true or hasTargetType(faceDefinition.targ, "closeatk")
+    local selfHeal = faceDefinition.selfHeal == true or hasTargetType(faceDefinition.targ, "maulatk")
+    local sabotageObjective = faceDefinition.sabotageObjective == true or hasTargetType(faceDefinition.targ, "AtkSab")
+
+    return {
+        action = action,
+        targetClass = targetClass,
+        effectiveTargetType = effectiveTargetType,
+        autoReload = autoReload,
+        gainSyntac = gainSyntac,
+        immac = immac,
+        lrange = lrange,
+        selfBlock = selfBlock,
+        selfHeal = selfHeal,
+        sabotageObjective = sabotageObjective,
+    }
+end
+
 local function buildRollState(entityKey, definition, faceIndices, isEnemy, preserveState, sourceCard)
     if not definition or not faceIndices or #faceIndices == 0 then
         return nil
@@ -179,22 +373,28 @@ local function buildRollState(entityKey, definition, faceIndices, isEnemy, prese
 
     local selectedFaceIndex = faceIndices[love.math.random(1, #faceIndices)]
     local selectedFaceDefinition = carddraw.getCardFaceBadge(definition, selectedFaceIndex, sourceCard)
-    local effectiveTargetType = getEffectiveTargetType(selectedFaceDefinition and selectedFaceDefinition.targ or nil)
-    local autoReload = selectedFaceDefinition and hasTargetType(selectedFaceDefinition.targ, "exoatk") or false
+    local normalizedBehavior = getNormalizedFaceBehavior(selectedFaceDefinition)
+    local effectiveTargetType = normalizedBehavior.effectiveTargetType
+    local autoReload = normalizedBehavior.autoReload
     local isReloading = hasReloadingKeyword(definition, sourceCard)
     local targetCard = nil
     local targetCardIndex = nil
     local targetColumn = nil
-    local damageValue = isReloading and 0 or math.max(0, tonumber(selectedFaceDefinition and selectedFaceDefinition.value) or 0)
+    local baseDamageValue = math.max(0, tonumber(selectedFaceDefinition and selectedFaceDefinition.value) or 0)
+    local damageValue = isReloading and 0 or baseDamageValue
     local targetType = isReloading and nil or effectiveTargetType
     local cardgen = selectedFaceDefinition and (selectedFaceDefinition.cardgen or getFirstTargetCardId(selectedFaceDefinition)) or nil
     local cardgenPool = selectedFaceDefinition and getTargetCardIds(selectedFaceDefinition) or {}
-    local pain = not isReloading and (tonumber(selectedFaceDefinition and selectedFaceDefinition.pain) or 0) > 0
+    local area = selectedFaceDefinition and selectedFaceDefinition.area == true or false
+    local pain = not isReloading and selectedFaceDefinition and selectedFaceDefinition.pain == true or false
 
     if isReloading then
         cardgen = nil
         cardgenPool = {}
+        area = false
         autoReload = false
+    elseif normalizedBehavior.immac == true and isSourceAtFullHealth(definition, sourceCard) then
+        damageValue = damageValue * 2
     end
 
     if isEnemy
@@ -205,7 +405,7 @@ local function buildRollState(entityKey, definition, faceIndices, isEnemy, prese
         local validTargets = {}
 
         for _, target in ipairs(playerAttackTargets) do
-            if canAttackTarget(definition, target.definition, sourceCard, target.card) then
+            if canAttackTarget(definition, target.definition, sourceCard, target.card, normalizedBehavior) then
                 validTargets[#validTargets + 1] = target
             end
         end
@@ -227,35 +427,51 @@ local function buildRollState(entityKey, definition, faceIndices, isEnemy, prese
         end
     elseif selectedFaceDefinition
         and not isReloading
-        and hasTargetType(effectiveTargetType, "Inf") then
+        and (
+            normalizedBehavior.action == "infiltrate"
+            or hasTargetType(effectiveTargetType, "Inf")
+        ) then
         targetType = "Inf"
         targetCard = {
             kind = "deck",
         }
     elseif selectedFaceDefinition
         and not isReloading
-        and hasTargetType(effectiveTargetType, "Obj")
+        and (
+            normalizedBehavior.targetClass == "objective"
+            or hasTargetType(effectiveTargetType, "Obj")
+        )
         and objectiveTargetPreview then
         targetType = "Obj"
         targetCard = objectiveTargetPreview
     elseif selectedFaceDefinition
         and not isReloading
-        and hasTargetType(effectiveTargetType, "IntCD")
+        and (
+            normalizedBehavior.targetClass == "intel"
+            or hasTargetType(effectiveTargetType, "IntCD")
+        )
         and entityKey == "intel"
         and intelTargetPreview then
         targetType = "IntCD"
         targetCard = intelTargetPreview
     elseif selectedFaceDefinition
         and not isReloading
-        and hasTargetType(effectiveTargetType, "WZOpp")
+        and (
+            normalizedBehavior.targetClass == "enemy_warzone"
+            or hasTargetType(effectiveTargetType, "WZOpp")
+        )
         and warzoneTargetPreview then
         targetType = "WZOpp"
         targetCard = warzoneTargetPreview
     elseif selectedFaceDefinition
         and not isReloading
-        and canTargetPlayerWarzone(effectiveTargetType)
+        and (
+            (normalizedBehavior.action == "influence" and normalizedBehavior.targetClass == "player_warzone")
+            or canTargetPlayerWarzone(effectiveTargetType)
+        )
         and warzoneTargetPreview then
         targetType = firstTargetTypeMatching(effectiveTargetType, PLAYER_WARZONE_TARGET_TYPES)
+            or "WZPlayer"
         targetCard = warzoneTargetPreview
     end
 
@@ -265,13 +481,22 @@ local function buildRollState(entityKey, definition, faceIndices, isEnemy, prese
         sourceDefinition = definition,
         sourceCard = sourceCard,
         damageValue = damageValue,
+        action = normalizedBehavior.action,
+        targetClass = normalizedBehavior.targetClass,
         targetType = targetType,
         targetCard = targetCard,
         targetCardIndex = targetCardIndex,
         targetColumn = targetColumn,
         cardgen = cardgen,
         cardgenPool = cardgenPool,
+        area = area,
         pain = pain,
+        gainSyntac = normalizedBehavior.gainSyntac,
+        immac = normalizedBehavior.immac,
+        lrange = normalizedBehavior.lrange,
+        selfBlock = normalizedBehavior.selfBlock,
+        selfHeal = normalizedBehavior.selfHeal,
+        sabotageObjective = normalizedBehavior.sabotageObjective,
         autoReload = autoReload,
         exhausted = preserveState and preserveState.exhausted or false,
         locked = preserveState and preserveState.locked or false,
@@ -320,6 +545,32 @@ end
 
 function warrules.getCardRollState(cardIndex)
     return warRollDisplayStates[warrules.getCardEntityKey(cardIndex)]
+end
+
+function warrules.getAdjacentSameRowCardIndices(cards, targetCardIndex)
+    local targetCard = targetCardIndex and cards and cards[targetCardIndex] or nil
+
+    if not targetCard
+        or not targetCard.location
+        or targetCard.location.kind ~= "grid"
+        or not targetCard.location.rowId
+        or not targetCard.location.column then
+        return {}
+    end
+
+    local adjacentCardIndices = {}
+    local rowId = targetCard.location.rowId
+    local column = targetCard.location.column
+
+    for _, offset in ipairs({ -1, 1 }) do
+        local adjacentCardIndex = findGridCardIndexAt(cards, rowId, column + offset, targetCardIndex)
+
+        if adjacentCardIndex then
+            adjacentCardIndices[#adjacentCardIndices + 1] = adjacentCardIndex
+        end
+    end
+
+    return adjacentCardIndices
 end
 
 function warrules.canCardAttack(cardIndex)
@@ -478,17 +729,17 @@ local function isAvailablePlayerAttackTarget(cards, cardIndex)
         and not card.destroying
 end
 
-local function isLegalPlayerAttackTarget(cards, cardIndex, attackerDefinition, attackerCard)
+local function isLegalPlayerAttackTarget(cards, cardIndex, attackerDefinition, attackerCard, attackContext)
     if not isAvailablePlayerAttackTarget(cards, cardIndex) then
         return false
     end
 
     local card = cards[cardIndex]
     local definition = cardregistry.getCard(card.setName, card.cardId)
-    return canAttackTarget(attackerDefinition, definition, attackerCard, card)
+    return canAttackTarget(attackerDefinition, definition, attackerCard, card, attackContext)
 end
 
-local function shouldRetargetPlayerAttack(cards, cardIndex, attackerDefinition, attackerCard)
+local function shouldRetargetPlayerAttack(cards, cardIndex, attackerDefinition, attackerCard, attackContext)
     if not isAvailablePlayerAttackTarget(cards, cardIndex) then
         return true
     end
@@ -496,16 +747,16 @@ local function shouldRetargetPlayerAttack(cards, cardIndex, attackerDefinition, 
     local card = cards[cardIndex]
     local definition = cardregistry.getCard(card.setName, card.cardId)
 
-    return not canAttackTarget(attackerDefinition, definition, attackerCard, card)
+    return not canAttackTarget(attackerDefinition, definition, attackerCard, card, attackContext)
 end
 
-local function findClosestLegalPlayerAttackTarget(cards, sourceDefinition, sourceCard, originalColumn)
+local function findClosestLegalPlayerAttackTarget(cards, sourceDefinition, sourceCard, originalColumn, attackContext)
     local bestCardIndex = nil
     local bestDistance = math.huge
     local bestColumn = math.huge
 
     for cardIndex, card in ipairs(cards or {}) do
-        if isLegalPlayerAttackTarget(cards, cardIndex, sourceDefinition, sourceCard) then
+        if isLegalPlayerAttackTarget(cards, cardIndex, sourceDefinition, sourceCard, attackContext) then
             local column = card.location.column or 0
             local distance = math.abs(column - originalColumn)
 
@@ -531,12 +782,12 @@ function warrules.retargetIllegalEnemyAttacks(cards)
             local sourceDefinition = rollState.sourceDefinition
             local sourceCard = rollState.sourceCard
 
-            if shouldRetargetPlayerAttack(cards, rollState.targetCardIndex, sourceDefinition, sourceCard) then
+            if shouldRetargetPlayerAttack(cards, rollState.targetCardIndex, sourceDefinition, sourceCard, rollState) then
                 local targetCard = cards and cards[rollState.targetCardIndex] or nil
                 local originalColumn = rollState.targetColumn
                     or (targetCard and targetCard.location and targetCard.location.column)
                     or 0
-                local newTargetCardIndex = findClosestLegalPlayerAttackTarget(cards, sourceDefinition, sourceCard, originalColumn)
+                local newTargetCardIndex = findClosestLegalPlayerAttackTarget(cards, sourceDefinition, sourceCard, originalColumn, rollState)
 
                 if newTargetCardIndex then
                     local newTargetCard = cards[newTargetCardIndex]
@@ -587,7 +838,7 @@ function warrules.redirectIncomingAttacks(cards, fromCardIndex, toCardIndex)
             and rollState.faceIndex
             and canTargetEnemyCard(rollState)
             and rollState.targetCardIndex == fromCardIndex
-            and canAttackTarget(rollState.sourceDefinition, targetDefinition, rollState.sourceCard, targetCard) then
+            and canAttackTarget(rollState.sourceDefinition, targetDefinition, rollState.sourceCard, targetCard, rollState) then
             rollState.targetCardIndex = toCardIndex
             rollState.targetCard = targetPreview
             rollState.targetColumn = targetCard.location.column
@@ -957,6 +1208,7 @@ function warrules.beginRetaliatePhase(topSlotTargets, cards)
                 targetCard = rollState.targetCard,
                 damageValue = rollState.damageValue,
                 cardgen = rollState.cardgen,
+                area = rollState.area,
                 pain = rollState.pain,
                 isTopSlot = true,
             }
@@ -1002,6 +1254,7 @@ function warrules.beginRetaliatePhase(topSlotTargets, cards)
                 targetCard = rollState.targetCard,
                 damageValue = rollState.damageValue,
                 cardgen = rollState.cardgen,
+                area = rollState.area,
                 pain = rollState.pain,
                 isTopSlot = false,
             }
@@ -1163,8 +1416,8 @@ function warrules.update(dt, currentPhase)
     end
 end
 
-function warrules.canAttackTarget(attackerDefinition, targetDefinition, attackerCard, targetCard)
-    return canAttackTarget(attackerDefinition, targetDefinition, attackerCard, targetCard)
+function warrules.canAttackTarget(attackerDefinition, targetDefinition, attackerCard, targetCard, attackContext)
+    return canAttackTarget(attackerDefinition, targetDefinition, attackerCard, targetCard, attackContext)
 end
 
 return warrules

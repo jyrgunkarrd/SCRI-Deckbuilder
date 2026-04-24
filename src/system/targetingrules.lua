@@ -23,6 +23,10 @@ local function canTargetEnemyCard(rollState, context)
         return context.canTargetEnemyCard(rollState)
     end
 
+    if rollState and rollState.action == "attack" and rollState.targetClass == "enemy_card" then
+        return true
+    end
+
     return hasTargetType(rollState, "Atk")
         or hasTargetType(rollState, "AtkSab")
         or hasTargetType(rollState, "TAtk")
@@ -35,6 +39,10 @@ local function canTargetPlayerWarzone(rollState, context)
         return context.canTargetPlayerWarzone(rollState)
     end
 
+    if rollState and rollState.action == "influence" and rollState.targetClass == "player_warzone" then
+        return true
+    end
+
     return hasTargetType(rollState, "WZPlayer") or hasTargetType(rollState, "InfTac")
 end
 
@@ -45,60 +53,113 @@ local function isPlayerGridCard(card)
         and card.location.rowId == "PlayerRow"
 end
 
-function targetingrules.rollStateTargetsCard(rollState, cardIndex, context)
-    return rollState
-        and canTargetEnemyCard(rollState, context)
-        and rollState.targetCard
-        and rollState.targetCard.kind == "card"
-        and rollState.targetCardIndex
-        and rollState.targetCardIndex == cardIndex
+local function isEnemyGridCard(card)
+    return card
+        and card.location
+        and card.location.kind == "grid"
+        and card.location.rowId == "OppRow"
 end
 
-function targetingrules.rollStateTargetsTopSlot(rollState, slotId, context)
-    if not rollState or not rollState.targetCard or not slotId then
+local function isSelectedAttackerCardTarget(cardIndex, context)
+    local selectedCardIndex = context and context.selectedAttackerCardIndex or nil
+    local selectedCard = selectedCardIndex and context.cards and context.cards[selectedCardIndex] or nil
+    local selectedRollState = context and context.getCardRollState and selectedCardIndex and context.getCardRollState(selectedCardIndex) or nil
+    local candidateCard = cardIndex and context.cards and context.cards[cardIndex] or nil
+
+    if not selectedCard or not selectedRollState or not candidateCard then
         return false
     end
 
-    context = context or {}
+    if selectedRollState.action == "block" or hasTargetType(selectedRollState, "Blk") then
+        return isPlayerGridCard(candidateCard)
+    end
 
-    local targetCard = rollState.targetCard
+    if selectedRollState.action == "divert" or hasTargetType(selectedRollState, "Div") then
+        return isPlayerGridCard(candidateCard)
+    end
 
-    if slotId == "objective" then
-        return hasTargetType(rollState, "Obj")
-            and targetCard.kind == "objective"
-            and context.activePrimaryObjective
-            and targetCard.objectiveId == context.activePrimaryObjective.id
-    elseif slotId == "intel" then
-        return hasTargetType(rollState, "IntCD")
-            and targetCard.kind == "intel"
-            and context.activeIntel
-            and targetCard.objectiveId == context.activeIntel.id
-    elseif slotId == "warzone" then
-        return (hasTargetType(rollState, "WZOpp") or canTargetPlayerWarzone(rollState, context))
-            and targetCard.kind == "warzone"
-            and context.activeWarzone
-            and targetCard.warzoneId == context.activeWarzone.id
-    elseif slotId == "poi" then
-        return (hasTargetType(rollState, "WZOpp") or canTargetPlayerWarzone(rollState, context))
-            and targetCard.kind == "warzone"
-            and context.activePoi
-            and targetCard.warzoneId == context.activePoi.id
+    if canTargetEnemyCard(selectedRollState, context) and isEnemyGridCard(candidateCard) then
+        if not context.cardregistry or not context.canAttackTarget then
+            return true
+        end
+
+        local selectedDefinition = context.cardregistry.getCard(selectedCard.setName, selectedCard.cardId)
+        local candidateDefinition = context.cardregistry.getCard(candidateCard.setName, candidateCard.cardId)
+        return context.canAttackTarget(selectedDefinition, candidateDefinition, selectedCard, candidateCard, selectedRollState)
     end
 
     return false
 end
 
-function targetingrules.shouldBracketCard(cardIndex, context)
-    context = context or {}
+local function canSelectedAttackerTargetSlot(slotId, context)
+    local selectedCardIndex = context and context.selectedAttackerCardIndex or nil
+    local selectedCard = selectedCardIndex and context.cards and context.cards[selectedCardIndex] or nil
+    local selectedRollState = context and context.getCardRollState and selectedCardIndex and context.getCardRollState(selectedCardIndex) or nil
 
-    if cardIndex == context.hoveredCardIndex then
+    if not selectedCard or not selectedRollState or not slotId then
         return false
     end
 
-    if context.pendingStrategySelection and context.isPendingStrategyTarget then
-        return context.isPendingStrategyTarget(cardIndex, context.pendingStrategySelection)
+    if slotId == "champion" then
+        return context.activeChampion and canTargetEnemyCard(selectedRollState, context) or false
     end
 
+    if slotId == "objective" then
+        return context.activePrimaryObjective
+            and (
+                hasTargetType(selectedRollState, "Obj")
+                or (
+                    selectedRollState.action == "sabotage"
+                    and (
+                        selectedRollState.targetClass == "objective"
+                        or selectedRollState.targetClass == "objective_or_intel"
+                    )
+                )
+            ) or false
+    end
+
+    if slotId == "intel" then
+        return context.activeIntel
+            and (
+                hasTargetType(selectedRollState, "IntCD")
+                or (
+                    selectedRollState.action == "sabotage"
+                    and (
+                        selectedRollState.targetClass == "intel"
+                        or selectedRollState.targetClass == "objective_or_intel"
+                    )
+                )
+            ) or false
+    end
+
+    if slotId == "warzone" or slotId == "poi" then
+        local targetExists = (slotId == "warzone" and context.activeWarzone) or (slotId == "poi" and context.activePoi)
+        return targetExists
+            and (
+                canTargetPlayerWarzone(selectedRollState, context)
+                or hasTargetType(selectedRollState, "WZOpp")
+                or (selectedRollState.action == "influence" and selectedRollState.targetClass == "enemy_warzone")
+            ) or false
+    end
+
+    return false
+end
+
+local function isPendingChoiceTarget(cardIndex, context)
+    return context.pendingStrategySelection
+        and context.isPendingStrategyTarget
+        and context.isPendingStrategyTarget(cardIndex, context.pendingStrategySelection)
+        or false
+end
+
+local function isPrimedAbilityTarget(cardIndex, context)
+    return context.primedActivatedAbility
+        and context.isPrimedAbilityTarget
+        and context.isPrimedAbilityTarget(cardIndex, context.primedActivatedAbility)
+        or false
+end
+
+local function isThreatBracketCard(cardIndex, context)
     if context.currentPhase ~= "War" then
         return false
     end
@@ -156,10 +217,100 @@ function targetingrules.shouldBracketCard(cardIndex, context)
     return false
 end
 
+function targetingrules.rollStateTargetsCard(rollState, cardIndex, context)
+    return rollState
+        and canTargetEnemyCard(rollState, context)
+        and rollState.targetCard
+        and rollState.targetCard.kind == "card"
+        and rollState.targetCardIndex
+        and rollState.targetCardIndex == cardIndex
+end
+
+function targetingrules.rollStateTargetsTopSlot(rollState, slotId, context)
+    if not rollState or not rollState.targetCard or not slotId then
+        return false
+    end
+
+    context = context or {}
+
+    local targetCard = rollState.targetCard
+
+    if slotId == "objective" then
+        return (
+            hasTargetType(rollState, "Obj")
+            or (
+                rollState.action == "sabotage"
+                and (
+                    rollState.targetClass == "objective"
+                    or rollState.targetClass == "objective_or_intel"
+                )
+            )
+        )
+            and targetCard.kind == "objective"
+            and context.activePrimaryObjective
+            and targetCard.objectiveId == context.activePrimaryObjective.id
+    elseif slotId == "intel" then
+        return (
+            hasTargetType(rollState, "IntCD")
+            or (
+                rollState.action == "sabotage"
+                and (
+                    rollState.targetClass == "intel"
+                    or rollState.targetClass == "objective_or_intel"
+                )
+            )
+        )
+            and targetCard.kind == "intel"
+            and context.activeIntel
+            and targetCard.objectiveId == context.activeIntel.id
+    elseif slotId == "warzone" then
+        return (
+            hasTargetType(rollState, "WZOpp")
+            or canTargetPlayerWarzone(rollState, context)
+            or (rollState.action == "influence" and rollState.targetClass == "enemy_warzone")
+        )
+            and targetCard.kind == "warzone"
+            and context.activeWarzone
+            and targetCard.warzoneId == context.activeWarzone.id
+    elseif slotId == "poi" then
+        return (
+            hasTargetType(rollState, "WZOpp")
+            or canTargetPlayerWarzone(rollState, context)
+            or (rollState.action == "influence" and rollState.targetClass == "enemy_warzone")
+        )
+            and targetCard.kind == "warzone"
+            and context.activePoi
+            and targetCard.warzoneId == context.activePoi.id
+    end
+
+    return false
+end
+
+function targetingrules.shouldBracketCard(cardIndex, context)
+    context = context or {}
+
+    if cardIndex == context.hoveredCardIndex then
+        return false
+    end
+
+    return isPendingChoiceTarget(cardIndex, context)
+        or isPrimedAbilityTarget(cardIndex, context)
+        or (context.selectedAttackerCardIndex and isSelectedAttackerCardTarget(cardIndex, context) or false)
+        or isThreatBracketCard(cardIndex, context)
+end
+
 function targetingrules.shouldBracketTopSlot(slotId, context)
     context = context or {}
 
-    if not slotId or slotId == context.hoveredTopSlotId or context.currentPhase ~= "War" then
+    if not slotId or context.currentPhase ~= "War" then
+        return false
+    end
+
+    if context.selectedAttackerCardIndex and canSelectedAttackerTargetSlot(slotId, context) then
+        return true
+    end
+
+    if slotId == context.hoveredTopSlotId then
         return false
     end
 
@@ -226,13 +377,111 @@ end
 function targetingrules.getCardBracketColor(cardIndex, context)
     context = context or {}
 
-    if context.pendingStrategySelection
-        and context.isPendingStrategyTarget
-        and context.isPendingStrategyTarget(cardIndex, context.pendingStrategySelection) then
+    if isPendingChoiceTarget(cardIndex, context) then
+        return "strategy"
+    end
+
+    if isPrimedAbilityTarget(cardIndex, context) then
+        return "strategy"
+    end
+
+    if context.selectedAttackerCardIndex and isSelectedAttackerCardTarget(cardIndex, context) then
         return "strategy"
     end
 
     return "default"
+end
+
+function targetingrules.getCardBracketLayers(cardIndex, context)
+    context = context or {}
+
+    if cardIndex == context.hoveredCardIndex then
+        return {}
+    end
+
+    local layers = {}
+
+    if isThreatBracketCard(cardIndex, context) then
+        layers[#layers + 1] = "default"
+    end
+
+    if isPendingChoiceTarget(cardIndex, context)
+        or isPrimedAbilityTarget(cardIndex, context)
+        or (
+        context.selectedAttackerCardIndex and isSelectedAttackerCardTarget(cardIndex, context)
+    ) then
+        layers[#layers + 1] = "strategy"
+    end
+
+    return layers
+end
+
+local function isThreatBracketTopSlot(slotId, context)
+    context = context or {}
+
+    if not slotId or slotId == context.hoveredTopSlotId or context.currentPhase ~= "War" then
+        return false
+    end
+
+    local displayStates = context.displayStates or {}
+
+    if context.hoveredTopSlotId then
+        if targetingrules.rollStateTargetsTopSlot(displayStates[context.hoveredTopSlotId], slotId, context) then
+            return true
+        end
+
+        if targetingrules.rollStateTargetsTopSlot(displayStates[slotId], context.hoveredTopSlotId, context) then
+            return true
+        end
+    end
+
+    if context.hoveredCardIndex then
+        local hoveredCard = context.cards and context.cards[context.hoveredCardIndex] or nil
+
+        if not hoveredCard or not hoveredCard.location or hoveredCard.location.kind ~= "grid" then
+            return false
+        end
+
+        local hoveredRollState = context.getCardRollState and context.getCardRollState(context.hoveredCardIndex) or nil
+
+        if slotId == "champion"
+            and context.activeChampion
+            and isPlayerGridCard(hoveredCard)
+            and canTargetEnemyCard(hoveredRollState, context) then
+            return true
+        end
+
+        if hoveredCard.location.rowId ~= "PlayerRow"
+            and targetingrules.rollStateTargetsTopSlot(
+                hoveredRollState,
+                slotId,
+                context
+            ) then
+            return true
+        end
+
+        if targetingrules.rollStateTargetsCard(displayStates[slotId], context.hoveredCardIndex, context) then
+            return true
+        end
+    end
+
+    return false
+end
+
+function targetingrules.getTopSlotBracketLayers(slotId, context)
+    context = context or {}
+
+    local layers = {}
+
+    if isThreatBracketTopSlot(slotId, context) then
+        layers[#layers + 1] = "default"
+    end
+
+    if context.selectedAttackerCardIndex and canSelectedAttackerTargetSlot(slotId, context) then
+        layers[#layers + 1] = "strategy"
+    end
+
+    return layers
 end
 
 return targetingrules

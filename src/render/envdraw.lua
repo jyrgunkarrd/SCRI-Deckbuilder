@@ -106,6 +106,14 @@ local SPECIAL_TOOLTIP_OFFSET_X = 18
 local SPECIAL_TOOLTIP_OFFSET_Y = 18
 local SPECIAL_TOOLTIP_PREVIEW_GAP = 16
 local SPECIAL_TOOLTIP_BACKDROP_PADDING = 8
+local HOVER_PREVIEW_MARGIN_X = 48
+local HOVER_PREVIEW_FRAME_PADDING = 12
+local HOVER_PREVIEW_CARD_MAX_WIDTH = 360
+local HOVER_PREVIEW_CARD_MAX_HEIGHT_RATIO = 0.74
+local HOVER_PREVIEW_ART_MAX_WIDTH_RATIO = 0.34
+local HOVER_PREVIEW_ART_MAX_HEIGHT_RATIO = 0.58
+local HOVER_PREVIEW_LABEL_HEIGHT = 38
+local HOVER_PREVIEW_BADGE_SCALE = 1.2
 local SETUP_MODAL_MARGIN = 24
 local SETUP_MODAL_PADDING = 18
 local SETUP_MODAL_SLOT_GAP = 20
@@ -2105,6 +2113,184 @@ function envdraw.drawFullArtOverlay(image)
     love.graphics.setColor(1, 1, 1, 1)
     love.graphics.draw(image, imageX, imageY, 0, scale, scale)
     love.graphics.setColor(1, 1, 1, 1)
+end
+
+local function getHoverPreviewSide(sourceRect)
+    local windowWidth = love.graphics.getWidth()
+    local sourceCenterX = sourceRect and (sourceRect.x + ((sourceRect.width or 0) / 2)) or (windowWidth / 2)
+
+    if sourceCenterX < (windowWidth / 2) then
+        return "right"
+    end
+
+    return "left"
+end
+
+local function getHoverPreviewCardLayout(sourceRect)
+    local windowWidth, windowHeight = love.graphics.getDimensions()
+    local previewSide = getHoverPreviewSide(sourceRect)
+    local availableSideWidth = math.max(220, (windowWidth / 2) - (HOVER_PREVIEW_MARGIN_X * 2))
+    local maxCardHeight = windowHeight * HOVER_PREVIEW_CARD_MAX_HEIGHT_RATIO
+    local previewWidth = math.min(
+        HOVER_PREVIEW_CARD_MAX_WIDTH,
+        availableSideWidth,
+        maxCardHeight / 2.2
+    )
+    local _, previewHeight = carddraw.getExpandedCardSize({
+        width = previewWidth,
+    })
+    local previewX = previewSide == "left"
+        and HOVER_PREVIEW_MARGIN_X
+        or (windowWidth - HOVER_PREVIEW_MARGIN_X - previewWidth)
+    local previewY = (windowHeight - previewHeight) / 2
+
+    return {
+        side = previewSide,
+        x = snap(previewX),
+        y = snap(previewY),
+        width = snap(previewWidth),
+        height = snap(previewHeight),
+    }
+end
+
+local function getHoverPreviewArtLayout(sourceRect, image)
+    local windowWidth, windowHeight = love.graphics.getDimensions()
+    local previewSide = getHoverPreviewSide(sourceRect)
+    local maxWidth = math.max(180, (windowWidth * HOVER_PREVIEW_ART_MAX_WIDTH_RATIO))
+    local maxHeight = math.max(180, (windowHeight * HOVER_PREVIEW_ART_MAX_HEIGHT_RATIO))
+    local imageWidth = maxWidth
+    local imageHeight = maxHeight
+
+    if image then
+        local scale = math.min(maxWidth / image:getWidth(), maxHeight / image:getHeight())
+        imageWidth = image:getWidth() * scale
+        imageHeight = image:getHeight() * scale
+    end
+
+    local frameWidth = imageWidth + (HOVER_PREVIEW_FRAME_PADDING * 2)
+    local frameHeight = imageHeight + HOVER_PREVIEW_LABEL_HEIGHT + (HOVER_PREVIEW_FRAME_PADDING * 2)
+    local frameX = previewSide == "left"
+        and HOVER_PREVIEW_MARGIN_X
+        or (windowWidth - HOVER_PREVIEW_MARGIN_X - frameWidth)
+    local frameY = (windowHeight - frameHeight) / 2
+
+    return {
+        side = previewSide,
+        x = snap(frameX),
+        y = snap(frameY),
+        width = snap(frameWidth),
+        height = snap(frameHeight),
+        imageX = snap(frameX + HOVER_PREVIEW_FRAME_PADDING),
+        imageY = snap(frameY + HOVER_PREVIEW_LABEL_HEIGHT + HOVER_PREVIEW_FRAME_PADDING),
+        imageWidth = snap(imageWidth),
+        imageHeight = snap(imageHeight),
+    }
+end
+
+local function drawHoverPreviewArtPanel(preview)
+    local layout = getHoverPreviewArtLayout(preview.sourceRect, preview.image)
+    local accentColor = preview.accentColor or { 0.82, 0.85, 0.89 }
+    local labelFont = getFont(JACL_LABEL_FONT_PATH, 16)
+    local imageRect = {
+        x = layout.imageX,
+        y = layout.imageY,
+        width = layout.imageWidth,
+        height = layout.imageHeight,
+    }
+
+    love.graphics.setColor(0.02, 0.025, 0.03, 0.48)
+    love.graphics.rectangle(
+        "fill",
+        layout.x - 6,
+        layout.y - 6,
+        layout.width + 12,
+        layout.height + 12,
+        10,
+        10
+    )
+    love.graphics.setColor(0.06, 0.07, 0.09, 0.96)
+    love.graphics.rectangle("fill", layout.x, layout.y, layout.width, layout.height, 10, 10)
+    love.graphics.setColor(accentColor[1], accentColor[2], accentColor[3], 0.92)
+    love.graphics.rectangle("line", layout.x, layout.y, layout.width, layout.height, 10, 10)
+    love.graphics.rectangle("line", layout.x, layout.y, layout.width, HOVER_PREVIEW_LABEL_HEIGHT, 10, 10)
+
+    love.graphics.setFont(labelFont)
+    love.graphics.setColor(0.95, 0.96, 0.98, 1)
+    love.graphics.printf(
+        preview.label or preview.slotId or "Preview",
+        layout.x + 12,
+        layout.y + ((HOVER_PREVIEW_LABEL_HEIGHT - labelFont:getHeight()) / 2),
+        layout.width - 24,
+        "center"
+    )
+
+    if preview.image then
+        love.graphics.setColor(1, 1, 1, 1)
+        love.graphics.draw(
+            preview.image,
+            imageRect.x,
+            imageRect.y,
+            0,
+            imageRect.width / preview.image:getWidth(),
+            imageRect.height / preview.image:getHeight()
+        )
+    else
+        love.graphics.setColor(0.16, 0.17, 0.2, 1)
+        love.graphics.rectangle("fill", imageRect.x, imageRect.y, imageRect.width, imageRect.height, 8, 8)
+    end
+
+    love.graphics.setColor(accentColor[1], accentColor[2], accentColor[3], 0.9)
+    love.graphics.rectangle("line", imageRect.x, imageRect.y, imageRect.width, imageRect.height, 8, 8)
+
+    if preview.definition and preview.rollState and preview.rollState.faceIndex then
+        local badgeInset = math.max(4, snap(imageRect.width * 0.035))
+        local badgeWidth = math.max(20, snap(imageRect.width * 0.115 * HOVER_PREVIEW_BADGE_SCALE))
+        local badgeHeaderHeight = snap(badgeWidth * 0.44)
+        local badgeBodyHeight = badgeWidth
+        local badgeHeight = badgeHeaderHeight + badgeBodyHeight
+        local badgeX = snap(imageRect.x + imageRect.width - badgeInset - badgeWidth)
+        local badgeY = snap(imageRect.y + badgeInset)
+
+        carddraw.drawDefinitionRollBadge(
+            preview.definition,
+            badgeX,
+            badgeY,
+            badgeWidth,
+            badgeHeight,
+            preview.rollState.faceIndex,
+            preview.rollState.pulseScale
+        )
+    end
+
+    love.graphics.setColor(1, 1, 1, 1)
+end
+
+function envdraw.drawHoverPreview(preview, drawCardStateOverlays)
+    if not preview or not preview.sourceRect then
+        return
+    end
+
+    if preview.kind == "card" then
+        local layout = getHoverPreviewCardLayout(preview.sourceRect)
+        local renderOptions = {}
+
+        for key, value in pairs(preview.renderOptions or {}) do
+            renderOptions[key] = value
+        end
+
+        renderOptions.width = layout.width
+        renderOptions.showBadgesInTextbox = true
+
+        carddraw.drawCardState(preview.setName, preview.cardId, layout.x, layout.y, 1, renderOptions)
+
+        if drawCardStateOverlays and preview.card and preview.cardIndex then
+            drawCardStateOverlays(preview.card, preview.cardIndex, layout.x, layout.y, 1, renderOptions)
+        end
+
+        return
+    end
+
+    drawHoverPreviewArtPanel(preview)
 end
 
 function envdraw.getPlayerHandLayout()

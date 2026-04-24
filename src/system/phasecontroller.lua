@@ -7,6 +7,24 @@ local function getCardIndexFromEntityKey(entityKey)
     return cardIndex and tonumber(cardIndex) or nil
 end
 
+local function applyAreaDamageToAdjacentCards(gameState, deps, retaliation)
+    if not retaliation
+        or retaliation.area ~= true
+        or not retaliation.targetCardIndex then
+        return
+    end
+
+    local adjacentCardIndices = deps.warrules.getAdjacentSameRowCardIndices(gameState.cards, retaliation.targetCardIndex)
+
+    for _, adjacentCardIndex in ipairs(adjacentCardIndices) do
+        local adjacentCard = gameState.cards[adjacentCardIndex]
+
+        if adjacentCard and not deps.isCardUnavailable(adjacentCard) then
+            deps.dealDamageToCard(adjacentCard, retaliation.damageValue or 0)
+        end
+    end
+end
+
 local function buildStartPhaseGenerators(gameState, deps)
     local gridCardGenerators = {}
 
@@ -68,9 +86,11 @@ local function resolveRetaliation(gameState, deps, retaliation)
         end
     else
         local targetCard = gameState.cards[retaliation.targetCardIndex]
+        local shouldApplyAreaDamage = targetCard and not deps.isCardUnavailable(targetCard)
 
-        if targetCard and not deps.isCardUnavailable(targetCard) then
+        if shouldApplyAreaDamage then
             deps.dealDamageToCard(targetCard, retaliation.damageValue or 0)
+            applyAreaDamageToAdjacentCards(gameState, deps, retaliation)
         end
 
         if retaliation.targetType == "AtkSab" and gameState.activePrimaryObjective then

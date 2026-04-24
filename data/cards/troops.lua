@@ -16,9 +16,34 @@ local troops = {
         method = {
             { resource = "The Trigger", amount = 2 },
         },
-        D1 = "D011",
-        D2 = "D011",
-        D3 = "D011",
+        agentAbilities = {
+            {
+                id = "betty_recode",
+                name = "Tankette Garage",
+                text = "Transform a friendly troop card into a tankette."
+                trigger = "method_badge_click",
+                badgeResource = "The Trigger",
+                costs = {
+                    { resource = "The Trigger", amount = 1 },
+                },
+                timing = {
+                    phase = "Prelude",
+                },
+                target = {
+                    kind = "grid_card",
+                    controller = "player",
+                    rowId = "PlayerRow",
+                    cardTypes = { "troop", "token" },
+                },
+                effect = "transform_card",
+                effectArgs = {
+                    targetCardId = "B6POC",
+                },
+            },
+        },
+        D1 = "IMMACRNGDMG3",
+        D2 = "ARDMG1",
+        D3 = "ARDMG1",
         D4 = "D011",
         D5 = "D011",
         D6 = "D011",
@@ -449,6 +474,27 @@ local troops = {
         id = "B6DEPTOK",
         type = "token",
         name = "Mangled Limb",
+        classname = "Token",
+        subclass = "Troop",
+        flavor = "Even reduced to just a severed hand, that hand will still know only war.",
+        health = 1,
+        max = 1,
+        keyword = { "KWCNTR" },
+        kwval = {
+            KWCNTR = 1,
+        },
+        D1 = "DIV1",
+        D2 = "DIV1",
+        D3 = "DIV1",
+        D4 = "NUL",
+        D5 = "NUL",
+        D6 = "NUL",
+    },
+
+    {
+        id = "B6POC",
+        type = "token",
+        name = "Apocalypse Systems Tankette",
         classname = "Token",
         subclass = "Troop",
         flavor = "Even reduced to just a severed hand, that hand will still know only war.",

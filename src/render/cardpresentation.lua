@@ -229,12 +229,33 @@ function cardpresentation.drawStateOverlays(card, cardIndex, drawX, drawY, expan
     local targetingContext = ctx.getTargetingContext()
 
     if targetingrules.shouldBracketCard(cardIndex, targetingContext) then
-        local bracketColorName = targetingrules.getCardBracketColor(cardIndex, targetingContext)
-        local bracketColor = bracketColorName == "strategy"
-            and targetoverlays.getStrategyBracketColor()
-            or targetoverlays.getDefaultBracketColor()
+        local bracketLayers = targetingrules.getCardBracketLayers(cardIndex, targetingContext)
 
-        targetoverlays.drawBrackets(drawX, drawY, cardWidth, cardHeight, bracketColor)
+        for _, bracketColorName in ipairs(bracketLayers) do
+            if bracketColorName == "strategy" then
+                targetoverlays.drawBrackets(
+                    drawX,
+                    drawY,
+                    cardWidth,
+                    cardHeight,
+                    targetoverlays.getStrategyBracketColor(),
+                    {
+                        bracketLengthScale = 0.5,
+                    }
+                )
+            else
+                targetoverlays.drawBrackets(
+                    drawX,
+                    drawY,
+                    cardWidth,
+                    cardHeight,
+                    targetoverlays.getDefaultBracketColor(),
+                    {
+                        dotted = true,
+                    }
+                )
+            end
+        end
     end
 
     if renderOptions.selected then

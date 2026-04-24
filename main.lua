@@ -26,6 +26,7 @@ local temporaryeffects = require("src.system.temporaryeffects")
 local kitrules = require("src.system.kitrules")
 local resourcerules = require("src.system.resourcerules")
 local specialrules = require("src.system.specialrules")
+local abilityrules = require("src.system.abilityrules")
 local infiltrationrules = require("src.system.infiltrationrules")
 local strategyrules = require("src.system.strategyrules")
 local tomerules = require("src.system.tomerules")
@@ -94,6 +95,7 @@ local gameState = {
     jaclDeckPreviewCard = nil,
     activeDeckModalDeck = nil,
     primedJaclSpecial = nil,
+    primedActivatedAbility = nil,
     fullArtImage = nil,
     hoveredJaclSpecialDefinition = nil,
     hoveredJaclSpecialPreviewCard = nil,
@@ -129,6 +131,7 @@ local playHunterAddedSfxForCard
 local playHunterAddedSfxForCardDefinition
 local playHunterAddedSfxForCards
 local isPointInsideJaclPortrait
+local releaseAttachedKits
 local function getDamageJitterKeyForCard(cardIndex)
     return "card:" .. tostring(cardIndex)
 end
@@ -227,6 +230,33 @@ local function copyLocation(location)
     return cardinstances.copyLocation(location)
 end
 
+local function transformCardAtIndex(cardIndex, cardDefinition)
+    local card = cardIndex and gameState.cards[cardIndex] or nil
+
+    if not card or not cardDefinition then
+        return false
+    end
+
+    releaseAttachedKits(card)
+
+    local replacementCard = cardinstances.create(
+        cardDefinition,
+        card.instanceId,
+        copyLocation(card.location),
+        card.deckOwner
+    )
+
+    if not replacementCard then
+        return false
+    end
+
+    replacementCard.deckOwner = card.deckOwner
+    cardinstances.initializeHealth(replacementCard)
+    gameState.cards[cardIndex] = replacementCard
+    warrules.clearCardRollState(cardIndex)
+    return true
+end
+
 local function getPlayerHandLayout()
     return envdraw.getPlayerHandLayout()
 end
@@ -288,10 +318,6 @@ local function addSetupAgents()
         )
 
         initializeCardHealthState(gameState.cards[#gameState.cards])
-
-        if cardId == "AGT0001" then
-            dealDamageToCard(gameState.cards[#gameState.cards], 2, true)
-        end
     end
 end
 
@@ -690,7 +716,7 @@ local function drawKitReturnAnimations()
     love.graphics.setColor(1, 1, 1, 1)
 end
 
-local function releaseAttachedKits(card)
+releaseAttachedKits = function(card)
     if not card
         or card.deckOwner ~= "player"
         or not gameState.playerDeck
@@ -1472,6 +1498,144 @@ local function getEntitySourceRect(entityKey)
     return cardpresentation.getEntitySourceRect(entityKey, getCardPresentationContext())
 end
 
+local function copyRenderOptions(renderOptions)
+    local copiedOptions = {}
+
+    for key, value in pairs(renderOptions or {}) do
+        copiedOptions[key] = value
+    end
+
+    return copiedOptions
+end
+
+local function getHoveredCardPreview()
+    local cardIndex = gameState.hoveredCardIndex
+    local card = cardIndex and gameState.cards[cardIndex] or nil
+
+    if not card
+        or isCardDestroyed(card)
+        or card.returningToHandAnimation
+        or isCardUnavailable(card) then
+        return nil
+    end
+
+    local drawX, drawY, expansionProgress, renderOptions = getCardDrawPosition(card, cardIndex)
+    local cardWidth, collapsedHeight = carddraw.getCardSize(renderOptions)
+    local _, expandedHeight = carddraw.getExpandedCardSize(renderOptions)
+    local cardHeight = collapsedHeight + ((expandedHeight - collapsedHeight) * (expansionProgress or 0))
+
+    return {
+        kind = "card",
+        cardIndex = cardIndex,
+        card = card,
+        sourceRect = {
+            x = drawX,
+            y = drawY,
+            width = cardWidth,
+            height = cardHeight,
+        },
+        setName = card.setName,
+        cardId = card.cardId,
+        renderOptions = copyRenderOptions(renderOptions),
+    }
+end
+
+local function getHoveredTopSlotPreview()
+    local slotId = gameState.hoveredTopSlotId
+
+    if not slotId then
+        return nil
+    end
+
+    local slots = envdraw.getTopSlotLayouts(
+        turnrules.getCurrentPhase(),
+        gameState.activeChampion,
+        gameState.activeWarzone,
+        gameState.activePoi,
+        gameState.activePrimaryObjective,
+        gameState.activeIntel
+    )
+
+    for _, slot in ipairs(slots or {}) do
+        if slot.id == slotId and slot.definition and slot.imageRect then
+            local displayStates = warrules.getDisplayStates()
+
+            return {
+                kind = "topslot",
+                sourceRect = {
+                    x = slot.imageRect.x,
+                    y = slot.imageRect.y,
+                    width = slot.imageRect.width,
+                    height = slot.imageRect.height,
+                },
+                slotId = slot.id,
+                label = slot.nameText or slot.slotLabel or slot.id,
+                image = slot.image,
+                definition = slot.definition,
+                accentColor = slot.accentColor,
+                rollState = displayStates and displayStates[slot.id] or nil,
+            }
+        end
+    end
+
+    return nil
+end
+
+local function getHoveredJaclPreview(mouseX, mouseY)
+    local jaclLayout = envdraw.getBottomLeftPanelLayout(gameState.playerJacl)
+
+    if not jaclLayout then
+        return nil
+    end
+
+    local insidePanel = mouseX >= jaclLayout.panelX
+        and mouseX <= jaclLayout.panelX + jaclLayout.panelSize
+        and mouseY >= jaclLayout.panelY
+        and mouseY <= jaclLayout.panelY + jaclLayout.panelSize
+
+    if not insidePanel then
+        return nil
+    end
+
+    return {
+        kind = "jacl",
+        sourceRect = {
+            x = jaclLayout.panelX,
+            y = jaclLayout.panelY,
+            width = jaclLayout.panelSize,
+            height = jaclLayout.panelSize,
+        },
+        label = gameState.playerJacl and gameState.playerJacl.name or "JACL",
+        image = envdraw.getJaclArtImage(gameState.playerJacl),
+    }
+end
+
+local function getHoverPreviewState()
+    if gameState.draggedCardIndex
+        or gameState.fullArtImage
+        or gameState.isJaclDeckModalOpen
+        or gameState.isResourceExchangeModalOpen
+        or love.keyboard.isDown("lshift")
+        or love.keyboard.isDown("rshift") then
+        return nil
+    end
+
+    local hoveredCardPreview = getHoveredCardPreview()
+
+    if hoveredCardPreview then
+        return hoveredCardPreview
+    end
+
+    local hoveredTopSlotPreview = getHoveredTopSlotPreview()
+
+    if hoveredTopSlotPreview then
+        return hoveredTopSlotPreview
+    end
+
+    local mouseX, mouseY = love.mouse.getPosition()
+    return getHoveredJaclPreview(mouseX, mouseY)
+end
+
 beginInfiltrationEffect = function(entityKey, generatedCardDefinition, count)
     if not generatedCardDefinition then
         return false
@@ -1511,6 +1675,35 @@ local function getValidJaclSpecialTargetCell(mouseX, mouseY)
     return cardzones.getValidJaclSpecialTargetCell(mouseX, mouseY, gameState.cards, {
         getPlayerRow = getPlayerRow,
     })
+end
+
+local function getCardMethodBadgeTarget(mouseX, mouseY)
+    local cardIndex = getGridCardAt(mouseX, mouseY)
+    local card = cardIndex and gameState.cards[cardIndex] or nil
+
+    if not card
+        or not card.location
+        or card.location.kind ~= "grid"
+        or card.location.rowId ~= "PlayerRow" then
+        return nil
+    end
+
+    local drawX, drawY, expansionProgress, renderOptions = getCardDrawPosition(card, cardIndex)
+    local badgeRects = carddraw.getMethodBadgeRects(card.setName, card.cardId, drawX, drawY, expansionProgress, renderOptions)
+
+    for _, badgeRect in ipairs(badgeRects or {}) do
+        if mouseX >= badgeRect.x
+            and mouseX <= badgeRect.x + badgeRect.width
+            and mouseY >= badgeRect.y
+            and mouseY <= badgeRect.y + badgeRect.height then
+            return {
+                cardIndex = cardIndex,
+                resource = badgeRect.resource,
+            }
+        end
+    end
+
+    return nil
 end
 
 isWarRollSourceActive = function(entityKey)
@@ -1600,6 +1793,7 @@ local function buildModalState()
         jaclDeckPreviewCard = gameState.jaclDeckPreviewCard,
         activeDeckModalDeck = gameState.activeDeckModalDeck,
         primedJaclSpecial = gameState.primedJaclSpecial,
+        primedActivatedAbility = gameState.primedActivatedAbility,
     }
 end
 
@@ -1609,6 +1803,7 @@ local function applyModalState(modalState)
     gameState.jaclDeckPreviewCard = modalState.jaclDeckPreviewCard
     gameState.activeDeckModalDeck = modalState.activeDeckModalDeck
     gameState.primedJaclSpecial = modalState.primedJaclSpecial
+    gameState.primedActivatedAbility = modalState.primedActivatedAbility
 end
 
 local function getModalDeps()
@@ -1616,13 +1811,21 @@ local function getModalDeps()
         turnrules = turnrules,
         resourcerules = resourcerules,
         specialrules = specialrules,
+        abilityrules = abilityrules,
         cardregistry = cardregistry,
+        cards = gameState.cards,
+        isCardUnavailable = isCardUnavailable,
         sfxrules = sfxrules,
         envdraw = envdraw,
+        cardinstances = cardinstances,
         createGeneratedGridCard = createGeneratedGridCard,
+        transformCardAtIndex = transformCardAtIndex,
+        getCardMethodBadgeTarget = getCardMethodBadgeTarget,
+        getGridCardAt = getGridCardAt,
         getValidJaclSpecialTargetCell = getValidJaclSpecialTargetCell,
         getPlayerRowCellAt = getPlayerRowCellAt,
         addObjectiveProgress = addObjectiveProgress,
+        copyLocation = copyLocation,
     }
 end
 
@@ -1641,6 +1844,13 @@ local function primeJaclSpecial(resourceName)
     return primed
 end
 
+local function primeCardMethodAbility(cardIndex, resourceName)
+    local modalState = buildModalState()
+    local primed = abilityrules.primeCardMethodAbility(cardIndex, resourceName, modalState, getModalDeps())
+    applyModalState(modalState)
+    return primed
+end
+
 local function tryUseEngageReroll(mouseX, mouseY)
     return engagerules.tryUseReroll(mouseX, mouseY, getEngageContext())
 end
@@ -1655,16 +1865,23 @@ getTargetingContext = function()
         hoveredCardIndex = gameState.hoveredCardIndex,
         hoveredTopSlotId = gameState.hoveredTopSlotId,
         pendingStrategySelection = getPendingSelection(),
+        primedActivatedAbility = gameState.primedActivatedAbility,
         selectedAttackerCardIndex = gameState.selectedAttackerCardIndex,
         currentPhase = turnrules.getCurrentPhase(),
         displayStates = warrules.getDisplayStates(),
+        activeChampion = gameState.activeChampion,
         activePrimaryObjective = gameState.activePrimaryObjective,
         activeIntel = gameState.activeIntel,
         activeWarzone = gameState.activeWarzone,
         activePoi = gameState.activePoi,
         getCardRollState = warrules.getCardRollState,
         canTargetEnemyCard = warrules.canTargetEnemyCard,
+        canAttackTarget = warrules.canAttackTarget,
         canTargetPlayerWarzone = warrules.canTargetPlayerWarzone,
+        cardregistry = cardregistry,
+        isPrimedAbilityTarget = function(cardIndex, primedAbility)
+            return abilityrules.isPrimedAbilityTarget(cardIndex, primedAbility, getModalDeps())
+        end,
         isPendingStrategyTarget = function(cardIndex, pendingSelection)
             if pendingSelection and pendingSelection.kind == "troop_script_sacrifice" then
                 return trooprules.isValidPendingSacrificeTarget(cardIndex, pendingSelection, {
@@ -1867,6 +2084,7 @@ local function getInputControllerDeps()
         copyLocation = copyLocation,
         getCardDrawPosition = getCardDrawPosition,
         getHoveredPlayerRollBadgeCardIndex = getHoveredPlayerRollBadgeCardIndex,
+        getCardMethodBadgeTarget = getCardMethodBadgeTarget,
         getHoveredTopSlotId = getHoveredTopSlotId,
         getGridCardAt = getGridCardAt,
         getModalDeps = getModalDeps,
@@ -1888,6 +2106,7 @@ local function getInputControllerDeps()
         normalizeHandCardSlots = normalizeHandCardSlots,
         normalizeSetupCardSlots = normalizeSetupCardSlots,
         payCardCosts = payCardCosts,
+        primeCardMethodAbility = primeCardMethodAbility,
         primeJaclSpecial = primeJaclSpecial,
         resolvePlayedTroopCard = resolvePlayedTroopCard,
         cancelPendingStrategySelection = cancelPendingStrategySelection,
@@ -1942,6 +2161,7 @@ function love.load()
     gameState.jaclDeckPreviewCard = nil
     gameState.activeDeckModalDeck = nil
     gameState.primedJaclSpecial = nil
+    gameState.primedActivatedAbility = nil
     gameState.fullArtImage = nil
     gameState.hoveredJaclSpecialDefinition = nil
     gameState.hoveredJaclSpecialPreviewCard = nil
@@ -2137,6 +2357,7 @@ function love.draw()
         hoveredCardIndex = gameState.hoveredCardIndex,
         draggedCardIndex = gameState.draggedCardIndex,
         expandedGridCardIndex = gameState.expandedGridCardIndex,
+        hoverPreview = getHoverPreviewState(),
         isJaclDeckModalOpen = gameState.isJaclDeckModalOpen,
         activeDeckModalDeck = gameState.activeDeckModalDeck,
         fullArtImage = gameState.fullArtImage,
@@ -2151,6 +2372,7 @@ function love.draw()
         hoveredTomeSpawnPreviewCards = gameState.hoveredTomeSpawnPreviewCards,
         hoveredTomeSpawnPreviewLabel = gameState.hoveredTomeSpawnPreviewLabel,
         primedJaclSpecial = gameState.primedJaclSpecial,
+        primedActivatedAbility = gameState.primedActivatedAbility,
         isWarRollSourceActive = isWarRollSourceActive,
         getDamageJitterOffset = getDamageJitterOffset,
         getObjectiveProgressJitterOffset = getObjectiveProgressJitterOffset,

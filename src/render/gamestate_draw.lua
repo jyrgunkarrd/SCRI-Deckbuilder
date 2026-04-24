@@ -283,9 +283,16 @@ function gamestatedraw.draw(ctx)
         )
     end
 
+    if ctx.hoverPreview then
+        ctx.envdraw.drawHoverPreview(ctx.hoverPreview, ctx.drawCardStateOverlays)
+    end
+
     if ctx.primedJaclSpecial and ctx.primedJaclSpecial.resourceName then
         local mouseX, mouseY = love.mouse.getPosition()
         ctx.envdraw.drawFloatingMethodBadge(ctx.primedJaclSpecial.resourceName, mouseX + 16, mouseY + 16)
+    elseif ctx.primedActivatedAbility and ctx.primedActivatedAbility.resourceName then
+        local mouseX, mouseY = love.mouse.getPosition()
+        ctx.envdraw.drawFloatingMethodBadge(ctx.primedActivatedAbility.resourceName, mouseX + 16, mouseY + 16)
     end
 
     if ctx.fullArtImage then

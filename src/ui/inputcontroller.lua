@@ -51,6 +51,7 @@ function inputcontroller.mousepressed(gameState, deps, x, y, button)
     local clickedScratchBadge = deps.isPointInsideJaclScratchBadge(x, y)
     local clickedJaclPortrait = deps.isPointInsideJaclPortrait(x, y)
     local clickedJaclMethodBadge = deps.envdraw.getJaclMethodBadgeAt(x, y, gameState.playerJacl)
+    local clickedCardMethodBadge = deps.getCardMethodBadgeTarget and deps.getCardMethodBadgeTarget(x, y) or nil
 
     if deps.hasPendingStrategySelection and deps.hasPendingStrategySelection() then
         if button == 2 and deps.cancelPendingStrategySelection then
@@ -71,6 +72,16 @@ function inputcontroller.mousepressed(gameState, deps, x, y, button)
     end
 
     if button == 1 and deps.tryUseEngageReroll(x, y) then
+        return
+    end
+
+    if button == 1 and clickedCardMethodBadge then
+        if deps.primeCardMethodAbility(clickedCardMethodBadge.cardIndex, clickedCardMethodBadge.resource) then
+            clearHoverAndExpansion(gameState)
+            return
+        end
+
+        deps.sfxrules.playPlayReject()
         return
     end
 

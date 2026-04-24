@@ -40,6 +40,28 @@ local function applyReloading(ctx, cardIndex, rollState)
     end
 end
 
+local function applyAreaDamageToAdjacentCards(ctx, attackerCardIndex, rollState, targetCardIndex)
+    if not rollState
+        or rollState.area ~= true
+        or not targetCardIndex then
+        return
+    end
+
+    local adjacentCardIndices = ctx.warrules.getAdjacentSameRowCardIndices(ctx.cards, targetCardIndex)
+
+    for _, adjacentCardIndex in ipairs(adjacentCardIndices) do
+        local adjacentCard = ctx.cards[adjacentCardIndex]
+
+        if adjacentCard and not ctx.isCardUnavailable(adjacentCard) then
+            local damageResult = ctx.dealDamageToCard(adjacentCard, rollState.damageValue or 0)
+
+            if damageResult and damageResult.killed and ctx.resolveKilledEnemyByPlayerCard then
+                ctx.resolveKilledEnemyByPlayerCard(attackerCardIndex, adjacentCardIndex)
+            end
+        end
+    end
+end
+
 local function finishSelectedAttack(ctx, saviorTriggered)
     if not saviorTriggered then
         ctx.warrules.consumeCardAttack(ctx.selectedAttackerCardIndex)
@@ -83,15 +105,15 @@ local function resolveImmediateCardAction(ctx, cardIndex, action)
 end
 
 local function applyAttackSideEffects(ctx, rollState)
-    if ctx.warrules.hasTargetType(rollState, "AtkSab") and ctx.activePrimaryObjective then
+    if rollState and rollState.sabotageObjective == true and ctx.activePrimaryObjective then
         ctx.addObjectiveProgress(ctx.activePrimaryObjective, -(rollState.damageValue or 0), "objective")
     end
 
-    if ctx.warrules.hasTargetType(rollState, "TAtk") then
+    if rollState and rollState.gainSyntac == true then
         ctx.addSyntac(rollState.damageValue or 0)
     end
 
-    if ctx.warrules.hasTargetType(rollState, "closeatk") and ctx.selectedAttackerCardIndex then
+    if rollState and rollState.selfBlock == true and ctx.selectedAttackerCardIndex then
         local attackerCard = ctx.cards[ctx.selectedAttackerCardIndex]
 
         if attackerCard then
@@ -99,7 +121,7 @@ local function applyAttackSideEffects(ctx, rollState)
         end
     end
 
-    if ctx.warrules.hasTargetType(rollState, "maulatk") and ctx.selectedAttackerCardIndex and ctx.healCard then
+    if rollState and rollState.selfHeal == true and ctx.selectedAttackerCardIndex and ctx.healCard then
         local attackerCard = ctx.cards[ctx.selectedAttackerCardIndex]
 
         if attackerCard then
@@ -138,18 +160,26 @@ local function applyCounterStrikeToAttacker(ctx, attackerCard, targetCard, targe
 end
 
 local function applyPlayerWarzoneSideEffects(ctx, rollState)
-    if ctx.warrules.hasTargetType(rollState, "InfTac") then
+    if rollState and rollState.gainSyntac == true then
         ctx.addSyntac(rollState.damageValue or 0)
     end
 end
 
 local function canTargetSabotage(ctx, rollState)
-    return ctx.warrules.hasTargetType(rollState, "Sab")
+    return (
+        rollState
+        and rollState.action == "sabotage"
+        and (
+            rollState.targetClass == "objective_or_intel"
+            or rollState.targetClass == "objective"
+            or rollState.targetClass == "intel"
+        )
+    ) or ctx.warrules.hasTargetType(rollState, "Sab")
         or ctx.warrules.hasTargetType(rollState, "TacSab")
 end
 
 local function applySabotageSideEffects(ctx, rollState)
-    if ctx.warrules.hasTargetType(rollState, "TacSab") then
+    if rollState and rollState.gainSyntac == true then
         ctx.addSyntac(rollState.damageValue or 0)
     end
 end
@@ -267,7 +297,7 @@ function engagerules.tryResolveClick(hoveredTopSlotId, ctx)
                 local attackerDefinition = cardregistry.getCard(attackerCard.setName, attackerCard.cardId)
                 local targetDefinition = cardregistry.getCard(targetCard.setName, targetCard.cardId)
 
-                if ctx.warrules.canAttackTarget(attackerDefinition, targetDefinition, attackerCard, targetCard) then
+                if ctx.warrules.canAttackTarget(attackerDefinition, targetDefinition, attackerCard, targetCard, attackerRollState) then
                     resolveSelectedAttack(ctx, function()
                         applyCounterStrikeToAttacker(ctx, attackerCard, targetCard, targetDefinition)
 
@@ -280,6 +310,8 @@ function engagerules.tryResolveClick(hoveredTopSlotId, ctx)
                         if damageResult and damageResult.killed and ctx.resolveKilledEnemyByPlayerCard then
                             ctx.resolveKilledEnemyByPlayerCard(ctx.selectedAttackerCardIndex, ctx.hoveredCardIndex)
                         end
+
+                        applyAreaDamageToAdjacentCards(ctx, ctx.selectedAttackerCardIndex, attackerRollState, ctx.hoveredCardIndex)
 
                         applyAttackSideEffects(ctx, attackerRollState)
                         return true
@@ -350,7 +382,11 @@ function engagerules.tryResolveClick(hoveredTopSlotId, ctx)
                 return true
             end
 
-            if hoveredRollState and ctx.warrules.hasTargetType(hoveredRollState, "Tac") then
+            if hoveredRollState
+                and (
+                    (hoveredRollState.action == "utility" and hoveredRollState.gainSyntac == true)
+                    or ctx.warrules.hasTargetType(hoveredRollState, "Tac")
+                ) then
                 resolveImmediateCardAction(ctx, ctx.hoveredCardIndex, function()
                     ctx.addSyntac(hoveredRollState.damageValue or 0)
                     return true

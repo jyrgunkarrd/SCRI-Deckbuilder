@@ -2324,4 +2324,42 @@ function carddraw.getMethodBadgeCenters(setName, cardId, drawX, drawY, expansion
     return centers
 end
 
+function carddraw.getMethodBadgeRects(setName, cardId, drawX, drawY, expansionProgress, options)
+    local cardDefinition = getCardDefinition(setName, cardId)
+
+    if not cardDefinition or not cardDefinition.method then
+        return nil
+    end
+
+    local metrics = getCardMetrics(options)
+
+    if not metrics.showHealthOnPortrait or cardDefinition.health == nil then
+        return nil
+    end
+
+    local renderWidth = snap(metrics.width)
+    local portraitHeight = snap(metrics.portraitHeight)
+    local footerHeight = snap(metrics.footerHeight)
+    local padding = snap(metrics.padding)
+    local footerY = snap(drawY) + portraitHeight - footerHeight
+    local expandedResources, badgeInset, badgeSize, badgeGap, totalBadgeWidth = getMethodBadgeLayout(renderWidth, footerHeight, padding, cardDefinition.method)
+    local badgesStartX = snap(drawX) + renderWidth - padding - totalBadgeWidth
+    local rects = {}
+
+    for resourceIndex, resourceName in ipairs(expandedResources) do
+        local badgeX = badgesStartX + ((resourceIndex - 1) * (badgeSize + badgeGap))
+        local badgeY = footerY + badgeInset
+
+        rects[#rects + 1] = {
+            resource = resourceName,
+            x = badgeX,
+            y = badgeY,
+            width = badgeSize,
+            height = badgeSize,
+        }
+    end
+
+    return rects
+end
+
 return carddraw

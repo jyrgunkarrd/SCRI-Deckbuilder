@@ -7,7 +7,7 @@ local enemies = {
     
     {
         id = "EN0001",
-        keyword = "KEY0001",
+        keyword = {"KEY0001"},
         name = "Forgiven",
         textbox = "Plunder or strike: Create a Flair in hand if you don't already have one.",
         health = 3,

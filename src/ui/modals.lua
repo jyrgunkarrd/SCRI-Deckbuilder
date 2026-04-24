@@ -128,6 +128,20 @@ function modals.tryUsePrimedJaclSpecial(mouseX, mouseY, state, deps)
     return false
 end
 
+function modals.tryUsePrimedActivatedAbility(mouseX, mouseY, state, deps)
+    if not state.primedActivatedAbility or not state.primedActivatedAbility.definition then
+        return false
+    end
+
+    local targetCardIndex = deps.getGridCardAt(mouseX, mouseY)
+
+    if not targetCardIndex then
+        return false
+    end
+
+    return deps.abilityrules.resolvePrimedAbility(targetCardIndex, state, deps)
+end
+
 function modals.tryExchangeScratchForModalResource(mouseX, mouseY, state, deps)
     local targetResource = deps.envdraw.getResourceExchangeModalResourceAt(mouseX, mouseY)
 
@@ -220,11 +234,27 @@ function modals.handleResourceExchangeMousePressed(x, y, button, state, deps)
 end
 
 function modals.handlePrimedSpecialMousePressed(x, y, button, state, deps)
-    if not state.primedJaclSpecial then
+    if not state.primedJaclSpecial and not state.primedActivatedAbility then
         return false
     end
 
+    if button == 2 then
+        state.primedJaclSpecial = nil
+        state.primedActivatedAbility = nil
+        return true
+    end
+
     if button == 1 then
+        local clickedCardMethodBadge = deps.getCardMethodBadgeTarget and deps.getCardMethodBadgeTarget(x, y) or nil
+
+        if clickedCardMethodBadge then
+            if not deps.abilityrules.primeCardMethodAbility(clickedCardMethodBadge.cardIndex, clickedCardMethodBadge.resource, state, deps) then
+                deps.sfxrules.playPlayReject()
+            end
+
+            return true
+        end
+
         local clickedMethodBadge = deps.envdraw.getJaclMethodBadgeAt(x, y, state.playerJacl)
 
         if clickedMethodBadge then
@@ -235,11 +265,25 @@ function modals.handlePrimedSpecialMousePressed(x, y, button, state, deps)
             return true
         end
 
-        if not modals.tryUsePrimedJaclSpecial(x, y, state, deps)
-            and deps.turnrules.getCurrentPhase() == "Prelude" then
+        if modals.tryUsePrimedActivatedAbility(x, y, state, deps) then
+            return true
+        end
+
+        if modals.tryUsePrimedJaclSpecial(x, y, state, deps) then
+            return true
+        end
+
+        if deps.turnrules.getCurrentPhase() == "Prelude" then
             local validTargetCell = deps.getPlayerRowCellAt(x, y)
 
             if validTargetCell then
+                deps.sfxrules.playPlayReject()
+                return true
+            end
+
+            local targetCardIndex = deps.getGridCardAt and deps.getGridCardAt(x, y) or nil
+
+            if targetCardIndex then
                 deps.sfxrules.playPlayReject()
             end
         end
