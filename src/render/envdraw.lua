@@ -2341,6 +2341,64 @@ function envdraw.drawPlayerHand()
     love.graphics.setColor(1, 1, 1, 1)
 end
 
+function envdraw.getMulliganPromptLayout()
+    local windowWidth, windowHeight = love.graphics.getDimensions()
+    local handLayout = envdraw.getPlayerHandLayout()
+    local firstSlot = handLayout.slots[1]
+    local promptWidth = 260
+    local promptHeight = 112
+    local buttonWidth = 132
+    local buttonHeight = 34
+    local promptX = (windowWidth - promptWidth) / 2
+    local promptY = firstSlot and (firstSlot.y - promptHeight - 22) or (windowHeight * 0.62)
+
+    promptY = math.max(16, promptY)
+
+    return {
+        x = promptX,
+        y = promptY,
+        width = promptWidth,
+        height = promptHeight,
+        button = {
+            x = promptX + ((promptWidth - buttonWidth) / 2),
+            y = promptY + promptHeight - buttonHeight - 16,
+            width = buttonWidth,
+            height = buttonHeight,
+        },
+    }
+end
+
+function envdraw.drawMulliganPrompt(alpha)
+    alpha = clamp(alpha or 1, 0, 1)
+
+    local layout = envdraw.getMulliganPromptLayout()
+    local previousFont = love.graphics.getFont()
+    local titleFont = getFont(JACL_LABEL_FONT_PATH, 24)
+    local buttonFont = getFont(JACL_LABEL_FONT_PATH, 14)
+    local button = layout.button
+
+    love.graphics.setColor(0.04, 0.045, 0.055, 0.96 * alpha)
+    love.graphics.rectangle("fill", layout.x, layout.y, layout.width, layout.height, 6, 6)
+    love.graphics.setColor(0.78, 0.82, 0.88, 0.8 * alpha)
+    love.graphics.rectangle("line", layout.x, layout.y, layout.width, layout.height, 6, 6)
+
+    love.graphics.setFont(titleFont)
+    love.graphics.setColor(0.95, 0.96, 0.98, alpha)
+    love.graphics.printf("MULLIGAN", layout.x, layout.y + 18, layout.width, "center")
+
+    love.graphics.setColor(0.16, 0.18, 0.22, alpha)
+    love.graphics.rectangle("fill", button.x, button.y, button.width, button.height, 4, 4)
+    love.graphics.setColor(0.86, 0.88, 0.92, 0.9 * alpha)
+    love.graphics.rectangle("line", button.x, button.y, button.width, button.height, 4, 4)
+
+    love.graphics.setFont(buttonFont)
+    love.graphics.setColor(0.96, 0.97, 0.99, alpha)
+    love.graphics.printf("DONE", button.x, button.y + ((button.height - buttonFont:getHeight()) / 2), button.width, "center")
+
+    love.graphics.setFont(previousFont)
+    love.graphics.setColor(1, 1, 1, 1)
+end
+
 local function getHandSlotVisualBounds(slot)
     local visualX = slot.x + ((slot.width - HAND_SLOT_VISUAL_WIDTH) / 2) + HAND_SLOT_VISUAL_OFFSET_X
 
@@ -2598,10 +2656,15 @@ function envdraw.drawBottomLeftPanel(jaclDefinition, resourceCounts)
     for badgeIndex, badgeCenter in ipairs(methodBadgeCenters) do
         local badgeX = methodBadgeX + ((badgeIndex - 1) * (JACL_METHOD_BADGE_SIZE + methodBadgeGap))
         local methodImage = getMethodImage(badgeCenter.resource)
+        local isUsedMethodAbility = jaclDefinition
+            and jaclDefinition.usedMethodAbilities
+            and jaclDefinition.usedMethodAbilities[badgeCenter.resource] == true
+            or false
+        local badgeAlpha = isUsedMethodAbility and 0.34 or 1
 
-        love.graphics.setColor(0.12, 0.13, 0.16, 0.95)
+        love.graphics.setColor(0.12, 0.13, 0.16, 0.95 * badgeAlpha)
         love.graphics.rectangle("fill", badgeX, methodBadgeY, JACL_METHOD_BADGE_SIZE, JACL_METHOD_BADGE_SIZE)
-        love.graphics.setColor(0.87, 0.87, 0.9, 0.9)
+        love.graphics.setColor(0.87, 0.87, 0.9, 0.9 * badgeAlpha)
         love.graphics.rectangle("line", badgeX, methodBadgeY, JACL_METHOD_BADGE_SIZE, JACL_METHOD_BADGE_SIZE)
 
         if methodImage then
@@ -2611,8 +2674,20 @@ function envdraw.drawBottomLeftPanel(jaclDefinition, resourceCounts)
             local imageX = badgeX + ((JACL_METHOD_BADGE_SIZE - imageWidth) / 2)
             local imageY = methodBadgeY + ((JACL_METHOD_BADGE_SIZE - imageHeight) / 2)
 
-            love.graphics.setColor(1, 1, 1, 1)
+            love.graphics.setColor(1, 1, 1, badgeAlpha)
             love.graphics.draw(methodImage, imageX, imageY, 0, imageScale, imageScale)
+        end
+
+        if isUsedMethodAbility then
+            love.graphics.setColor(0, 0, 0, 0.42)
+            love.graphics.rectangle("fill", badgeX, methodBadgeY, JACL_METHOD_BADGE_SIZE, JACL_METHOD_BADGE_SIZE)
+            love.graphics.setColor(0.42, 0.44, 0.48, 0.78)
+            love.graphics.line(
+                badgeX + 4,
+                methodBadgeY + JACL_METHOD_BADGE_SIZE - 4,
+                badgeX + JACL_METHOD_BADGE_SIZE - 4,
+                methodBadgeY + 4
+            )
         end
     end
 

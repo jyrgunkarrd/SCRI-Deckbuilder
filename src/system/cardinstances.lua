@@ -8,6 +8,10 @@ local generatedCardInstanceCounter = 0
 
 function cardinstances.reset()
     generatedCardInstanceCounter = 0
+
+    if keywordrules.resetKeywordExhaustion then
+        keywordrules.resetKeywordExhaustion()
+    end
 end
 
 function cardinstances.copyLocation(location)

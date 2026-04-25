@@ -71,11 +71,29 @@ local function isSelectedAttackerCardTarget(cardIndex, context)
     end
 
     if selectedRollState.action == "block" or hasTargetType(selectedRollState, "Blk") then
+        local candidateDefinition = context.cardregistry
+            and candidateCard
+            and context.cardregistry.getCard(candidateCard.setName, candidateCard.cardId)
+            or nil
+
         return isPlayerGridCard(candidateCard)
+            and (
+                not context.canTargetCardByHeavyRestriction
+                or context.canTargetCardByHeavyRestriction(candidateDefinition, candidateCard, selectedRollState, context.cards)
+            )
     end
 
     if selectedRollState.action == "divert" or hasTargetType(selectedRollState, "Div") then
+        local candidateDefinition = context.cardregistry
+            and candidateCard
+            and context.cardregistry.getCard(candidateCard.setName, candidateCard.cardId)
+            or nil
+
         return isPlayerGridCard(candidateCard)
+            and (
+                not context.canTargetCardByHeavyRestriction
+                or context.canTargetCardByHeavyRestriction(candidateDefinition, candidateCard, selectedRollState, context.cards)
+            )
     end
 
     if canTargetEnemyCard(selectedRollState, context) and isEnemyGridCard(candidateCard) then
@@ -85,7 +103,7 @@ local function isSelectedAttackerCardTarget(cardIndex, context)
 
         local selectedDefinition = context.cardregistry.getCard(selectedCard.setName, selectedCard.cardId)
         local candidateDefinition = context.cardregistry.getCard(candidateCard.setName, candidateCard.cardId)
-        return context.canAttackTarget(selectedDefinition, candidateDefinition, selectedCard, candidateCard, selectedRollState)
+        return context.canAttackTarget(selectedDefinition, candidateDefinition, selectedCard, candidateCard, selectedRollState, context.cards)
     end
 
     return false
@@ -159,6 +177,16 @@ local function isPrimedAbilityTarget(cardIndex, context)
         or false
 end
 
+local function isPrimedAbilityTopSlotTarget(slotId, context)
+    return context.primedActivatedAbility
+        and context.isPrimedAbilityTarget
+        and context.isPrimedAbilityTarget({
+            kind = "top_slot",
+            slotId = slotId,
+        }, context.primedActivatedAbility)
+        or false
+end
+
 local function isThreatBracketCard(cardIndex, context)
     if context.currentPhase ~= "War" then
         return false
@@ -174,14 +202,6 @@ local function isThreatBracketCard(cardIndex, context)
         end
 
         local cardRollState = context.getCardRollState and context.getCardRollState(cardIndex) or nil
-        local card = context.cards and context.cards[cardIndex] or nil
-
-        if context.hoveredTopSlotId == "champion"
-            and context.activeChampion
-            and isPlayerGridCard(card)
-            and canTargetEnemyCard(cardRollState, context) then
-            return true
-        end
 
         if targetingrules.rollStateTargetsTopSlot(cardRollState, context.hoveredTopSlotId, context) then
             return true
@@ -219,7 +239,6 @@ end
 
 function targetingrules.rollStateTargetsCard(rollState, cardIndex, context)
     return rollState
-        and canTargetEnemyCard(rollState, context)
         and rollState.targetCard
         and rollState.targetCard.kind == "card"
         and rollState.targetCardIndex
@@ -302,7 +321,15 @@ end
 function targetingrules.shouldBracketTopSlot(slotId, context)
     context = context or {}
 
-    if not slotId or context.currentPhase ~= "War" then
+    if not slotId then
+        return false
+    end
+
+    if isPrimedAbilityTopSlotTarget(slotId, context) then
+        return true
+    end
+
+    if context.currentPhase ~= "War" then
         return false
     end
 
@@ -349,13 +376,6 @@ function targetingrules.shouldBracketTopSlot(slotId, context)
         end
 
         local hoveredRollState = context.getCardRollState and context.getCardRollState(context.hoveredCardIndex) or nil
-
-        if slotId == "champion"
-            and context.activeChampion
-            and isPlayerGridCard(hoveredCard)
-            and canTargetEnemyCard(hoveredRollState, context) then
-            return true
-        end
 
         if hoveredCard.location.rowId ~= "PlayerRow"
             and targetingrules.rollStateTargetsTopSlot(
@@ -444,13 +464,6 @@ local function isThreatBracketTopSlot(slotId, context)
 
         local hoveredRollState = context.getCardRollState and context.getCardRollState(context.hoveredCardIndex) or nil
 
-        if slotId == "champion"
-            and context.activeChampion
-            and isPlayerGridCard(hoveredCard)
-            and canTargetEnemyCard(hoveredRollState, context) then
-            return true
-        end
-
         if hoveredCard.location.rowId ~= "PlayerRow"
             and targetingrules.rollStateTargetsTopSlot(
                 hoveredRollState,
@@ -475,6 +488,10 @@ function targetingrules.getTopSlotBracketLayers(slotId, context)
 
     if isThreatBracketTopSlot(slotId, context) then
         layers[#layers + 1] = "default"
+    end
+
+    if isPrimedAbilityTopSlotTarget(slotId, context) then
+        layers[#layers + 1] = "strategy"
     end
 
     if context.selectedAttackerCardIndex and canSelectedAttackerTargetSlot(slotId, context) then

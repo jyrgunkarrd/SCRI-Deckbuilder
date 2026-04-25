@@ -1,6 +1,32 @@
 local cardinstances = require("src.system.cardinstances")
+local cardregistry = require("src.system.cardregistry")
+local keywordrules = require("src.system.keywordrules")
 
 local damagerules = {}
+local TOUGH_KEYWORD_ID = "KWTOUGH"
+local BULLETPROOF_KEYWORD_ID = "KWBULLETPROOF"
+
+local function applyDamageLimitKeywords(card, damageAmount)
+    local limitedDamage = math.max(0, tonumber(damageAmount) or 0)
+
+    if limitedDamage <= 0 then
+        return limitedDamage, nil
+    end
+
+    local cardDefinition = card and cardregistry.getCard(card.setName, card.cardId) or nil
+
+    if keywordrules.cardHasKeyword(cardDefinition, BULLETPROOF_KEYWORD_ID, card) then
+        return math.min(1, limitedDamage), BULLETPROOF_KEYWORD_ID
+    end
+
+    if keywordrules.cardHasKeyword(cardDefinition, TOUGH_KEYWORD_ID, card)
+        and not keywordrules.isKeywordExhausted(card, TOUGH_KEYWORD_ID) then
+        keywordrules.exhaustKeyword(card, TOUGH_KEYWORD_ID)
+        return math.min(1, limitedDamage), TOUGH_KEYWORD_ID
+    end
+
+    return limitedDamage, nil
+end
 
 function damagerules.dealDamageToCard(card, amount)
     if not card or amount == nil then
@@ -23,6 +49,10 @@ function damagerules.dealDamageToCard(card, amount)
         appliedDamage = appliedDamage - blockedDamage
     end
 
+    local preKeywordDamage = appliedDamage
+    local damageLimitKeywordId = nil
+    appliedDamage, damageLimitKeywordId = applyDamageLimitKeywords(card, appliedDamage)
+
     card.currentHealth = math.max(0, card.currentHealth - appliedDamage)
 
     return {
@@ -31,6 +61,8 @@ function damagerules.dealDamageToCard(card, amount)
         previousBlocking = previousBlocking,
         currentBlocking = math.max(0, tonumber(card.blocking) or 0),
         blockedDamage = blockedDamage,
+        preventedByKeywordDamage = preKeywordDamage - appliedDamage,
+        damageLimitKeywordId = damageLimitKeywordId,
         healthDamage = previousHealth - card.currentHealth,
         killed = previousHealth > 0 and card.currentHealth <= 0,
         changed = card.currentHealth < previousHealth or blockedDamage > 0,

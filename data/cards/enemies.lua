@@ -23,6 +23,7 @@ local enemies = {
     {
         id = "EN0002",
         name = "Confessor",
+        keyword = { "KWTOUGH"},
         textbox = "Plunder or strike: Create a Flair in hand if you don't already have one.",
         health = 3,
         max = 3,

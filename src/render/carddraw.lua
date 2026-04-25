@@ -61,7 +61,8 @@ local DAMAGE_PREVIEW_PIP_COLOR = { 1, 0.298, 0.298, 1 }
 local KIA_BADGE_TEXT_COLOR = { 0.902, 0.2, 0.416, 1 }
 local STRATEGIST_KEYWORD_ID = "KWSTRAT"
 local RELOADING_KEYWORD_ID = "KWRLD"
-local TOME_CARD_TYPE = "tome"
+local TOUGH_KEYWORD_ID = "KWTOUGH"
+local TOME_SUBCLASS = "Tome"
 local TROOP_HEALTH_PIP_COLOR = { 0, 1, 0.839 }
 local CACHE_PIP_COLOR = { 1, 0.486, 0.694 }
 local SYNTAC_PIP_COLOR = { 0.58, 0.9, 0.96 }
@@ -756,7 +757,7 @@ local function getMethodBadgeLayout(width, footerHeight, padding, methodEntries)
     return expandedResources, badgeInset, badgeSize, badgeGap, totalWidth
 end
 
-local function drawHealthFooter(x, y, width, height, padding, footerHeight, footerFont, healthValue, maxHealthValue, damagePreviewCount, blockedDamagePreviewCount, blockingValue, alpha, methodEntries, pipColor, pipShape)
+local function drawHealthFooter(x, y, width, height, padding, footerHeight, footerFont, healthValue, maxHealthValue, damagePreviewCount, blockedDamagePreviewCount, blockingValue, alpha, methodEntries, pipColor, pipShape, card)
     local footerY = y + height - footerHeight
     local expandedResources, badgeInset, badgeSize, badgeGap, totalBadgeWidth = getMethodBadgeLayout(width, footerHeight, padding, methodEntries)
     local badgesStartX = x + width - padding - totalBadgeWidth
@@ -775,10 +776,15 @@ local function drawHealthFooter(x, y, width, height, padding, footerHeight, foot
             local methodImage = getMethodImage(resourceName)
             local badgeX = badgesStartX + ((resourceIndex - 1) * (badgeSize + badgeGap))
             local badgeY = footerY + badgeInset
+            local isUsedMethodAbility = card
+                and card.usedMethodAbilities
+                and card.usedMethodAbilities[resourceName] == true
+                or false
+            local badgeAlpha = isUsedMethodAbility and (alpha * 0.34) or alpha
 
-            love.graphics.setColor(0.12, 0.13, 0.16, alpha)
+            love.graphics.setColor(0.12, 0.13, 0.16, badgeAlpha)
             love.graphics.rectangle("fill", badgeX, badgeY, badgeSize, badgeSize, 3, 3)
-            love.graphics.setColor(0.87, 0.87, 0.9, alpha)
+            love.graphics.setColor(0.87, 0.87, 0.9, badgeAlpha)
             love.graphics.rectangle("line", badgeX, badgeY, badgeSize, badgeSize, 3, 3)
 
             if methodImage then
@@ -788,8 +794,15 @@ local function drawHealthFooter(x, y, width, height, padding, footerHeight, foot
                 local imageX = badgeX + ((badgeSize - imageWidth) / 2)
                 local imageY = badgeY + ((badgeSize - imageHeight) / 2)
 
-                love.graphics.setColor(1, 1, 1, alpha)
+                love.graphics.setColor(1, 1, 1, badgeAlpha)
                 love.graphics.draw(methodImage, imageX, imageY, 0, imageScale, imageScale)
+            end
+
+            if isUsedMethodAbility then
+                love.graphics.setColor(0, 0, 0, alpha * 0.42)
+                love.graphics.rectangle("fill", badgeX, badgeY, badgeSize, badgeSize, 3, 3)
+                love.graphics.setColor(0.42, 0.44, 0.48, alpha * 0.78)
+                love.graphics.line(badgeX + 3, badgeY + badgeSize - 3, badgeX + badgeSize - 3, badgeY + 3)
             end
         end
     end
@@ -1194,6 +1207,21 @@ local function drawKeywordBadges(cardDefinition, x, y, width, keywordValuesOverr
         end
 
         drawKeywordBadge(badgeRect.keywordId, badgeRect.x, badgeRect.y, badgeRect.size, keywordValue)
+
+        if badgeRect.keywordId == TOUGH_KEYWORD_ID
+            and keywordrules.isKeywordExhausted(card, TOUGH_KEYWORD_ID) then
+            love.graphics.setColor(0.02, 0.025, 0.03, 0.58)
+            love.graphics.rectangle("fill", badgeRect.x, badgeRect.y, badgeRect.size, badgeRect.size, 4, 4)
+            love.graphics.setColor(0.78, 0.82, 0.86, 0.55)
+            love.graphics.setLineWidth(math.max(1, snap(badgeRect.size * 0.08)))
+            love.graphics.line(
+                badgeRect.x + snap(badgeRect.size * 0.22),
+                badgeRect.y + snap(badgeRect.size * 0.78),
+                badgeRect.x + snap(badgeRect.size * 0.78),
+                badgeRect.y + snap(badgeRect.size * 0.22)
+            )
+            love.graphics.setLineWidth(1)
+        end
     end
 end
 
@@ -1885,6 +1913,13 @@ function carddraw.getHoveredKeyword(setName, cardId, drawX, drawY, options, mous
                     hoveredKeyword.previewCardDefinition = cardregistry.getCard(attachedKit.setName, attachedKit.cardId)
                     hoveredKeyword.previewLabel = "KIT"
                 end
+            elseif badgeRect.keywordId == "KWPILOT" then
+                local attachedPilot = metrics.card and metrics.card.attachedPilotCard or nil
+
+                if attachedPilot then
+                    hoveredKeyword.previewCardDefinition = cardregistry.getCard(attachedPilot.setName, attachedPilot.cardId)
+                    hoveredKeyword.previewLabel = "PILOT"
+                end
             end
 
             return hoveredKeyword
@@ -2101,7 +2136,7 @@ function carddraw.drawCardState(setName, cardId, x, y, expansionProgress, option
         displayedMaxHealth = cardDefinition.max
     end
 
-    if cardDefinition.type == TOME_CARD_TYPE and cardDefinition.syncost ~= nil then
+    if (cardDefinition.type == "tome" or cardDefinition.subclass == TOME_SUBCLASS) and cardDefinition.syncost ~= nil then
         displayedHealth = math.max(0, tonumber(cardDefinition.syncost) or 0)
         displayedMaxHealth = displayedHealth
         footerPipColor = SYNTAC_PIP_COLOR
@@ -2142,7 +2177,7 @@ function carddraw.drawCardState(setName, cardId, x, y, expansionProgress, option
             drawPortraitBadges(cardDefinition, metrics.card, drawX, portraitY, renderWidth, portraitHeight, snap(metrics.footerHeight))
         end
 
-        drawHealthFooter(drawX, portraitY, renderWidth, portraitHeight, snap(metrics.padding), snap(metrics.footerHeight), footerFont, displayedHealth, displayedMaxHealth, metrics.damagePreviewCount, metrics.blockedDamagePreviewCount, metrics.blocking, 1, cardDefinition.method, footerPipColor, footerPipShape)
+        drawHealthFooter(drawX, portraitY, renderWidth, portraitHeight, snap(metrics.padding), snap(metrics.footerHeight), footerFont, displayedHealth, displayedMaxHealth, metrics.damagePreviewCount, metrics.blockedDamagePreviewCount, metrics.blocking, 1, cardDefinition.method, footerPipColor, footerPipShape, metrics.card)
     elseif cardDefinition.mcost and not metrics.showHealthOnPortrait then
         drawCostBadges(cardDefinition, drawX, portraitY, renderWidth, portraitHeight)
     end
@@ -2241,7 +2276,7 @@ function carddraw.drawCardState(setName, cardId, x, y, expansionProgress, option
             end
 
             if displayedHealth ~= nil and textboxHeight > snap(metrics.footerHeight) and not metrics.showHealthOnPortrait then
-                drawHealthFooter(drawX, textY, renderWidth, textboxHeight, snap(metrics.padding), snap(metrics.footerHeight), footerFont, displayedHealth, displayedMaxHealth, metrics.damagePreviewCount, metrics.blockedDamagePreviewCount, metrics.blocking, expansionProgress, cardDefinition.method, footerPipColor, footerPipShape)
+                drawHealthFooter(drawX, textY, renderWidth, textboxHeight, snap(metrics.padding), snap(metrics.footerHeight), footerFont, displayedHealth, displayedMaxHealth, metrics.damagePreviewCount, metrics.blockedDamagePreviewCount, metrics.blocking, expansionProgress, cardDefinition.method, footerPipColor, footerPipShape, metrics.card)
             elseif cardDefinition.type == "strategy" and textboxHeight > snap(metrics.footerHeight) then
                 drawStrategyFooter(drawX, textY, renderWidth, textboxHeight, snap(metrics.footerHeight), footerFont, expansionProgress)
             end

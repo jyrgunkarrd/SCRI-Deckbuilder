@@ -5,6 +5,8 @@ local temporaryeffects = require("src.system.temporaryeffects")
 local TIME_LIMIT_KEYWORD_ID = "KWTIME"
 local RELOADING_KEYWORD_ID = "KWRLD"
 local GROWTH_KEYWORD_ID = "KWGRO"
+local TOUGH_KEYWORD_ID = "KWTOUGH"
+local exhaustedKeywordInstances = {}
 
 local enemyChampionHandlers = {
     enemy_champion_play_another_card = function()
@@ -101,6 +103,64 @@ function keywordrules.cardHasKeyword(cardDefinition, keywordId, card)
     end
 
     return false
+end
+
+function keywordrules.isKeywordExhausted(card, keywordId)
+    if not card or not keywordId then
+        return false
+    end
+
+    if card.instanceId
+        and exhaustedKeywordInstances[card.instanceId]
+        and exhaustedKeywordInstances[card.instanceId][keywordId] == true then
+        return true
+    end
+
+    return card
+        and keywordId
+        and card.exhaustedKeywords
+        and card.exhaustedKeywords[keywordId] == true
+        or false
+end
+
+function keywordrules.exhaustKeyword(card, keywordId)
+    if not card or not keywordId then
+        return false
+    end
+
+    card.exhaustedKeywords = card.exhaustedKeywords or {}
+    card.exhaustedKeywords[keywordId] = true
+
+    if card.instanceId then
+        exhaustedKeywordInstances[card.instanceId] = exhaustedKeywordInstances[card.instanceId] or {}
+        exhaustedKeywordInstances[card.instanceId][keywordId] = true
+    end
+
+    return true
+end
+
+function keywordrules.resetKeywordExhaustion()
+    exhaustedKeywordInstances = {}
+end
+
+function keywordrules.refreshEndPhaseKeywords(cards)
+    for _, card in ipairs(cards or {}) do
+        if card and card.instanceId and exhaustedKeywordInstances[card.instanceId] then
+            exhaustedKeywordInstances[card.instanceId][TOUGH_KEYWORD_ID] = nil
+
+            if next(exhaustedKeywordInstances[card.instanceId]) == nil then
+                exhaustedKeywordInstances[card.instanceId] = nil
+            end
+        end
+
+        if card and card.exhaustedKeywords then
+            card.exhaustedKeywords[TOUGH_KEYWORD_ID] = nil
+
+            if next(card.exhaustedKeywords) == nil then
+                card.exhaustedKeywords = nil
+            end
+        end
+    end
 end
 
 local function getDefinitionKeywordValue(cardDefinition, keywordId)

@@ -205,6 +205,12 @@ function engagerules.tryResolveClick(hoveredTopSlotId, ctx)
                 if targetCard
                     and targetCard.location.kind == "grid"
                     and targetCard.location.rowId == "PlayerRow" then
+                    local targetDefinition = cardregistry.getCard(targetCard.setName, targetCard.cardId)
+
+                    if not ctx.warrules.canTargetCardByHeavyRestriction(targetDefinition, targetCard, attackerRollState, ctx.cards) then
+                        return true
+                    end
+
                     resolveSelectedAttack(ctx, function()
                         ctx.addBlockingToCard(targetCard, attackerRollState.damageValue or 0)
                         return true
@@ -222,6 +228,12 @@ function engagerules.tryResolveClick(hoveredTopSlotId, ctx)
                 if targetCard
                     and targetCard.location.kind == "grid"
                     and targetCard.location.rowId == "PlayerRow" then
+                    local targetDefinition = cardregistry.getCard(targetCard.setName, targetCard.cardId)
+
+                    if not ctx.warrules.canTargetCardByHeavyRestriction(targetDefinition, targetCard, attackerRollState, ctx.cards) then
+                        return true
+                    end
+
                     resolveSelectedAttack(ctx, function()
                         ctx.warrules.redirectIncomingAttacks(ctx.cards, ctx.hoveredCardIndex, ctx.selectedAttackerCardIndex)
                         ctx.addBlockingToCard(attackerCard, attackerRollState.damageValue or 0)
@@ -297,7 +309,7 @@ function engagerules.tryResolveClick(hoveredTopSlotId, ctx)
                 local attackerDefinition = cardregistry.getCard(attackerCard.setName, attackerCard.cardId)
                 local targetDefinition = cardregistry.getCard(targetCard.setName, targetCard.cardId)
 
-                if ctx.warrules.canAttackTarget(attackerDefinition, targetDefinition, attackerCard, targetCard, attackerRollState) then
+                if ctx.warrules.canAttackTarget(attackerDefinition, targetDefinition, attackerCard, targetCard, attackerRollState, ctx.cards) then
                     resolveSelectedAttack(ctx, function()
                         applyCounterStrikeToAttacker(ctx, attackerCard, targetCard, targetDefinition)
 

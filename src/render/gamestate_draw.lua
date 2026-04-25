@@ -1,5 +1,16 @@
 local gamestatedraw = {}
 
+local function clamp(value, minValue, maxValue)
+    return math.max(minValue, math.min(maxValue, value))
+end
+
+local function easeOutCubic(t)
+    t = clamp(t or 0, 0, 1)
+    local invT = 1 - t
+
+    return 1 - (invT * invT * invT)
+end
+
 function gamestatedraw.draw(ctx)
     local currentPhase = ctx.turnrules.getCurrentPhase()
     local drawTopStripOnTop = ctx.expandedTopSlotId ~= nil
@@ -96,6 +107,9 @@ function gamestatedraw.draw(ctx)
     for cardIndex, card in ipairs(ctx.cards) do
         if not ctx.isCardDestroyed(card)
             and not card.returningToHandAnimation
+            and not card.mulliganInAnimation
+            and not card.mulliganOutAnimation
+            and not card.pilotVehicleAnimation
             and cardIndex ~= ctx.hoveredCardIndex
             and cardIndex ~= ctx.draggedCardIndex
             and cardIndex ~= ctx.expandedGridCardIndex then
@@ -108,6 +122,7 @@ function gamestatedraw.draw(ctx)
     if ctx.hoveredCardIndex
         and ctx.hoveredCardIndex ~= ctx.expandedGridCardIndex
         and not ctx.cards[ctx.hoveredCardIndex].returningToHandAnimation
+        and not ctx.cards[ctx.hoveredCardIndex].pilotVehicleAnimation
         and not ctx.isCardDestroyed(ctx.cards[ctx.hoveredCardIndex]) then
         local hoveredCard = ctx.cards[ctx.hoveredCardIndex]
         local drawX, drawY, expansionProgress, renderOptions = ctx.getCardDrawPosition(hoveredCard, ctx.hoveredCardIndex)
@@ -118,6 +133,7 @@ function gamestatedraw.draw(ctx)
     if ctx.expandedGridCardIndex
         and ctx.expandedGridCardIndex ~= ctx.draggedCardIndex
         and not ctx.cards[ctx.expandedGridCardIndex].returningToHandAnimation
+        and not ctx.cards[ctx.expandedGridCardIndex].pilotVehicleAnimation
         and not ctx.isCardDestroyed(ctx.cards[ctx.expandedGridCardIndex]) then
         local expandedCard = ctx.cards[ctx.expandedGridCardIndex]
 
@@ -152,6 +168,10 @@ function gamestatedraw.draw(ctx)
 
     if ctx.drawKitReturnAnimations then
         ctx.drawKitReturnAnimations()
+    end
+
+    if ctx.drawPilotVehicleAnimations then
+        ctx.drawPilotVehicleAnimations()
     end
 
     if drawTopStripOnTop then
@@ -201,7 +221,65 @@ function gamestatedraw.draw(ctx)
 
     ctx.envdraw.drawResourceTransfers(ctx.resourcerules.getActiveTransfers())
 
-    if ctx.isJaclDeckModalOpen then
+    if ctx.mulliganActive then
+        local mulliganAlpha = clamp(ctx.mulliganPromptAlpha or 1, 0, 1)
+
+        love.graphics.setColor(0, 0, 0, 0.62 * mulliganAlpha)
+        love.graphics.rectangle("fill", 0, 0, love.graphics.getWidth(), love.graphics.getHeight())
+
+        for cardIndex, card in ipairs(ctx.cards) do
+            if card
+                and card.location
+                and card.location.kind == "hand"
+                and not ctx.isCardDestroyed(card)
+                and not card.returningToHandAnimation then
+                local drawX, drawY, expansionProgress, renderOptions = ctx.getCardDrawPosition(card, cardIndex)
+                local isTomeCard = ctx.isTomeCard and ctx.isTomeCard(card) or false
+                local animation = card.mulliganInAnimation or card.mulliganOutAnimation
+                local animationProgress = animation and easeOutCubic((animation.elapsed or 0) / animation.duration) or 1
+                local animationOffset = animation and (animation.offset or 0) or 0
+                local yOffset = 0
+                local coverAlpha = 0
+
+                renderOptions.dimmed = isTomeCard
+                renderOptions.selected = ctx.mulliganSelection
+                    and ctx.mulliganSelection[cardIndex] == true
+                    or false
+
+                if card.mulliganInAnimation then
+                    yOffset = animationOffset * (1 - animationProgress)
+                    coverAlpha = 0.68 * (1 - animationProgress)
+                elseif card.mulliganOutAnimation then
+                    yOffset = animationOffset * animationProgress
+                    coverAlpha = 0.72 * animationProgress
+                    renderOptions.selected = true
+                end
+
+                drawY = drawY + yOffset
+
+                ctx.carddraw.drawCardState(card.setName, card.cardId, drawX, drawY, expansionProgress, renderOptions)
+                ctx.drawCardStateOverlays(card, cardIndex, drawX, drawY, expansionProgress, renderOptions)
+
+                if coverAlpha > 0 then
+                    local cardWidth, collapsedHeight = ctx.carddraw.getCardSize(renderOptions)
+                    local _, expandedHeight = ctx.carddraw.getExpandedCardSize(renderOptions)
+                    local cardHeight = collapsedHeight + ((expandedHeight - collapsedHeight) * (expansionProgress or 0))
+
+                    love.graphics.setColor(0.01, 0.012, 0.016, coverAlpha)
+                    love.graphics.rectangle("fill", drawX, drawY, cardWidth, cardHeight, 8, 8)
+                    love.graphics.setColor(1, 1, 1, 1)
+                end
+            end
+        end
+
+        if mulliganAlpha > 0.01 then
+            ctx.envdraw.drawMulliganPrompt(mulliganAlpha)
+        end
+    end
+
+    if ctx.mulliganActive then
+        -- Mulligan owns input and hover UI until DONE is clicked.
+    elseif ctx.isJaclDeckModalOpen then
         ctx.envdraw.drawJaclDeckModal(ctx.activeDeckModalDeck, {
             top = { scrollY = ctx.jaclDeckModalScroll.deck },
             bottom = { scrollY = ctx.jaclDeckModalScroll.discard },
@@ -233,10 +311,11 @@ function gamestatedraw.draw(ctx)
             )
         end
     elseif ctx.hoveredTomeSpawnPreviewCards and #ctx.hoveredTomeSpawnPreviewCards > 0 then
-        local hoveredCard = ctx.hoveredCardIndex and ctx.cards[ctx.hoveredCardIndex] or nil
+        local sourceCardIndex = ctx.hoveredTomeSpawnPreviewCardIndex or ctx.hoveredCardIndex
+        local hoveredCard = sourceCardIndex and ctx.cards[sourceCardIndex] or nil
 
         if hoveredCard then
-            local drawX, drawY, expansionProgress, renderOptions = ctx.getCardDrawPosition(hoveredCard, ctx.hoveredCardIndex)
+            local drawX, drawY, expansionProgress, renderOptions = ctx.getCardDrawPosition(hoveredCard, sourceCardIndex)
             local cardWidth, collapsedHeight = ctx.carddraw.getCardSize(renderOptions)
             local _, expandedHeight = ctx.carddraw.getExpandedCardSize(renderOptions)
             local cardHeight = collapsedHeight + ((expandedHeight - collapsedHeight) * (expansionProgress or 0))
@@ -248,6 +327,25 @@ function gamestatedraw.draw(ctx)
                 cardWidth,
                 cardHeight,
                 ctx.hoveredTomeSpawnPreviewLabel or "SUMMON"
+            )
+        end
+    elseif ctx.hoveredCardAbilityPreviewDefinition then
+        local sourceCardIndex = ctx.hoveredCardAbilityPreviewCardIndex or ctx.hoveredCardIndex
+        local sourceCard = sourceCardIndex and ctx.cards[sourceCardIndex] or nil
+
+        if sourceCard then
+            local drawX, drawY, expansionProgress, renderOptions = ctx.getCardDrawPosition(sourceCard, sourceCardIndex)
+            local cardWidth, collapsedHeight = ctx.carddraw.getCardSize(renderOptions)
+            local _, expandedHeight = ctx.carddraw.getExpandedCardSize(renderOptions)
+            local cardHeight = collapsedHeight + ((expandedHeight - collapsedHeight) * (expansionProgress or 0))
+
+            ctx.envdraw.drawJaclSpecialTooltip(
+                ctx.hoveredCardAbilityPreviewDefinition,
+                ctx.hoveredCardAbilityPreviewCards and ctx.hoveredCardAbilityPreviewCards[1] or nil,
+                drawX,
+                drawY,
+                cardWidth,
+                cardHeight
             )
         end
     elseif ctx.hoveredKeyword and ctx.hoveredKeyword.previewCardDefinition then
@@ -283,14 +381,11 @@ function gamestatedraw.draw(ctx)
         )
     end
 
-    if ctx.hoverPreview then
+    if ctx.hoverPreview and not ctx.mulliganActive then
         ctx.envdraw.drawHoverPreview(ctx.hoverPreview, ctx.drawCardStateOverlays)
     end
 
-    if ctx.primedJaclSpecial and ctx.primedJaclSpecial.resourceName then
-        local mouseX, mouseY = love.mouse.getPosition()
-        ctx.envdraw.drawFloatingMethodBadge(ctx.primedJaclSpecial.resourceName, mouseX + 16, mouseY + 16)
-    elseif ctx.primedActivatedAbility and ctx.primedActivatedAbility.resourceName then
+    if ctx.primedActivatedAbility and ctx.primedActivatedAbility.resourceName and not ctx.mulliganActive then
         local mouseX, mouseY = love.mouse.getPosition()
         ctx.envdraw.drawFloatingMethodBadge(ctx.primedActivatedAbility.resourceName, mouseX + 16, mouseY + 16)
     end

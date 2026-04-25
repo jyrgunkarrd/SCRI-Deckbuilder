@@ -97,7 +97,13 @@ function targetoverlays.getStrategyBracketColor()
 end
 
 function targetoverlays.drawTopSlotBrackets(slots, context)
-    if not context or (not context.hoveredCardIndex and not context.hoveredTopSlotId and not context.selectedAttackerCardIndex) then
+    if not context
+        or (
+            not context.hoveredCardIndex
+            and not context.hoveredTopSlotId
+            and not context.selectedAttackerCardIndex
+            and not context.primedActivatedAbility
+        ) then
         return
     end
 

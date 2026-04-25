@@ -187,6 +187,18 @@ local dice = {
         },
 
         {
+            id = "HCQDMG4",
+            type = "HvyMeleeWeap",
+            value = 4,
+            action = "attack",
+            target = "enemy_card",
+            selfBlock = true,
+            heavy = true,
+            facename = "Heavy Close Quarters Attack",
+            facedesc = "Deal damage to a target troop with the highest health or Champion. This card gains block.",
+        },
+
+        {
             id = "MLDMG3",
             type = "Maul",
             value = 3,

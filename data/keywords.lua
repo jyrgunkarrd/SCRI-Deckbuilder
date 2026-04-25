@@ -70,6 +70,24 @@ local keywords = {
             hasvalue = 1,
 
         },
+
+        {
+            id = "KWPILOT",
+            name = "Pilot",
+            text = "This card is being piloted by the shown card.",
+        },
+
+        {
+            id = "KWTOUGH",
+            name = "Tough",
+            text = "Damage dealt to this card is reduced to 1. This keyword is exhausted after being triggered.",
+        },
+
+        {
+            id = "KWBULLETPROOF",
+            name = "Bulletproof",
+            text = "Damage dealt to this card is reduced to 1.",
+        },
 }
 
 return keywords

@@ -3,35 +3,81 @@
 
 local decks = {
 
-    --- Player Decks ---
+    --- Player JACL Decks ---
     
         {
             id = "DCK001",
-            name = "Demo",
+            name = "VALSHAMR",
             cards = {
                 {
-                    cardId = "AEGSPMSL",
+                    cardId = "AEGBLK",
+                    quantity = 4,
+                },
+
+                {
+                    cardId = "AEGPSYBOM",
                     quantity = 2,
                 },
 
                 {
-                    cardId = "B6VIC",
-                    quantity = 3,
+                    cardId = "AEGLXSKY",
+                    quantity = 2,
                 },
 
                 {
-                    cardId = "MAMHNT",
-                    quantity = 3,
+                    cardId = "AEGTMINGO",
+                    quantity = 1,
                 },
 
                 {
-                    cardId = "MAMGRZ",
+                    cardId = "AEGPSYRAP",
+                    quantity = 2,
+                },
+
+                {
+                    cardId = "AEGSPMSL",
                     quantity = 1,
                 },
             },
         },
 
-    --- Champion decks
+    --- Agent dekcs ---
+
+    {
+        id = "AGB6",
+        name = "BETTY SIX",
+        cards = {
+            {
+                cardId = "B6VIC",
+                quantity = 2,
+            },
+
+            {
+                cardId = "B6CYBLD",
+                quantity = 1,
+            },
+
+        },
+    },
+
+    {
+        id = "AGMAM",
+        name = "MAMMOTH",
+        cards = {
+            {
+                cardId = "MAMHNT",
+                quantity = 2,
+            },
+
+            {
+                cardId = "MAMGRZ",
+                quantity = 1,
+            },
+
+        },
+    },
+
+    --- Champion decks ---
 
         {
             id = "DCK002",

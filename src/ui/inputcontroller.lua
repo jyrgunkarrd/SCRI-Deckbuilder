@@ -5,6 +5,10 @@ local function clearHoverAndExpansion(gameState)
     gameState.expandedTopSlotId = nil
     gameState.hoveredCardIndex = nil
     gameState.hoveredKeyword = nil
+    gameState.hoveredCardAbilityPreviewCards = nil
+    gameState.hoveredCardAbilityPreviewLabel = nil
+    gameState.hoveredCardAbilityPreviewDefinition = nil
+    gameState.hoveredCardAbilityPreviewCardIndex = nil
 end
 
 local function handleModals(x, y, button, deps)
@@ -22,6 +26,57 @@ local function handleModals(x, y, button, deps)
     return false
 end
 
+local function isPointInRect(x, y, rect)
+    return rect
+        and x >= rect.x
+        and x <= rect.x + rect.width
+        and y >= rect.y
+        and y <= rect.y + rect.height
+end
+
+local function handleMulligan(gameState, deps, x, y, button)
+    if not gameState.mulliganActive then
+        return false
+    end
+
+    if button ~= 1 then
+        return true
+    end
+
+    if gameState.mulliganResolving then
+        return true
+    end
+
+    local layout = deps.envdraw.getMulliganPromptLayout()
+
+    if isPointInRect(x, y, layout.button) then
+        deps.resolveOpeningMulligan()
+        clearHoverAndExpansion(gameState)
+        return true
+    end
+
+    deps.updateHoveredCard()
+
+    for cardIndex = #gameState.cards, 1, -1 do
+        local card = gameState.cards[cardIndex]
+
+        if card
+            and card.location
+            and card.location.kind == "hand"
+            and not deps.isTomeCard(card) then
+            local drawX, drawY, expansionProgress, renderOptions = deps.getCardDrawPosition(card, cardIndex)
+
+            if deps.carddraw.isPointInsideDrawnCard(x, y, drawX, drawY, expansionProgress, nil, renderOptions) then
+                gameState.mulliganSelection = gameState.mulliganSelection or {}
+                gameState.mulliganSelection[cardIndex] = not gameState.mulliganSelection[cardIndex] or nil
+                return true
+            end
+        end
+    end
+
+    return true
+end
+
 function inputcontroller.mousepressed(gameState, deps, x, y, button)
     if button ~= 1 and button ~= 2 and button ~= 3 then
         return
@@ -32,6 +87,10 @@ function inputcontroller.mousepressed(gameState, deps, x, y, button)
             gameState.fullArtImage = nil
         end
 
+        return
+    end
+
+    if handleMulligan(gameState, deps, x, y, button) then
         return
     end
 
@@ -128,7 +187,7 @@ function inputcontroller.mousepressed(gameState, deps, x, y, button)
     if button == 1
         and not gameState.selectedAttackerCardIndex
         and gameState.hoveredCardIndex
-        and deps.tryUseTomeCard(gameState.hoveredCardIndex) then
+        and deps.tryUseTomeCard(gameState.hoveredCardIndex, x, y) then
         deps.sfxrules.playResourcePlay()
         return
     end
@@ -233,6 +292,10 @@ function inputcontroller.mousepressed(gameState, deps, x, y, button)
 end
 
 function inputcontroller.wheelmoved(gameState, deps, _, y)
+    if gameState.mulliganActive then
+        return
+    end
+
     local modalState = deps.buildModalState()
 
     if deps.modals.handleWheelMoved(y, modalState, {
@@ -243,6 +306,12 @@ function inputcontroller.wheelmoved(gameState, deps, _, y)
 end
 
 function inputcontroller.mousereleased(gameState, deps, x, y, button)
+    if gameState.mulliganActive then
+        gameState.draggedCardIndex = nil
+        gameState.draggedCardOrigin = nil
+        return
+    end
+
     if button ~= 1 or not gameState.draggedCardIndex then
         return
     end
@@ -336,6 +405,16 @@ function inputcontroller.mousereleased(gameState, deps, x, y, button)
 end
 
 function inputcontroller.keypressed(gameState, deps, key)
+    if gameState.mulliganActive then
+        if not gameState.mulliganResolving
+            and (key == "return" or key == "kpenter" or key == "space") then
+            deps.resolveOpeningMulligan()
+            clearHoverAndExpansion(gameState)
+        end
+
+        return
+    end
+
     if deps.hasPendingStrategySelection and deps.hasPendingStrategySelection() and key == "space" then
         return
     end

@@ -8,6 +8,7 @@ local sfxrules = require("src.audio.sfxrules")
 local pendingWarRolls = {}
 local warRollDisplayStates = {}
 local playerAttackTargets = {}
+local activeWarCards = nil
 local ROLLS_PER_UPDATE = 1
 local ROLL_SETTLE_DELAY = 0.16
 local rollSettleTimer = 0
@@ -69,8 +70,62 @@ local function findGridCardIndexAt(cards, rowId, column, ignoredCardIndex)
     return nil
 end
 
-local function canAttackTarget(attackerDefinition, targetDefinition, attackerCard, targetCard, attackContext)
+local function getHighestCurrentTroopHealthInRow(cards, rowId)
+    local highestHealth = nil
+
+    for _, card in ipairs(cards or {}) do
+        if card
+            and card.location
+            and card.location.kind == "grid"
+            and card.location.rowId == rowId
+            and not card.destroyed
+            and not card.destroying then
+            local definition = cardregistry.getCard(card.setName, card.cardId)
+
+            if definition and definition.type == "troop" then
+                cardinstances.initializeHealth(card)
+
+                local currentHealth = tonumber(card.currentHealth) or 0
+
+                if highestHealth == nil or currentHealth > highestHealth then
+                    highestHealth = currentHealth
+                end
+            end
+        end
+    end
+
+    return highestHealth
+end
+
+local function isHeavyRestrictedTarget(targetDefinition, targetCard, attackContext, cards)
+    if not attackContext
+        or attackContext.heavy ~= true
+        or not targetDefinition
+        or targetDefinition.type ~= "troop"
+        or not targetCard
+        or not targetCard.location
+        or targetCard.location.kind ~= "grid"
+        or not targetCard.location.rowId then
+        return false
+    end
+
+    local targetCards = cards or activeWarCards
+    local highestHealth = getHighestCurrentTroopHealthInRow(targetCards, targetCard.location.rowId)
+
+    if highestHealth == nil then
+        return false
+    end
+
+    cardinstances.initializeHealth(targetCard)
+    return (tonumber(targetCard.currentHealth) or 0) < highestHealth
+end
+
+local function canAttackTarget(attackerDefinition, targetDefinition, attackerCard, targetCard, attackContext, cards)
     if targetDefinition and (targetDefinition.type == TOME_CARD_TYPE or targetDefinition.type == CACHE_CARD_TYPE) then
+        return false
+    end
+
+    if isHeavyRestrictedTarget(targetDefinition, targetCard, attackContext, cards) then
         return false
     end
 
@@ -265,6 +320,7 @@ local function getNormalizedFaceBehavior(faceDefinition)
             gainSyntac = false,
             immac = false,
             lrange = false,
+            heavy = false,
             selfBlock = false,
             selfHeal = false,
             sabotageObjective = false,
@@ -348,6 +404,7 @@ local function getNormalizedFaceBehavior(faceDefinition)
         or hasTargetType(faceDefinition.targ, "Tac")
     local immac = faceDefinition.immac == true
     local lrange = faceDefinition.lrange == true
+    local heavy = faceDefinition.heavy == true
     local selfBlock = faceDefinition.selfBlock == true or hasTargetType(faceDefinition.targ, "closeatk")
     local selfHeal = faceDefinition.selfHeal == true or hasTargetType(faceDefinition.targ, "maulatk")
     local sabotageObjective = faceDefinition.sabotageObjective == true or hasTargetType(faceDefinition.targ, "AtkSab")
@@ -360,6 +417,7 @@ local function getNormalizedFaceBehavior(faceDefinition)
         gainSyntac = gainSyntac,
         immac = immac,
         lrange = lrange,
+        heavy = heavy,
         selfBlock = selfBlock,
         selfHeal = selfHeal,
         sabotageObjective = sabotageObjective,
@@ -494,6 +552,7 @@ local function buildRollState(entityKey, definition, faceIndices, isEnemy, prese
         gainSyntac = normalizedBehavior.gainSyntac,
         immac = normalizedBehavior.immac,
         lrange = normalizedBehavior.lrange,
+        heavy = normalizedBehavior.heavy,
         selfBlock = normalizedBehavior.selfBlock,
         selfHeal = normalizedBehavior.selfHeal,
         sabotageObjective = normalizedBehavior.sabotageObjective,
@@ -527,6 +586,7 @@ function warrules.reset()
     pendingWarRolls = {}
     warRollDisplayStates = {}
     playerAttackTargets = {}
+    activeWarCards = nil
     rollSettleTimer = 0
     pendingRetaliations = {}
     retaliateTimer = 0
@@ -736,7 +796,7 @@ local function isLegalPlayerAttackTarget(cards, cardIndex, attackerDefinition, a
 
     local card = cards[cardIndex]
     local definition = cardregistry.getCard(card.setName, card.cardId)
-    return canAttackTarget(attackerDefinition, definition, attackerCard, card, attackContext)
+    return canAttackTarget(attackerDefinition, definition, attackerCard, card, attackContext, cards)
 end
 
 local function shouldRetargetPlayerAttack(cards, cardIndex, attackerDefinition, attackerCard, attackContext)
@@ -747,7 +807,7 @@ local function shouldRetargetPlayerAttack(cards, cardIndex, attackerDefinition, 
     local card = cards[cardIndex]
     local definition = cardregistry.getCard(card.setName, card.cardId)
 
-    return not canAttackTarget(attackerDefinition, definition, attackerCard, card, attackContext)
+    return not canAttackTarget(attackerDefinition, definition, attackerCard, card, attackContext, cards)
 end
 
 local function findClosestLegalPlayerAttackTarget(cards, sourceDefinition, sourceCard, originalColumn, attackContext)
@@ -838,7 +898,7 @@ function warrules.redirectIncomingAttacks(cards, fromCardIndex, toCardIndex)
             and rollState.faceIndex
             and canTargetEnemyCard(rollState)
             and rollState.targetCardIndex == fromCardIndex
-            and canAttackTarget(rollState.sourceDefinition, targetDefinition, rollState.sourceCard, targetCard, rollState) then
+            and canAttackTarget(rollState.sourceDefinition, targetDefinition, rollState.sourceCard, targetCard, rollState, cards) then
             rollState.targetCardIndex = toCardIndex
             rollState.targetCard = targetPreview
             rollState.targetColumn = targetCard.location.column
@@ -1308,6 +1368,7 @@ function warrules.beginPhase(topSlotTargets, cards, primaryObjectiveDefinition, 
     pendingWarRolls = {}
     warRollDisplayStates = {}
     playerAttackTargets = {}
+    activeWarCards = cards
     rollSettleTimer = 0
     objectiveTargetPreview = primaryObjectiveDefinition and {
         kind = "objective",
@@ -1416,8 +1477,12 @@ function warrules.update(dt, currentPhase)
     end
 end
 
-function warrules.canAttackTarget(attackerDefinition, targetDefinition, attackerCard, targetCard, attackContext)
-    return canAttackTarget(attackerDefinition, targetDefinition, attackerCard, targetCard, attackContext)
+function warrules.canAttackTarget(attackerDefinition, targetDefinition, attackerCard, targetCard, attackContext, cards)
+    return canAttackTarget(attackerDefinition, targetDefinition, attackerCard, targetCard, attackContext, cards)
+end
+
+function warrules.canTargetCardByHeavyRestriction(targetDefinition, targetCard, attackContext, cards)
+    return not isHeavyRestrictedTarget(targetDefinition, targetCard, attackContext, cards)
 end
 
 return warrules

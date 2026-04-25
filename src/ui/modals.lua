@@ -51,81 +51,7 @@ function modals.getHoveredJaclDeckModalCard(mouseX, mouseY, envdraw, activeDeckM
 end
 
 function modals.primeJaclSpecial(resourceName, state, deps)
-    if deps.turnrules.getCurrentPhase() ~= "Prelude" then
-        return false
-    end
-
-    if not state.playerJacl or not state.playerJacl.special or not resourceName then
-        return false
-    end
-
-    if deps.resourcerules.getResourceCount(resourceName) < 1 then
-        return false
-    end
-
-    local specialDefinition = deps.specialrules.getSpecial(state.playerJacl.special)
-
-    if not specialDefinition then
-        return false
-    end
-
-    state.primedJaclSpecial = {
-        resourceName = resourceName,
-        definition = specialDefinition,
-    }
-
-    return true
-end
-
-function modals.tryUsePrimedJaclSpecial(mouseX, mouseY, state, deps)
-    if not state.primedJaclSpecial or not state.primedJaclSpecial.definition then
-        return false
-    end
-
-    if deps.turnrules.getCurrentPhase() ~= "Prelude" then
-        state.primedJaclSpecial = nil
-        return false
-    end
-
-    if deps.resourcerules.getResourceCount(state.primedJaclSpecial.resourceName) < 1 then
-        state.primedJaclSpecial = nil
-        return false
-    end
-
-    local targetCell = deps.getValidJaclSpecialTargetCell(mouseX, mouseY)
-
-    if not targetCell then
-        return false
-    end
-
-    local specialDefinition = state.primedJaclSpecial.definition
-
-    if specialDefinition.spawn then
-        local cardDefinition = deps.cardregistry.getCardById(specialDefinition.spawn)
-
-        if not cardDefinition then
-            return false
-        end
-
-        local generatedCard = deps.createGeneratedGridCard(cardDefinition, "PlayerRow", targetCell.column)
-
-        if not generatedCard then
-            return false
-        end
-
-        deps.resourcerules.payCosts({
-            {
-                resource = state.primedJaclSpecial.resourceName,
-                amount = 1,
-            },
-        })
-
-        state.primedJaclSpecial = nil
-        deps.sfxrules.playUnitPlay()
-        return true
-    end
-
-    return false
+    return deps.abilityrules.primeJaclMethodAbility(resourceName, state, deps)
 end
 
 function modals.tryUsePrimedActivatedAbility(mouseX, mouseY, state, deps)
@@ -133,8 +59,31 @@ function modals.tryUsePrimedActivatedAbility(mouseX, mouseY, state, deps)
         return false
     end
 
-    local targetCardIndex = deps.getGridCardAt(mouseX, mouseY)
+    local targetRules = state.primedActivatedAbility.definition.target or nil
 
+    if targetRules and targetRules.kind == "player_row_cell" then
+        local targetCell = deps.getValidJaclSpecialTargetCell(mouseX, mouseY)
+
+        if not targetCell then
+            return false
+        end
+
+        targetCell.rowId = targetCell.rowId or targetRules.rowId
+        return deps.abilityrules.resolvePrimedAbility(targetCell, state, deps)
+    end
+
+    if targetRules and targetRules.kind == "enemy_card_or_champion" then
+        local topSlotId = deps.getHoveredTopSlotId and deps.getHoveredTopSlotId(mouseX, mouseY) or nil
+
+        if topSlotId == "champion" then
+            return deps.abilityrules.resolvePrimedAbility({
+                kind = "top_slot",
+                slotId = topSlotId,
+            }, state, deps)
+        end
+    end
+
+    local targetCardIndex = deps.getGridCardAt(mouseX, mouseY)
     if not targetCardIndex then
         return false
     end
@@ -234,12 +183,11 @@ function modals.handleResourceExchangeMousePressed(x, y, button, state, deps)
 end
 
 function modals.handlePrimedSpecialMousePressed(x, y, button, state, deps)
-    if not state.primedJaclSpecial and not state.primedActivatedAbility then
+    if not state.primedActivatedAbility then
         return false
     end
 
     if button == 2 then
-        state.primedJaclSpecial = nil
         state.primedActivatedAbility = nil
         return true
     end
@@ -266,10 +214,6 @@ function modals.handlePrimedSpecialMousePressed(x, y, button, state, deps)
         end
 
         if modals.tryUsePrimedActivatedAbility(x, y, state, deps) then
-            return true
-        end
-
-        if modals.tryUsePrimedJaclSpecial(x, y, state, deps) then
             return true
         end
 
@@ -328,11 +272,6 @@ function modals.handleWheelMoved(y, state, deps)
 end
 
 function modals.handleEscapeKey(state)
-    if state.primedJaclSpecial then
-        state.primedJaclSpecial = nil
-        return true
-    end
-
     if state.jaclDeckPreviewCard then
         state.jaclDeckPreviewCard = nil
         return true

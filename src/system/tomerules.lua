@@ -1,6 +1,6 @@
 local tomerules = {}
 
-local TOME_CARD_TYPE = "tome"
+local TOME_SUBCLASS = "Tome"
 
 local funcHandlers = {}
 
@@ -21,6 +21,10 @@ local function isEngagePhase(ctx)
         and ctx.turnrules.getCurrentWarSubphase() == "Engage"
 end
 
+local function isTomeUsePhase(ctx)
+    return ctx.turnrules.getCurrentPhase() == "Prelude" or isEngagePhase(ctx)
+end
+
 funcHandlers.Spawn = function(tomeDefinition, state)
     local tokenCardId = getFirstTargetCardId(tomeDefinition)
     local tokenDefinition = tokenCardId and state.ctx.cardregistry.getCardById(tokenCardId) or nil
@@ -36,7 +40,13 @@ end
 funcHandlers.spawn = funcHandlers.Spawn
 
 function tomerules.isTomeDefinition(cardDefinition)
-    return cardDefinition and cardDefinition.type == TOME_CARD_TYPE or false
+    return cardDefinition
+        and (
+            cardDefinition.subclass == TOME_SUBCLASS
+            or cardDefinition.type == "tome"
+            or cardDefinition.syncost ~= nil
+        )
+        or false
 end
 
 function tomerules.isTomeCard(card, ctx)
@@ -74,12 +84,66 @@ function tomerules.canUseTome(tomeCard, ctx)
     local syntacCost = math.max(0, tonumber(tomeDefinition and tomeDefinition.syncost) or 0)
     local syntacCount = math.max(0, tonumber(ctx.getSyntacCount and ctx.getSyntacCount()) or 0)
 
-    return isEngagePhase(ctx)
+    return isTomeUsePhase(ctx)
         and tomerules.isTomeDefinition(tomeDefinition)
         and tomeCard.location
         and tomeCard.location.kind == "grid"
         and tomeCard.location.rowId == "PlayerRow"
         and syntacCount >= syntacCost
+end
+
+local function getAttachedTome(hostCard, ctx)
+    for attachedIndex, attachedKit in ipairs(hostCard and hostCard.attachedKitCards or {}) do
+        local attachedDefinition = attachedKit and ctx.cardregistry.getCard(attachedKit.setName, attachedKit.cardId) or nil
+
+        if tomerules.isTomeDefinition(attachedDefinition) then
+            return attachedKit, attachedDefinition, attachedIndex
+        end
+    end
+
+    return nil, nil, nil
+end
+
+function tomerules.canUseAttachedTome(hostCard, ctx)
+    local _, tomeDefinition = getAttachedTome(hostCard, ctx)
+    local syntacCost = math.max(0, tonumber(tomeDefinition and tomeDefinition.syncost) or 0)
+    local syntacCount = math.max(0, tonumber(ctx.getSyntacCount and ctx.getSyntacCount()) or 0)
+
+    return isTomeUsePhase(ctx)
+        and hostCard
+        and hostCard.location
+        and hostCard.location.kind == "grid"
+        and hostCard.location.rowId == "PlayerRow"
+        and tomeDefinition ~= nil
+        and syntacCount >= syntacCost
+end
+
+function tomerules.useAttachedTome(hostCardIndex, ctx)
+    local hostCard = hostCardIndex and ctx.cards[hostCardIndex] or nil
+    local attachedTome, tomeDefinition = getAttachedTome(hostCard, ctx)
+
+    if not tomerules.canUseAttachedTome(hostCard, ctx) then
+        return false
+    end
+
+    if not executeTomeEffect(tomeDefinition, {
+        cards = ctx.cards,
+        tomeCardIndex = hostCardIndex,
+        tomeCard = hostCard,
+        hostCardIndex = hostCardIndex,
+        hostCard = hostCard,
+        attachedTome = attachedTome,
+        definition = tomeDefinition,
+        ctx = ctx,
+    }) then
+        return false
+    end
+
+    if ctx.spendSyntac then
+        ctx.spendSyntac(math.max(0, tonumber(tomeDefinition.syncost) or 0))
+    end
+
+    return true
 end
 
 function tomerules.useTome(tomeCardIndex, ctx)

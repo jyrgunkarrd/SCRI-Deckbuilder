@@ -19,6 +19,9 @@ local kit = {
         },
         textbox = "When an attached card is defeated, draw 2 cards.",
         flavor = "Sermon City is never short on deadly surprises.",
+        mcost = {
+            { resource = "The Trigger", amount = 1 },
+        },
     },
 }
 

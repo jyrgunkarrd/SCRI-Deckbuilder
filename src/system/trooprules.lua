@@ -143,12 +143,12 @@ function trooprules.isSpawnPreviewTroopDefinition(troopDefinition)
     local playFuncName = getFuncNameForTrigger(troopDefinition, "play")
     local deathFuncName = getFuncNameForTrigger(troopDefinition, "death")
 
-    return trooprules.isTroopDefinition(troopDefinition)
+    return isUnitDefinition(troopDefinition)
         and (playFuncName == "spawn" or deathFuncName == "spawn")
 end
 
 function trooprules.getPreviewCardIds(troopDefinition)
-    if not trooprules.isTroopDefinition(troopDefinition) then
+    if not isUnitDefinition(troopDefinition) then
         return nil, nil
     end
 

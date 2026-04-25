@@ -108,6 +108,54 @@ function deckrules.buildDeck(deckId)
     return builtDeck
 end
 
+function deckrules.appendDeck(deck, deckId)
+    local deckDefinition = deckrules.getDeckDefinition(deckId)
+
+    if not deck or not deckDefinition then
+        return false
+    end
+
+    for _, deckEntry in ipairs(deckDefinition.cards or {}) do
+        local cardDefinition = cardregistry.getCardById(deckEntry.cardId)
+
+        if cardDefinition then
+            for _ = 1, deckEntry.quantity or 0 do
+                deck.createdCardCount = (deck.createdCardCount or 0) + 1
+                deck.cards[#deck.cards + 1] = createDeckCard(cardDefinition, deck.createdCardCount, {
+                    kind = "deck",
+                })
+            end
+        else
+            deck.missingCards = deck.missingCards or {}
+            deck.missingCards[#deck.missingCards + 1] = {
+                cardId = deckEntry.cardId,
+                quantity = deckEntry.quantity or 0,
+                deckId = deckId,
+            }
+        end
+    end
+
+    return true
+end
+
+function deckrules.buildDeckWithAdditionalDecks(deckId, additionalDeckIds)
+    local deck = deckrules.buildDeck(deckId)
+
+    if not deck then
+        return nil
+    end
+
+    deck.additionalDeckIds = {}
+
+    for _, additionalDeckId in ipairs(additionalDeckIds or {}) do
+        if deckrules.appendDeck(deck, additionalDeckId) then
+            deck.additionalDeckIds[#deck.additionalDeckIds + 1] = additionalDeckId
+        end
+    end
+
+    return deck
+end
+
 function deckrules.discardCard(deck, card)
     if not deck or not card then
         return nil
@@ -229,6 +277,30 @@ function deckrules.drawCardToHand(deck, slotIndex)
         kind = "hand",
         slotIndex = slotIndex,
     })
+end
+
+function deckrules.shuffleCardsIntoDeck(deck, cards)
+    if not deck then
+        return 0
+    end
+
+    local shuffledCount = 0
+
+    for _, card in ipairs(cards or {}) do
+        if card then
+            local deckCard = copyCardInstance(card, {
+                kind = "deck",
+            })
+
+            deckCard.deckOwner = deck.owner or deckCard.deckOwner
+
+            local insertIndex = love.math.random(1, #deck.cards + 1)
+            table.insert(deck.cards, insertIndex, deckCard)
+            shuffledCount = shuffledCount + 1
+        end
+    end
+
+    return shuffledCount
 end
 
 return deckrules

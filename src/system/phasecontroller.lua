@@ -170,14 +170,32 @@ function phasecontroller.enterCurrentPhase(gameState, deps)
     end
 
     if currentPhase == deps.turnrules.getSetupPhase() then
-        gameState.cards = deps.deckrules.assignCardsToHand(gameState.playerDeck, deps.envrules.getPlayerHand().slots, {
-            firstCardId = gameState.playerJacl and gameState.playerJacl.tomeId or nil,
+        local firstCardId = gameState.playerJacl and gameState.playerJacl.tomeId or nil
+        local openingHandSize = firstCardId and 7 or 6
+
+        gameState.cards = deps.deckrules.assignCardsToHand(gameState.playerDeck, openingHandSize, {
+            firstCardId = firstCardId,
         })
+        gameState.mulliganSelection = {}
+        gameState.mulliganActive = gameState.mulliganCompleted ~= true
+        gameState.mulliganResolving = false
+        gameState.mulliganReturnedCards = nil
+        gameState.mulliganPromptAlpha = 0
         deps.initializeCardsHealthState(gameState.cards)
         deps.playHunterAddedSfxForCards(gameState.cards)
         deps.addSetupAgents()
         deps.normalizeSetupCardSlots()
     elseif currentPhase == "Start" then
+        if gameState.playerJacl then
+            gameState.playerJacl.usedMethodAbilities = nil
+        end
+
+        for _, card in ipairs(gameState.cards or {}) do
+            if card then
+                card.usedMethodAbilities = nil
+            end
+        end
+
         local gridCardGenerators = buildStartPhaseGenerators(gameState, deps)
         deps.resourcerules.enterStartPhase(gameState.playerJacl, deps.envdraw.getBottomLeftPanelLayout(gameState.playerJacl), deps.envdraw.getResourceTrackerLayout(), gridCardGenerators)
         gameState.waitingForStartGeneration = true
@@ -199,6 +217,7 @@ function phasecontroller.enterCurrentPhase(gameState, deps)
         deps.warrules.clearAllRollResults()
         deps.clearAllBlocking()
         deps.temporaryeffects.clearAllEndPhaseEffects()
+        deps.keywordrules.refreshEndPhaseKeywords(gameState.cards)
         for _, expiredCardIndex in ipairs(deps.keywordrules.decrementEndPhaseKeywords(gameState.cards)) do
             deps.removeCardFromPlay(expiredCardIndex)
         end
@@ -220,6 +239,10 @@ function phasecontroller.completeSetupPhaseIfReady(gameState, deps)
     end
 
     if deps.getSetupCardCount() > 0 then
+        return
+    end
+
+    if gameState.mulliganActive then
         return
     end
 
