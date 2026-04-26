@@ -17,6 +17,7 @@ local JACL_LABEL_FONT_PATH = "assets/fonts/Furore.otf"
 local CHAMP_LABEL_FONT_PATH = "assets/fonts/Furore.otf"
 local PHASE_TRACKER_FONT_PATH = "assets/fonts/Furore.otf"
 local RESOURCE_COUNTER_FONT_PATH = "assets/fonts/BITSUMIS.TTF"
+local CARD_FLAVOR_FONT_PATH = "assets/fonts/DejaVuSans-Oblique.ttf"
 local PHASE_TRACKER_X = 24
 local PHASE_TRACKER_WIDTH = 180
 local PHASE_TRACKER_STEP_HEIGHT = 54
@@ -139,6 +140,7 @@ local CHAMP_HEALTH_PIP_COLUMNS = 20
 local TOP_SLOT_PIP_MAX_SIZE_RATIO = 0.18
 local TOP_SLOT_TEXTBOX_FONT_PATH = "assets/fonts/Furore.otf"
 local TOP_SLOT_TEXTBOX_FONT_SIZE = 12
+local TOP_SLOT_FLAVOR_FONT_SIZE = 12
 local TOP_SLOT_TEXTBOX_PADDING = 14
 local TOP_SLOT_EMPHASIS_BADGE_SIZE_RATIO = 0.1425
 
@@ -1036,6 +1038,58 @@ local function expandMethodEntries(methodEntries)
     return expandedResources
 end
 
+local function getTopSlotMethodBadgeLayout(slotX, slotY, slotWidth, labelHeight, labelPadding, methodEntries)
+    local expandedResources = expandMethodEntries(methodEntries)
+    local badgeSize = math.max(12, snap(math.min(JACL_METHOD_BADGE_SIZE, labelHeight - 6)))
+    local badgeGap = math.max(2, snap(badgeSize * 0.12))
+    local totalWidth = (#expandedResources * badgeSize) + (math.max(0, #expandedResources - 1) * badgeGap)
+    local startX = snap(slotX + slotWidth - labelPadding - totalWidth)
+    local startY = snap(slotY + ((labelHeight - badgeSize) / 2))
+    local centers = {}
+    local badges = {}
+
+    for badgeIndex, resourceName in ipairs(expandedResources) do
+        local badgeX = startX + ((badgeIndex - 1) * (badgeSize + badgeGap))
+
+        centers[#centers + 1] = {
+            resource = resourceName,
+            x = badgeX + (badgeSize / 2),
+            y = startY + (badgeSize / 2),
+        }
+        badges[#badges + 1] = {
+            resource = resourceName,
+            x = badgeX,
+            y = startY,
+            width = badgeSize,
+            height = badgeSize,
+        }
+    end
+
+    return centers, badges
+end
+
+local function drawMethodBadges(methodBadges)
+    for _, badge in ipairs(methodBadges or {}) do
+        local methodImage = getMethodImage(badge.resource)
+
+        love.graphics.setColor(0.12, 0.13, 0.16, 0.95)
+        love.graphics.rectangle("fill", badge.x, badge.y, badge.width, badge.height)
+        love.graphics.setColor(0.87, 0.87, 0.9, 0.9)
+        love.graphics.rectangle("line", badge.x, badge.y, badge.width, badge.height)
+
+        if methodImage then
+            local imageScale = math.min(badge.width / methodImage:getWidth(), badge.height / methodImage:getHeight())
+            local imageWidth = methodImage:getWidth() * imageScale
+            local imageHeight = methodImage:getHeight() * imageScale
+            local imageX = badge.x + ((badge.width - imageWidth) / 2)
+            local imageY = badge.y + ((badge.height - imageHeight) / 2)
+
+            love.graphics.setColor(1, 1, 1, 1)
+            love.graphics.draw(methodImage, imageX, imageY, 0, imageScale, imageScale)
+        end
+    end
+end
+
 function envdraw.getGridLayout()
     local rows = envrules.getRows()
     local gridRows = #rows
@@ -1192,6 +1246,9 @@ buildTopStripLayout = function(championDefinition, currentPhase, warzoneDefiniti
 
     local function addSlot(slotId, slotX, slotY, slotWidth, slotHeight, labelHeight, labelPadding, labelFont, accentColor, nameColor, rightTextColor, nameText, rightText, rightPipCount, maxPipCount, previewPipCount, previewOverlaysExisting, previewExtendPipCount, slotLabel, image, textbox, definition, hideHeader)
         local imageRect = getTopSlotImageRect(slotX, slotY, slotWidth, slotHeight, labelHeight, image)
+        local slotTextbox = textbox or definition and definition.flavor or nil
+        local isFlavorTextbox = textbox == nil and definition and definition.flavor ~= nil
+        local methodBadgeCenters, methodBadges = getTopSlotMethodBadgeLayout(slotX, slotY, slotWidth, labelHeight, labelPadding, definition and definition.method or nil)
 
         slots[#slots + 1] = {
             id = slotId,
@@ -1215,7 +1272,10 @@ buildTopStripLayout = function(championDefinition, currentPhase, warzoneDefiniti
             slotLabel = slotLabel,
             image = image,
             imageRect = imageRect,
-            textbox = textbox,
+            textbox = slotTextbox,
+            isFlavorTextbox = isFlavorTextbox,
+            methodBadgeCenters = methodBadgeCenters,
+            methodBadges = methodBadges,
             definition = definition,
             hideHeader = hideHeader == true,
             hideBodyOutline = false,
@@ -1260,9 +1320,23 @@ buildTopStripLayout = function(championDefinition, currentPhase, warzoneDefiniti
         local rightTextWidth = rightText and labelFont:getWidth(rightText) or 0
         local rightTextPadding = (rightText or rightPipCount) and labelPadding or 0
         local rightPipAreaWidth = 0
+        local _, methodBadges = getTopSlotMethodBadgeLayout(slotX, slotY, slotWidth, labelHeight, labelPadding, definition and definition.method or nil)
+        local methodBadgeAreaWidth = 0
+
+        if methodBadges and #methodBadges > 0 then
+            local firstBadge = methodBadges[1]
+            local lastBadge = methodBadges[#methodBadges]
+            methodBadgeAreaWidth = (lastBadge.x + lastBadge.width) - firstBadge.x
+        end
 
         if rightPipCount and rightPipCount > 0 or maxPipCount and maxPipCount > 0 then
-            rightPipAreaWidth = math.min(slotWidth * 0.48, math.max(labelHeight * 2.4, slotWidth * 0.34))
+            local basePipAreaWidth = math.max(labelHeight * 2.4, slotWidth * 0.34)
+
+            if methodBadgeAreaWidth > 0 then
+                basePipAreaWidth = basePipAreaWidth + methodBadgeAreaWidth + math.max(2, snap(labelHeight * 0.08))
+            end
+
+            rightPipAreaWidth = math.min(slotWidth * 0.62, basePipAreaWidth)
             rightTextWidth = rightPipAreaWidth
         end
 
@@ -1298,7 +1372,8 @@ buildTopStripLayout = function(championDefinition, currentPhase, warzoneDefiniti
             local columnCount = math.min(CHAMP_HEALTH_PIP_COLUMNS, math.max(1, maxCount))
             local rowCount = math.max(1, math.ceil(math.max(1, maxCount) / CHAMP_HEALTH_PIP_COLUMNS))
             local pipGap = math.max(1, snap(labelHeight * 0.06))
-            local availableWidth = math.max(1, rightPipAreaWidth)
+            local methodBadgeGap = methodBadgeAreaWidth > 0 and math.max(2, snap(labelHeight * 0.08)) or 0
+            local availableWidth = math.max(1, rightPipAreaWidth - methodBadgeAreaWidth - methodBadgeGap)
             local availableHeight = math.max(1, labelHeight - 4)
             local pipSizeByWidth = (availableWidth - ((columnCount - 1) * pipGap)) / math.max(1, columnCount)
             local pipSizeByHeight = (availableHeight - ((rowCount - 1) * pipGap)) / rowCount
@@ -1306,7 +1381,8 @@ buildTopStripLayout = function(championDefinition, currentPhase, warzoneDefiniti
             local pipSize = math.max(1, snap(math.min(pipSizeByWidth, pipSizeByHeight, maxDefaultPipSize)))
             local totalGridWidth = (columnCount * pipSize) + ((columnCount - 1) * pipGap)
             local totalGridHeight = (rowCount * pipSize) + ((rowCount - 1) * pipGap)
-            local startX = snap(slotX + slotWidth - labelPadding - rightPipAreaWidth + ((availableWidth - totalGridWidth) / 2))
+            local pipAreaX = slotX + slotWidth - labelPadding - rightPipAreaWidth
+            local startX = snap(pipAreaX + ((availableWidth - totalGridWidth) / 2))
             local startY = snap(slotY + ((labelHeight - totalGridHeight) / 2))
 
             if maxPipCount and maxPipCount > 0 then
@@ -1366,6 +1442,8 @@ buildTopStripLayout = function(championDefinition, currentPhase, warzoneDefiniti
                     love.graphics.rectangle("fill", pipX, pipY, pipSize, pipSize)
                 end
             end
+
+            drawMethodBadges(methodBadges)
         elseif rightText then
             love.graphics.setColor(rightTextColor[1], rightTextColor[2], rightTextColor[3], 1)
             love.graphics.print(
@@ -1425,6 +1503,13 @@ buildTopStripLayout = function(championDefinition, currentPhase, warzoneDefiniti
             local badgeY = snap(imageRect.y + badgeInset)
 
             carddraw.drawDefinitionRollBadge(definition, badgeX, badgeY, badgeWidth, badgeHeight, rollState.faceIndex, rollState.pulseScale)
+
+            if rollState.locked then
+                love.graphics.setColor(1, 0.847, 0.219, 0.95)
+                love.graphics.setLineWidth(3)
+                love.graphics.rectangle("line", badgeX - 1, badgeY - 1, badgeWidth + 2, badgeHeight + 2)
+                love.graphics.setLineWidth(1)
+            end
         end
 
         if rollState and rollState.targetCard then
@@ -1481,7 +1566,11 @@ function envdraw.getTopSlotHit(mouseX, mouseY, currentPhase, championDefinition,
     end
 
     for _, slot in ipairs(slots) do
-        if slot.textbox and mouseX >= slot.x and mouseX <= slot.x + slot.width and mouseY >= slot.y and mouseY <= slot.y + slot.labelHeight + slot.height then
+        if slot.definition
+            and mouseX >= slot.x
+            and mouseX <= slot.x + slot.width
+            and mouseY >= slot.y
+            and mouseY <= slot.y + slot.labelHeight + slot.height then
             return slot.id
         end
     end
@@ -1565,6 +1654,37 @@ function envdraw.getHoveredTopSlotDiceFace(mouseX, mouseY, currentPhase, champio
     return nil
 end
 
+function envdraw.getTopSlotRollBadgeHit(mouseX, mouseY, currentPhase, championDefinition, warzoneDefinition, poiDefinition, objectiveDefinition, intelDefinition, rollStates)
+    local slots = buildTopStripLayout(championDefinition, currentPhase, warzoneDefinition, poiDefinition, objectiveDefinition, intelDefinition)
+
+    if not slots then
+        return nil
+    end
+
+    for _, slot in ipairs(slots) do
+        local rollState = rollStates and rollStates[slot.id] or nil
+
+        if slot.imageRect and rollState and rollState.faceIndex then
+            local badgeInset = math.max(4, snap(slot.imageRect.width * 0.035))
+            local badgeWidth = math.max(20, snap(slot.imageRect.width * 0.115 * 1.12))
+            local badgeHeaderHeight = snap(badgeWidth * 0.44)
+            local badgeBodyHeight = badgeWidth
+            local badgeHeight = badgeHeaderHeight + badgeBodyHeight
+            local badgeX = snap(slot.imageRect.x + slot.imageRect.width - badgeInset - badgeWidth)
+            local badgeY = snap(slot.imageRect.y + badgeInset)
+
+            if mouseX >= badgeX
+                and mouseX <= badgeX + badgeWidth
+                and mouseY >= badgeY
+                and mouseY <= badgeY + badgeHeight then
+                return slot.id
+            end
+        end
+    end
+
+    return nil
+end
+
 function envdraw.getTopSlotLayouts(currentPhase, championDefinition, warzoneDefinition, poiDefinition, objectiveDefinition, intelDefinition, warzonePreviewState, objectivePreviewPips, intelPreviewPips)
     return buildTopStripLayout(championDefinition, currentPhase, warzoneDefinition, poiDefinition, objectiveDefinition, intelDefinition, warzonePreviewState, objectivePreviewPips, intelPreviewPips) or {}
 end
@@ -1586,6 +1706,7 @@ function envdraw.getTopSlotRollTargets(currentPhase, championDefinition, warzone
             rollTargets[#rollTargets + 1] = {
                 id = slot.id,
                 definition = slot.definition,
+                isEnemy = slot.definition.allied ~= true,
             }
         end
     end
@@ -1688,7 +1809,9 @@ function envdraw.drawChampion(championDefinition, currentPhase, warzoneDefinitio
             local textboxX = snap(slot.x)
             local textboxY = snap(slot.y + slot.labelHeight + slot.height)
             local textboxWidth = snap(slot.width)
-            local textboxFont = getFont(TOP_SLOT_TEXTBOX_FONT_PATH, TOP_SLOT_TEXTBOX_FONT_SIZE)
+            local textboxFontPath = slot.isFlavorTextbox and CARD_FLAVOR_FONT_PATH or TOP_SLOT_TEXTBOX_FONT_PATH
+            local textboxFontSize = slot.isFlavorTextbox and TOP_SLOT_FLAVOR_FONT_SIZE or TOP_SLOT_TEXTBOX_FONT_SIZE
+            local textboxFont = getFont(textboxFontPath, textboxFontSize)
             local textboxPadding = snap(TOP_SLOT_TEXTBOX_PADDING * (slot.width / CHAMP_DISPLAY_WIDTH))
 
             love.graphics.setColor(0.18, 0.18, 0.22, 1)

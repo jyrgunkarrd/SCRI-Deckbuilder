@@ -70,7 +70,17 @@ local function findGridCardIndexAt(cards, rowId, column, ignoredCardIndex)
     return nil
 end
 
-local function getHighestCurrentTroopHealthInRow(cards, rowId)
+local function isHeavyComparableTarget(definition)
+    if not definition
+        or definition.type == TOME_CARD_TYPE
+        or definition.type == CACHE_CARD_TYPE then
+        return false
+    end
+
+    return definition.health ~= nil or definition.max ~= nil
+end
+
+local function getHighestCurrentHeavyTargetHealthInRow(cards, rowId)
     local highestHealth = nil
 
     for _, card in ipairs(cards or {}) do
@@ -82,7 +92,7 @@ local function getHighestCurrentTroopHealthInRow(cards, rowId)
             and not card.destroying then
             local definition = cardregistry.getCard(card.setName, card.cardId)
 
-            if definition and definition.type == "troop" then
+            if isHeavyComparableTarget(definition) then
                 cardinstances.initializeHealth(card)
 
                 local currentHealth = tonumber(card.currentHealth) or 0
@@ -101,7 +111,7 @@ local function isHeavyRestrictedTarget(targetDefinition, targetCard, attackConte
     if not attackContext
         or attackContext.heavy ~= true
         or not targetDefinition
-        or targetDefinition.type ~= "troop"
+        or not isHeavyComparableTarget(targetDefinition)
         or not targetCard
         or not targetCard.location
         or targetCard.location.kind ~= "grid"
@@ -110,7 +120,7 @@ local function isHeavyRestrictedTarget(targetDefinition, targetCard, attackConte
     end
 
     local targetCards = cards or activeWarCards
-    local highestHealth = getHighestCurrentTroopHealthInRow(targetCards, targetCard.location.rowId)
+    local highestHealth = getHighestCurrentHeavyTargetHealthInRow(targetCards, targetCard.location.rowId)
 
     if highestHealth == nil then
         return false
@@ -557,7 +567,7 @@ local function buildRollState(entityKey, definition, faceIndices, isEnemy, prese
         selfHeal = normalizedBehavior.selfHeal,
         sabotageObjective = normalizedBehavior.sabotageObjective,
         autoReload = autoReload,
-        exhausted = preserveState and preserveState.exhausted or false,
+        exhausted = (preserveState and preserveState.exhausted) or (sourceCard and sourceCard.preludeStrategyExhausted == true) or false,
         locked = preserveState and preserveState.locked or false,
     }
 end
@@ -653,6 +663,27 @@ function warrules.canCardAttack(cardIndex)
         and (rollState.damageValue or 0) > 0
 end
 
+function warrules.canEntityAttack(entityKey)
+    local rollState = entityKey and warRollDisplayStates[entityKey] or nil
+
+    return rollState
+        and not rollState.exhausted
+        and (
+            canTargetEnemyCard(rollState)
+            or hasTargetType(rollState, "Blk")
+            or hasTargetType(rollState, "Div")
+            or hasTargetType(rollState, "Inf")
+            or hasTargetType(rollState, "rsmn")
+            or hasTargetType(rollState, "Sab")
+            or hasTargetType(rollState, "smn")
+            or hasTargetType(rollState, "Tac")
+            or hasTargetType(rollState, "TacSab")
+            or canTargetPlayerWarzone(rollState)
+            or hasTargetType(rollState, "WZOpp")
+        )
+        and (rollState.damageValue or 0) > 0
+end
+
 function warrules.isCardExhausted(cardIndex)
     local rollState = warrules.getCardRollState(cardIndex)
     return rollState and rollState.exhausted == true or false
@@ -660,6 +691,10 @@ end
 
 function warrules.consumeCardAttack(cardIndex)
     local entityKey = warrules.getCardEntityKey(cardIndex)
+    return warrules.consumeEntityAttack(entityKey)
+end
+
+function warrules.consumeEntityAttack(entityKey)
     local rollState = warRollDisplayStates[entityKey]
 
     if not rollState then
@@ -682,6 +717,18 @@ function warrules.exhaustCard(cardIndex)
     end
 
     rollState.exhausted = true
+    rollState.locked = false
+    return true
+end
+
+function warrules.refreshCardExhaustion(cardIndex)
+    local rollState = warrules.getCardRollState(cardIndex)
+
+    if not rollState then
+        return false
+    end
+
+    rollState.exhausted = false
     rollState.locked = false
     return true
 end
@@ -911,6 +958,14 @@ end
 
 function warrules.toggleCardLock(cardIndex)
     local rollState = warrules.getCardRollState(cardIndex)
+    return warrules.toggleEntityLock(rollState)
+end
+
+function warrules.toggleTopSlotLock(slotId)
+    return warrules.toggleEntityLock(slotId and warRollDisplayStates[slotId] or nil)
+end
+
+function warrules.toggleEntityLock(rollState)
 
     if not rollState or not rollState.faceIndex or rollState.exhausted then
         return false
@@ -920,7 +975,7 @@ function warrules.toggleCardLock(cardIndex)
     return rollState.locked
 end
 
-function warrules.rerollUnlockedPlayerCards(cards)
+function warrules.rerollUnlockedPlayerCards(cards, alliedTopSlots)
     local rerolledAny = false
     local rowCards = {}
 
@@ -954,6 +1009,25 @@ function warrules.rerollUnlockedPlayerCards(cards)
 
             if #faceIndices > 0 then
                 warRollDisplayStates[entityKey] = buildRollState(entityKey, definition, faceIndices, false, existingState, rowCard.card)
+                rerolledAny = true
+            end
+        end
+    end
+
+    for _, topSlot in ipairs(alliedTopSlots or {}) do
+        local entityKey = topSlot.id
+        local existingState = entityKey and warRollDisplayStates[entityKey] or nil
+        local definition = topSlot.definition
+
+        if existingState
+            and existingState.faceIndex
+            and not existingState.exhausted
+            and not existingState.locked
+            and definition then
+            local faceIndices = carddraw.getAssignedFaceIndices(definition)
+
+            if #faceIndices > 0 then
+                warRollDisplayStates[entityKey] = buildRollState(entityKey, definition, faceIndices, false, existingState, nil)
                 rerolledAny = true
             end
         end
@@ -1009,6 +1083,19 @@ function warrules.rerollEntity(entityKey, definition, isEnemy, sourceCard)
     warRollDisplayStates[entityKey] = buildRollState(entityKey, definition, faceIndices, isEnemy == true, nil, sourceCard)
     sfxrules.playDice()
     return true
+end
+
+function warrules.refreshAndRerollCard(cardIndex, definition, sourceCard)
+    local entityKey = warrules.getCardEntityKey(cardIndex)
+    local existingState = warRollDisplayStates[entityKey]
+
+    if not existingState then
+        return false
+    end
+
+    existingState.exhausted = false
+    existingState.locked = false
+    return warrules.rerollEntity(entityKey, definition, false, sourceCard)
 end
 
 function warrules.clearBlankResults()
@@ -1100,18 +1187,37 @@ function warrules.triggerCounterStrikesOnTargeting(cards, activeChampion, dealDa
     return counterStrikeCount
 end
 
-function warrules.getIncomingDamagePreview(cardIndex, isSourceActive)
+local function rollStateDealsAreaDamageToCard(rollState, cardIndex, cards)
+    if not rollState
+        or rollState.area ~= true
+        or not rollState.targetCardIndex
+        or not cardIndex then
+        return false
+    end
+
+    for _, adjacentCardIndex in ipairs(warrules.getAdjacentSameRowCardIndices(cards or activeWarCards, rollState.targetCardIndex)) do
+        if adjacentCardIndex == cardIndex then
+            return true
+        end
+    end
+
+    return false
+end
+
+function warrules.getIncomingDamagePreview(cardIndex, isSourceActive, cards)
     local incomingDamage = 0
     local cardKey = warrules.getCardEntityKey(cardIndex)
 
     for entityKey, rollState in pairs(warRollDisplayStates) do
         local sourceIsActive = isSourceActive == nil or isSourceActive(entityKey, rollState)
 
-        if sourceIsActive
-            and canTargetEnemyCard(rollState)
-            and rollState.targetCardIndex
-            and warrules.getCardEntityKey(rollState.targetCardIndex) == cardKey then
-            incomingDamage = incomingDamage + (rollState.damageValue or 0)
+        if sourceIsActive and canTargetEnemyCard(rollState) and rollState.targetCardIndex then
+            local isPrimaryTarget = warrules.getCardEntityKey(rollState.targetCardIndex) == cardKey
+            local isAreaTarget = rollStateDealsAreaDamageToCard(rollState, cardIndex, cards)
+
+            if isPrimaryTarget or isAreaTarget then
+                incomingDamage = incomingDamage + (rollState.damageValue or 0)
+            end
         end
     end
 
@@ -1251,6 +1357,7 @@ function warrules.beginRetaliatePhase(topSlotTargets, cards)
         local rollState = warRollDisplayStates[target.id]
 
         if rollState
+            and target.isEnemy ~= false
             and rollState.faceIndex
             and (rollState.damageValue or 0) > 0
             and (
@@ -1360,6 +1467,8 @@ function warrules.resetPlayerCardStates(cards)
                 rollState.exhausted = false
                 rollState.locked = false
             end
+
+            card.preludeStrategyExhausted = nil
         end
     end
 end
@@ -1387,7 +1496,7 @@ function warrules.beginPhase(topSlotTargets, cards, primaryObjectiveDefinition, 
             pendingWarRolls[#pendingWarRolls + 1] = {
                 entityKey = target.id,
                 definition = target.definition,
-                isEnemy = true,
+                isEnemy = target.isEnemy ~= false,
                 faceIndices = faceIndices,
                 sourceCard = nil,
             }
@@ -1439,7 +1548,9 @@ function warrules.beginPhase(topSlotTargets, cards, primaryObjectiveDefinition, 
                 }
             end
 
-            if #faceIndices > 0 then
+            local shouldRollCard = rowId ~= "PlayerRow" or rowCard.card.preludeStrategyExhausted ~= true
+
+            if shouldRollCard and #faceIndices > 0 then
                 pendingWarRolls[#pendingWarRolls + 1] = {
                     entityKey = warrules.getCardEntityKey(rowCard.cardIndex),
                     definition = rowCard.definition,

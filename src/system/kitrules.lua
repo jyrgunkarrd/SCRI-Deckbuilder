@@ -53,6 +53,7 @@ function kitrules.playKit(kitCardIndex, targetCardIndex, ctx)
         instanceId = kitCard.instanceId,
         setName = kitCard.setName,
         cardId = kitCard.cardId,
+        deckOwner = kitCard.deckOwner,
         displayName = kitCard.displayName,
         portraitPath = kitCard.portraitPath,
     }

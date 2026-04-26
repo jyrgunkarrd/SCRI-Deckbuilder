@@ -46,27 +46,19 @@ function notifications.update(dt)
     end
 end
 
-function notifications.draw()
-    local notification = activeNotifications[1]
-
-    if not notification then
+local function drawNotificationText(text, alpha)
+    if not text then
         return
     end
 
     local previousFont = love.graphics.getFont()
     local font = getFont(NOTIFICATION_FONT_PATH, NOTIFICATION_FONT_SIZE)
     local windowWidth, windowHeight = love.graphics.getDimensions()
-    local textWidth = font:getWidth(notification.text)
+    local textWidth = font:getWidth(text)
     local boxWidth = math.max(NOTIFICATION_MIN_WIDTH, textWidth + (NOTIFICATION_PADDING_X * 2))
     local boxHeight = font:getHeight() + (NOTIFICATION_PADDING_Y * 2)
     local boxX = (windowWidth - boxWidth) / 2
     local boxY = (windowHeight - boxHeight) / 2
-    local remaining = notification.duration - notification.elapsed
-    local alpha = 1
-
-    if remaining < NOTIFICATION_FADE_DURATION then
-        alpha = math.max(0, remaining / NOTIFICATION_FADE_DURATION)
-    end
 
     love.graphics.setColor(0.05, 0.05, 0.07, 0.92 * alpha)
     love.graphics.rectangle("fill", boxX, boxY, boxWidth, boxHeight, 10, 10)
@@ -75,7 +67,7 @@ function notifications.draw()
     love.graphics.setColor(NOTIFICATION_TEXT_COLOR[1], NOTIFICATION_TEXT_COLOR[2], NOTIFICATION_TEXT_COLOR[3], alpha)
     love.graphics.setFont(font)
     love.graphics.printf(
-        notification.text,
+        text,
         boxX + NOTIFICATION_PADDING_X,
         boxY + ((boxHeight - font:getHeight()) / 2),
         boxWidth - (NOTIFICATION_PADDING_X * 2),
@@ -84,6 +76,28 @@ function notifications.draw()
 
     love.graphics.setFont(previousFont)
     love.graphics.setColor(1, 1, 1, 1)
+end
+
+function notifications.draw(persistentText)
+    if persistentText then
+        drawNotificationText(persistentText, 1)
+        return
+    end
+
+    local notification = activeNotifications[1]
+
+    if not notification then
+        return
+    end
+
+    local remaining = notification.duration - notification.elapsed
+    local alpha = 1
+
+    if remaining < NOTIFICATION_FADE_DURATION then
+        alpha = math.max(0, remaining / NOTIFICATION_FADE_DURATION)
+    end
+
+    drawNotificationText(notification.text, alpha)
 end
 
 return notifications

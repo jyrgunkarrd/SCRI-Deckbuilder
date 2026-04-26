@@ -63,10 +63,14 @@ end
 local function isSelectedAttackerCardTarget(cardIndex, context)
     local selectedCardIndex = context and context.selectedAttackerCardIndex or nil
     local selectedCard = selectedCardIndex and context.cards and context.cards[selectedCardIndex] or nil
-    local selectedRollState = context and context.getCardRollState and selectedCardIndex and context.getCardRollState(selectedCardIndex) or nil
+    local selectedTopSlotId = context and context.selectedAttackerTopSlotId or nil
+    local displayStates = context and context.displayStates or {}
+    local selectedRollState = context and context.getCardRollState and selectedCardIndex and context.getCardRollState(selectedCardIndex)
+        or selectedTopSlotId and displayStates[selectedTopSlotId]
+        or nil
     local candidateCard = cardIndex and context.cards and context.cards[cardIndex] or nil
 
-    if not selectedCard or not selectedRollState or not candidateCard then
+    if not selectedRollState or not candidateCard then
         return false
     end
 
@@ -101,7 +105,10 @@ local function isSelectedAttackerCardTarget(cardIndex, context)
             return true
         end
 
-        local selectedDefinition = context.cardregistry.getCard(selectedCard.setName, selectedCard.cardId)
+        local selectedDefinition = selectedCard and context.cardregistry.getCard(selectedCard.setName, selectedCard.cardId)
+            or selectedTopSlotId == "warzone" and context.activeWarzone
+            or selectedTopSlotId == "poi" and context.activePoi
+            or nil
         local candidateDefinition = context.cardregistry.getCard(candidateCard.setName, candidateCard.cardId)
         return context.canAttackTarget(selectedDefinition, candidateDefinition, selectedCard, candidateCard, selectedRollState, context.cards)
     end
@@ -111,10 +118,13 @@ end
 
 local function canSelectedAttackerTargetSlot(slotId, context)
     local selectedCardIndex = context and context.selectedAttackerCardIndex or nil
-    local selectedCard = selectedCardIndex and context.cards and context.cards[selectedCardIndex] or nil
-    local selectedRollState = context and context.getCardRollState and selectedCardIndex and context.getCardRollState(selectedCardIndex) or nil
+    local selectedTopSlotId = context and context.selectedAttackerTopSlotId or nil
+    local displayStates = context and context.displayStates or {}
+    local selectedRollState = context and context.getCardRollState and selectedCardIndex and context.getCardRollState(selectedCardIndex)
+        or selectedTopSlotId and displayStates[selectedTopSlotId]
+        or nil
 
-    if not selectedCard or not selectedRollState or not slotId then
+    if not selectedRollState or not slotId then
         return false
     end
 
@@ -314,7 +324,7 @@ function targetingrules.shouldBracketCard(cardIndex, context)
 
     return isPendingChoiceTarget(cardIndex, context)
         or isPrimedAbilityTarget(cardIndex, context)
-        or (context.selectedAttackerCardIndex and isSelectedAttackerCardTarget(cardIndex, context) or false)
+        or ((context.selectedAttackerCardIndex or context.selectedAttackerTopSlotId) and isSelectedAttackerCardTarget(cardIndex, context) or false)
         or isThreatBracketCard(cardIndex, context)
 end
 
@@ -333,7 +343,7 @@ function targetingrules.shouldBracketTopSlot(slotId, context)
         return false
     end
 
-    if context.selectedAttackerCardIndex and canSelectedAttackerTargetSlot(slotId, context) then
+    if (context.selectedAttackerCardIndex or context.selectedAttackerTopSlotId) and canSelectedAttackerTargetSlot(slotId, context) then
         return true
     end
 
@@ -405,7 +415,7 @@ function targetingrules.getCardBracketColor(cardIndex, context)
         return "strategy"
     end
 
-    if context.selectedAttackerCardIndex and isSelectedAttackerCardTarget(cardIndex, context) then
+    if (context.selectedAttackerCardIndex or context.selectedAttackerTopSlotId) and isSelectedAttackerCardTarget(cardIndex, context) then
         return "strategy"
     end
 
@@ -428,7 +438,7 @@ function targetingrules.getCardBracketLayers(cardIndex, context)
     if isPendingChoiceTarget(cardIndex, context)
         or isPrimedAbilityTarget(cardIndex, context)
         or (
-        context.selectedAttackerCardIndex and isSelectedAttackerCardTarget(cardIndex, context)
+        (context.selectedAttackerCardIndex or context.selectedAttackerTopSlotId) and isSelectedAttackerCardTarget(cardIndex, context)
     ) then
         layers[#layers + 1] = "strategy"
     end
@@ -494,7 +504,7 @@ function targetingrules.getTopSlotBracketLayers(slotId, context)
         layers[#layers + 1] = "strategy"
     end
 
-    if context.selectedAttackerCardIndex and canSelectedAttackerTargetSlot(slotId, context) then
+    if (context.selectedAttackerCardIndex or context.selectedAttackerTopSlotId) and canSelectedAttackerTargetSlot(slotId, context) then
         layers[#layers + 1] = "strategy"
     end
 

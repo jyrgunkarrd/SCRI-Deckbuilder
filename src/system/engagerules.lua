@@ -55,7 +55,7 @@ local function applyAreaDamageToAdjacentCards(ctx, attackerCardIndex, rollState,
         if adjacentCard and not ctx.isCardUnavailable(adjacentCard) then
             local damageResult = ctx.dealDamageToCard(adjacentCard, rollState.damageValue or 0)
 
-            if damageResult and damageResult.killed and ctx.resolveKilledEnemyByPlayerCard then
+            if damageResult and damageResult.killed and attackerCardIndex and ctx.resolveKilledEnemyByPlayerCard then
                 ctx.resolveKilledEnemyByPlayerCard(attackerCardIndex, adjacentCardIndex)
             end
         end
@@ -64,7 +64,11 @@ end
 
 local function finishSelectedAttack(ctx, saviorTriggered)
     if not saviorTriggered then
-        ctx.warrules.consumeCardAttack(ctx.selectedAttackerCardIndex)
+        if ctx.selectedAttackerTopSlotId then
+            ctx.warrules.consumeEntityAttack(ctx.selectedAttackerTopSlotId)
+        else
+            ctx.warrules.consumeCardAttack(ctx.selectedAttackerCardIndex)
+        end
     end
 
     clearSelectedAttacker(ctx)
@@ -72,17 +76,23 @@ end
 
 local function resolveSelectedAttack(ctx, action)
     local attackerCardIndex = ctx.selectedAttackerCardIndex
-    local attackerRollState = ctx.warrules.getCardRollState(attackerCardIndex)
-    local saviorCheck = ctx.warrules.beginSaviorCheck(attackerCardIndex, ctx.cards, ctx.isWarRollSourceActive)
+    local attackerRollState = attackerCardIndex
+        and ctx.warrules.getCardRollState(attackerCardIndex)
+        or ctx.selectedAttackerTopSlotId and ctx.warrules.getDisplayStates()[ctx.selectedAttackerTopSlotId]
+        or nil
+    local saviorCheck = attackerCardIndex and ctx.warrules.beginSaviorCheck(attackerCardIndex, ctx.cards, ctx.isWarRollSourceActive) or nil
     local resolved = action()
 
     if not resolved then
         return false
     end
 
-    finishSelectedAttack(ctx, ctx.warrules.didSaviorPreventDeath(saviorCheck, ctx.cards, ctx.isWarRollSourceActive))
-    applyReloading(ctx, attackerCardIndex, attackerRollState)
-    applyPain(ctx, attackerCardIndex, attackerRollState)
+    finishSelectedAttack(ctx, saviorCheck and ctx.warrules.didSaviorPreventDeath(saviorCheck, ctx.cards, ctx.isWarRollSourceActive) or false)
+
+    if attackerCardIndex then
+        applyReloading(ctx, attackerCardIndex, attackerRollState)
+        applyPain(ctx, attackerCardIndex, attackerRollState)
+    end
     return true
 end
 
@@ -165,6 +175,15 @@ local function applyPlayerWarzoneSideEffects(ctx, rollState)
     end
 end
 
+local function canTargetEnemyWarzone(ctx, rollState)
+    return ctx.warrules.hasTargetType(rollState, "WZOpp")
+        or (
+            rollState
+            and rollState.action == "influence"
+            and rollState.targetClass == "enemy_warzone"
+        )
+end
+
 local function canTargetSabotage(ctx, rollState)
     return (
         rollState
@@ -189,11 +208,23 @@ function engagerules.tryResolveClick(hoveredTopSlotId, ctx)
         return false
     end
 
-    if ctx.selectedAttackerCardIndex then
-        local attackerCard = ctx.cards[ctx.selectedAttackerCardIndex]
-        local attackerRollState = ctx.warrules.getCardRollState(ctx.selectedAttackerCardIndex)
+    if ctx.selectedAttackerCardIndex or ctx.selectedAttackerTopSlotId then
+        local selectedTopSlotDefinition = ctx.selectedAttackerTopSlotId == "warzone" and ctx.activeWarzone
+            or ctx.selectedAttackerTopSlotId == "poi" and ctx.activePoi
+            or nil
+        local attackerCard = ctx.selectedAttackerCardIndex and ctx.cards[ctx.selectedAttackerCardIndex] or nil
+        local attackerDefinition = attackerCard and cardregistry.getCard(attackerCard.setName, attackerCard.cardId) or selectedTopSlotDefinition
+        local attackerRollState = ctx.selectedAttackerCardIndex
+            and ctx.warrules.getCardRollState(ctx.selectedAttackerCardIndex)
+            or ctx.selectedAttackerTopSlotId and ctx.warrules.getDisplayStates()[ctx.selectedAttackerTopSlotId]
+            or nil
 
-        if not attackerCard or not ctx.warrules.canCardAttack(ctx.selectedAttackerCardIndex) then
+        if ctx.selectedAttackerCardIndex and (not attackerCard or not ctx.warrules.canCardAttack(ctx.selectedAttackerCardIndex)) then
+            clearSelectedAttacker(ctx)
+            return false
+        end
+
+        if ctx.selectedAttackerTopSlotId and (not selectedTopSlotDefinition or selectedTopSlotDefinition.allied ~= true or not ctx.warrules.canEntityAttack(ctx.selectedAttackerTopSlotId)) then
             clearSelectedAttacker(ctx)
             return false
         end
@@ -275,12 +306,32 @@ function engagerules.tryResolveClick(hoveredTopSlotId, ctx)
                     applyPlayerWarzoneSideEffects(ctx, attackerRollState)
                     return true
                 end)
+                return true
             elseif hoveredTopSlotId == "poi" and ctx.activePoi then
                 resolveSelectedAttack(ctx, function()
                     ctx.addWarzoneControl(ctx.activePoi, attackerRollState.damageValue or 0, "poi")
                     applyPlayerWarzoneSideEffects(ctx, attackerRollState)
                     return true
                 end)
+                return true
+            end
+        end
+
+        if canTargetEnemyWarzone(ctx, attackerRollState) then
+            if hoveredTopSlotId == "warzone" and ctx.activeWarzone then
+                resolveSelectedAttack(ctx, function()
+                    ctx.addWarzoneControl(ctx.activeWarzone, -(attackerRollState.damageValue or 0), "warzone")
+                    applyPlayerWarzoneSideEffects(ctx, attackerRollState)
+                    return true
+                end)
+                return true
+            elseif hoveredTopSlotId == "poi" and ctx.activePoi then
+                resolveSelectedAttack(ctx, function()
+                    ctx.addWarzoneControl(ctx.activePoi, -(attackerRollState.damageValue or 0), "poi")
+                    applyPlayerWarzoneSideEffects(ctx, attackerRollState)
+                    return true
+                end)
+                return true
             end
         end
 
@@ -288,7 +339,7 @@ function engagerules.tryResolveClick(hoveredTopSlotId, ctx)
             resolveSelectedAttack(ctx, function()
                 applyCounterStrikeToAttacker(ctx, attackerCard, ctx.activeChampion, ctx.activeChampion)
 
-                if ctx.isCardUnavailable(attackerCard) then
+                if attackerCard and ctx.isCardUnavailable(attackerCard) then
                     return true
                 end
 
@@ -306,24 +357,27 @@ function engagerules.tryResolveClick(hoveredTopSlotId, ctx)
                 and targetCard.location.kind == "grid"
                 and targetCard.location.rowId == "OppRow"
                 and ctx.warrules.canTargetEnemyCard(attackerRollState) then
-                local attackerDefinition = cardregistry.getCard(attackerCard.setName, attackerCard.cardId)
                 local targetDefinition = cardregistry.getCard(targetCard.setName, targetCard.cardId)
 
                 if ctx.warrules.canAttackTarget(attackerDefinition, targetDefinition, attackerCard, targetCard, attackerRollState, ctx.cards) then
                     resolveSelectedAttack(ctx, function()
                         applyCounterStrikeToAttacker(ctx, attackerCard, targetCard, targetDefinition)
 
-                        if ctx.isCardUnavailable(attackerCard) then
+                        if attackerCard and ctx.isCardUnavailable(attackerCard) then
                             return true
                         end
 
                         local damageResult = ctx.dealDamageToCard(targetCard, attackerRollState.damageValue or 0)
 
-                        if damageResult and damageResult.killed and ctx.resolveKilledEnemyByPlayerCard then
+                        if damageResult and damageResult.killed and ctx.resolveKilledEnemyByPlayerCard and ctx.selectedAttackerCardIndex then
                             ctx.resolveKilledEnemyByPlayerCard(ctx.selectedAttackerCardIndex, ctx.hoveredCardIndex)
                         end
 
-                        applyAreaDamageToAdjacentCards(ctx, ctx.selectedAttackerCardIndex, attackerRollState, ctx.hoveredCardIndex)
+                        if ctx.selectedAttackerCardIndex then
+                            applyAreaDamageToAdjacentCards(ctx, ctx.selectedAttackerCardIndex, attackerRollState, ctx.hoveredCardIndex)
+                        else
+                            applyAreaDamageToAdjacentCards(ctx, nil, attackerRollState, ctx.hoveredCardIndex)
+                        end
 
                         applyAttackSideEffects(ctx, attackerRollState)
                         return true
@@ -334,6 +388,16 @@ function engagerules.tryResolveClick(hoveredTopSlotId, ctx)
             end
         end
 
+        return true
+    end
+
+    if hoveredTopSlotId == "warzone"
+        and ctx.activeWarzone
+        and ctx.activeWarzone.allied == true
+        and ctx.warrules.canEntityAttack("warzone") then
+        ctx.setSelectedAttackerTopSlotId("warzone")
+        ctx.setExpandedGridCardIndex(nil)
+        ctx.setExpandedTopSlotId(nil)
         return true
     end
 
@@ -418,7 +482,7 @@ function engagerules.tryResolveClick(hoveredTopSlotId, ctx)
 end
 
 function engagerules.tryCancelSelectedAttacker(ctx)
-    if not engagerules.isEngagePhase(ctx) or not ctx.selectedAttackerCardIndex then
+    if not engagerules.isEngagePhase(ctx) or (not ctx.selectedAttackerCardIndex and not ctx.selectedAttackerTopSlotId) then
         return false
     end
 
@@ -474,7 +538,16 @@ function engagerules.tryUseReroll(mouseX, mouseY, ctx)
         return false
     end
 
-    local rerolledAny = ctx.warrules.rerollUnlockedPlayerCards(ctx.cards)
+    local alliedTopSlots = {}
+
+    if ctx.activeWarzone and ctx.activeWarzone.allied == true then
+        alliedTopSlots[#alliedTopSlots + 1] = {
+            id = "warzone",
+            definition = ctx.activeWarzone,
+        }
+    end
+
+    local rerolledAny = ctx.warrules.rerollUnlockedPlayerCards(ctx.cards, alliedTopSlots)
     ctx.setEngageRerollCount(math.max(0, ctx.engageRerollCount - 1))
     clearSelectedAttacker(ctx)
 

@@ -44,6 +44,34 @@ local function buildStartPhaseGenerators(gameState, deps)
         end
     end
 
+    local topSlotGenerators = {}
+    local topSlots = deps.envdraw.getTopSlotLayouts(
+        deps.turnrules.getCurrentPhase(),
+        gameState.activeChampion,
+        gameState.activeWarzone,
+        gameState.activePoi,
+        gameState.activePrimaryObjective,
+        gameState.activeIntel
+    )
+
+    for _, slot in ipairs(topSlots or {}) do
+        if slot.id == "warzone"
+            and slot.definition
+            and slot.definition.method
+            and slot.methodBadgeCenters
+            and #slot.methodBadgeCenters > 0 then
+            topSlotGenerators[#topSlotGenerators + 1] = {
+                column = slot.x,
+                methodBadgeCenters = slot.methodBadgeCenters,
+                methodEntries = slot.definition.method,
+            }
+        end
+    end
+
+    for _, topSlotGenerator in ipairs(topSlotGenerators) do
+        gridCardGenerators[#gridCardGenerators + 1] = topSlotGenerator
+    end
+
     table.sort(gridCardGenerators, function(a, b)
         return a.column < b.column
     end)
@@ -219,7 +247,11 @@ function phasecontroller.enterCurrentPhase(gameState, deps)
         deps.temporaryeffects.clearAllEndPhaseEffects()
         deps.keywordrules.refreshEndPhaseKeywords(gameState.cards)
         for _, expiredCardIndex in ipairs(deps.keywordrules.decrementEndPhaseKeywords(gameState.cards)) do
-            deps.removeCardFromPlay(expiredCardIndex)
+            if deps.expireCardFromPlay then
+                deps.expireCardFromPlay(expiredCardIndex)
+            else
+                deps.removeCardFromPlay(expiredCardIndex)
+            end
         end
         resolveEndPhaseCaches(gameState, deps)
         deps.drawCardFromPlayerDeck()
@@ -257,6 +289,7 @@ end
 
 function phasecontroller.beginRetaliateFromEngage(gameState, deps)
     gameState.selectedAttackerCardIndex = nil
+    gameState.selectedAttackerTopSlotId = nil
     deps.turnrules.advanceWarSubphase()
     deps.warrules.triggerCounterStrikesOnTargeting(
         gameState.cards,

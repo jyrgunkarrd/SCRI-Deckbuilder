@@ -1,10 +1,12 @@
 local envdraw = require("src.render.envdraw")
 local carddraw = require("src.render.carddraw")
+cardanimations = require("src.render.cardanimations")
 local cardpresentation = require("src.render.cardpresentation")
 local infiltrationdraw = require("src.render.infiltrationdraw")
 local sfxrules = require("src.audio.sfxrules")
 local cardregistry = require("src.system.cardregistry")
 local cardinstances = require("src.system.cardinstances")
+cardlifecycle = require("src.system.cardlifecycle")
 local cardzones = require("src.system.cardzones")
 local championplayrules = require("src.system.championplayrules")
 local championrules = require("src.system.championrules")
@@ -30,10 +32,12 @@ local infiltrationrules = require("src.system.infiltrationrules")
 local strategyrules = require("src.system.strategyrules")
 local tomerules = require("src.system.tomerules")
 local trooprules = require("src.system.trooprules")
+spawnrules = require("src.system.spawnrules")
 local targetoverlays = require("src.render.targetoverlays")
 local gamestatedraw = require("src.render.gamestate_draw")
 local inputcontroller = require("src.ui.inputcontroller")
 local modals = require("src.ui.modals")
+hoverpreview = require("src.ui.hoverpreview")
 local warrules = require("src.system.warrules")
 
 local CARD_HOVER_ANIMATION_SPEED = 10
@@ -80,6 +84,7 @@ local gameState = {
     expandedGridCardIndex = nil,
     expandedTopSlotId = nil,
     selectedAttackerCardIndex = nil,
+    selectedAttackerTopSlotId = nil,
     draggedCardIndex = nil,
     draggedCardOrigin = nil,
     dragOffsetX = 0,
@@ -149,34 +154,21 @@ local playHunterAddedSfxForCardDefinition
 local playHunterAddedSfxForCards
 local isPointInsideJaclPortrait
 local releaseAttachedKits
+local getCardLifecycleContext
 local function getDamageJitterKeyForCard(cardIndex)
     return "card:" .. tostring(cardIndex)
 end
 
 local function isCardDestroyed(card)
-    return card and card.destroyed == true
+    return cardlifecycle.isCardDestroyed(card)
 end
 
 local function isCardUnavailable(card)
-    return card == nil or card.destroyed == true or card.destroying == true or card.pilotVehicleAnimation == true
+    return cardlifecycle.isCardUnavailable(card)
 end
 
 local function startCardDestruction(cardIndex)
-    local card = gameState.cards[cardIndex]
-
-    if not card or card.destroying or card.destroyed then
-        return
-    end
-
-    card.destroying = true
-    card.destroyElapsed = 0
-    card.destroySeed = love.math.random() * 1000
-    warrules.clearCardRollState(cardIndex)
-    sfxrules.playDestroy()
-
-    if gameState.selectedAttackerCardIndex == cardIndex then
-        gameState.selectedAttackerCardIndex = nil
-    end
+    return cardlifecycle.startCardDestruction(getCardLifecycleContext(), cardIndex)
 end
 
 local function startChampionDestruction()
@@ -274,111 +266,10 @@ local function transformCardAtIndex(cardIndex, cardDefinition)
     return true
 end
 
-local function createPilotAttachment(card)
-    if not card then
-        return nil
-    end
-
-    return {
-        instanceId = card.instanceId,
-        setName = card.setName,
-        cardId = card.cardId,
-        deckOwner = card.deckOwner,
-        displayName = card.displayName,
-        portraitPath = card.portraitPath,
-        currentHealth = card.currentHealth,
-        maxHealth = card.maxHealth,
-        keywordValues = card.keywordValues,
-        attachedKitCards = card.attachedKitCards,
-    }
-end
-
-local function copyAnimationRenderOptions(renderOptions)
-    local copiedOptions = {}
-
-    for key, value in pairs(renderOptions or {}) do
-        copiedOptions[key] = value
-    end
-
-    return copiedOptions
-end
-
-local function finishPilotVehicleAnimation(animation)
-    if not animation or not animation.vehicleCard then
-        return false
-    end
-
-    local cardIndex = animation.cardIndex
-    local currentCard = cardIndex and gameState.cards[cardIndex] or nil
-
-    if not currentCard or currentCard ~= animation.sourceCard then
-        return false
-    end
-
-    currentCard.pilotVehicleAnimation = nil
-    gameState.cards[cardIndex] = animation.vehicleCard
-    warrules.clearCardRollState(cardIndex)
-    return true
-end
+local getCardAnimationContext
 
 local function pilotCardWithVehicleAtIndex(cardIndex, vehicleDefinition)
-    local card = cardIndex and gameState.cards[cardIndex] or nil
-
-    if not card or not vehicleDefinition or card.attachedPilotCard then
-        return false
-    end
-
-    local cardDefinition = cardregistry.getCard(card.setName, card.cardId)
-
-    if keywordrules.cardHasKeyword(cardDefinition, "KWPILOT", card) then
-        return false
-    end
-
-    local vehicleCard = cardinstances.createGenerated(
-        vehicleDefinition,
-        copyLocation(card.location)
-    )
-
-    if not vehicleCard then
-        return false
-    end
-
-    vehicleCard.deckOwner = card.deckOwner
-    vehicleCard.attachedPilotCard = createPilotAttachment(card)
-    vehicleCard.keywordValues = vehicleCard.keywordValues or {}
-    vehicleCard.keywordValues.KWPILOT = 1
-    cardinstances.initializeHealth(vehicleCard)
-
-    local drawX, drawY, expansionProgress, renderOptions = getCardDrawPosition(card, cardIndex)
-    local cardWidth, collapsedHeight = carddraw.getCardSize(renderOptions)
-    local _, expandedHeight = carddraw.getExpandedCardSize(renderOptions)
-    local cardHeight = collapsedHeight + ((expandedHeight - collapsedHeight) * (expansionProgress or 0))
-    local vehicleRenderOptions = copyAnimationRenderOptions(renderOptions)
-    vehicleRenderOptions.card = vehicleCard
-    vehicleRenderOptions.currentHealth = vehicleCard.currentHealth
-    vehicleRenderOptions.maxHealth = vehicleCard.maxHealth
-    vehicleRenderOptions.keywordValues = keywordrules.getCardKeywordValues(vehicleCard, vehicleDefinition)
-
-    card.pilotVehicleAnimation = true
-    gameState.pilotVehicleAnimations[#gameState.pilotVehicleAnimations + 1] = {
-        elapsed = 0,
-        duration = PILOT_VEHICLE_ANIMATION_DURATION,
-        cardIndex = cardIndex,
-        sourceCard = card,
-        vehicleCard = vehicleCard,
-        pilotSetName = card.setName,
-        pilotCardId = card.cardId,
-        pilotRenderOptions = copyAnimationRenderOptions(renderOptions),
-        vehicleSetName = vehicleDefinition.setName,
-        vehicleCardId = vehicleDefinition.id,
-        vehicleRenderOptions = vehicleRenderOptions,
-        drawX = drawX,
-        drawY = drawY,
-        cardWidth = cardWidth,
-        cardHeight = cardHeight,
-    }
-
-    return true
+    return cardanimations.pilotCardWithVehicleAtIndex(getCardAnimationContext(), cardIndex, vehicleDefinition)
 end
 
 local function getPlayerHandLayout()
@@ -461,6 +352,32 @@ end
 
 local function normalizeHandCardSlots()
     cardzones.normalizeHandCardSlots(gameState.cards, isCardDestroyed)
+end
+
+getCardAnimationContext = function()
+    return {
+        cards = gameState.cards,
+        playerDeck = gameState.playerDeck,
+        kitReturnAnimations = gameState.kitReturnAnimations,
+        pilotVehicleAnimations = gameState.pilotVehicleAnimations,
+        mulliganActive = gameState.mulliganActive,
+        mulliganResolving = gameState.mulliganResolving,
+        mulliganPromptAlpha = gameState.mulliganPromptAlpha,
+        mulliganReturnedCards = gameState.mulliganReturnedCards,
+        mulliganCompleted = gameState.mulliganCompleted,
+        cardregistry = cardregistry,
+        warrules = warrules,
+        getCardDrawPosition = getCardDrawPosition,
+        getPlayerHandLayout = getPlayerHandLayout,
+        copyLocation = copyLocation,
+        normalizeHandCardSlots = normalizeHandCardSlots,
+        kitReturnFlashDuration = KIT_RETURN_FLASH_DURATION,
+        kitReturnExpandDuration = KIT_RETURN_EXPAND_DURATION,
+        kitReturnFlyDuration = KIT_RETURN_FLY_DURATION,
+        kitReturnTotalDuration = KIT_RETURN_TOTAL_DURATION,
+        pilotVehicleAnimationDuration = PILOT_VEHICLE_ANIMATION_DURATION,
+        mulliganPromptFadeDuration = MULLIGAN_PROMPT_FADE_DURATION,
+    }
 end
 
 function resolveOpeningMulligan()
@@ -547,224 +464,46 @@ getNextOpenHandSlot = function()
     return cardzones.getNextOpenHandSlot(gameState.cards, envrules.getPlayerHand().slots, isCardDestroyed)
 end
 
+getSpawnContext = function()
+    return {
+        cards = gameState.cards,
+        cardExpansion = gameState.cardExpansion,
+        cardEntranceProgress = gameState.cardEntranceProgress,
+        playerDeck = gameState.playerDeck,
+        envdraw = envdraw,
+        turnrules = turnrules,
+        warrules = warrules,
+        isCardUnavailable = isCardUnavailable,
+        playHunterAddedSfxForCardDefinition = playHunterAddedSfxForCardDefinition,
+    }
+end
+
 local function createGeneratedSupportCard(cardDefinition, targetLocation)
-    local generatedCard = cardinstances.createGeneratedSupportCard(gameState.cards, gameState.cardExpansion, gameState.cardEntranceProgress, gameState.playerDeck, cardDefinition, targetLocation)
-
-    if generatedCard and (targetLocation.kind == "hand" or targetLocation.kind == "deck") then
-        playHunterAddedSfxForCardDefinition(cardDefinition)
-    end
-
-    return generatedCard
+    return spawnrules.createGeneratedSupportCard(getSpawnContext(), cardDefinition, targetLocation)
 end
 
 local function createGeneratedDeckCardShuffled(cardDefinition)
-    local generatedCard = cardinstances.createGeneratedDeckCardShuffled(gameState.playerDeck, cardDefinition)
-
-    if generatedCard then
-        playHunterAddedSfxForCardDefinition(cardDefinition)
-    end
-
-    return generatedCard
+    return spawnrules.createGeneratedDeckCardShuffled(getSpawnContext(), cardDefinition)
 end
 
 local function createGeneratedGridCard(cardDefinition, rowId, column)
-    local generatedCard = cardinstances.createGeneratedGridCard(gameState.cards, gameState.cardExpansion, gameState.cardEntranceProgress, cardDefinition, rowId, column)
-
-    if generatedCard
-        and turnrules.getCurrentPhase() == "War"
-        and turnrules.getCurrentWarSubphase() == "Engage" then
-        local generatedCardIndex = #gameState.cards
-
-        warrules.rerollEntity(
-            warrules.getCardEntityKey(generatedCardIndex),
-            cardDefinition,
-            rowId == "OppRow"
-        )
-    end
-
-    return generatedCard
-end
-
-local function getClosestOpenGridColumns(rowId, anchorColumn, ignoredCardIndex, preferredColumn)
-    local row = rowId and envdraw.getGridRow(rowId) or nil
-    local columns = {}
-    local preferredIsOpen = false
-
-    if not row or not anchorColumn then
-        return columns
-    end
-
-    for _, cell in ipairs(row.cells or {}) do
-        local column = cell.column
-
-        if column and not cardzones.isGridRowColumnOccupied(gameState.cards, rowId, column, ignoredCardIndex) then
-            if preferredColumn and column == preferredColumn then
-                preferredIsOpen = true
-            else
-                columns[#columns + 1] = column
-            end
-        end
-    end
-
-    table.sort(columns, function(a, b)
-        local distanceA = math.abs(a - anchorColumn)
-        local distanceB = math.abs(b - anchorColumn)
-
-        if distanceA == distanceB then
-            return a < b
-        end
-
-        return distanceA < distanceB
-    end)
-
-    if preferredIsOpen then
-        table.insert(columns, 1, preferredColumn)
-    end
-
-    return columns
+    return spawnrules.createGeneratedGridCard(getSpawnContext(), cardDefinition, rowId, column)
 end
 
 local function spawnTokensNearCard(sourceCardIndex, tokenDefinition, count, options)
-    local sourceCard = sourceCardIndex and gameState.cards[sourceCardIndex] or nil
-
-    if not sourceCard
-        or not sourceCard.location
-        or sourceCard.location.kind ~= "grid"
-        or not tokenDefinition
-        or (count or 0) <= 0 then
-        return 0
-    end
-
-    local spawnedCount = 0
-    local rowId = sourceCard.location.rowId
-    local preferredColumn = options and options.preferredColumn or nil
-    local ignoredCardIndex = options and options.ignoredCardIndex or nil
-    local openColumns = getClosestOpenGridColumns(rowId, sourceCard.location.column, ignoredCardIndex, preferredColumn)
-
-    for _, column in ipairs(openColumns) do
-        if spawnedCount >= count then
-            break
-        end
-
-        if createGeneratedGridCard(tokenDefinition, rowId, column) then
-            spawnedCount = spawnedCount + 1
-        end
-    end
-
-    return spawnedCount
+    return spawnrules.spawnTokensNearCard(getSpawnContext(), sourceCardIndex, tokenDefinition, count, options)
 end
 
 local function spawnRandomTokensNearCard(sourceCardIndex, tokenDefinitions, count, options)
-    local sourceCard = sourceCardIndex and gameState.cards[sourceCardIndex] or nil
-
-    if not sourceCard
-        or not sourceCard.location
-        or sourceCard.location.kind ~= "grid"
-        or not tokenDefinitions
-        or #tokenDefinitions <= 0
-        or (count or 0) <= 0 then
-        return 0
-    end
-
-    local spawnedCount = 0
-    local rowId = sourceCard.location.rowId
-    local preferredColumn = options and options.preferredColumn or nil
-    local ignoredCardIndex = options and options.ignoredCardIndex or nil
-    local openColumns = getClosestOpenGridColumns(rowId, sourceCard.location.column, ignoredCardIndex, preferredColumn)
-
-    for _, column in ipairs(openColumns) do
-        if spawnedCount >= count then
-            break
-        end
-
-        local tokenDefinition = tokenDefinitions[love.math.random(1, #tokenDefinitions)]
-
-        if createGeneratedGridCard(tokenDefinition, rowId, column) then
-            spawnedCount = spawnedCount + 1
-        end
-    end
-
-    return spawnedCount
+    return spawnrules.spawnRandomTokensNearCard(getSpawnContext(), sourceCardIndex, tokenDefinitions, count, options)
 end
 
 local function spawnTokensNearPlayerCard(sourceCardIndex, tokenDefinition, count, options)
-    local sourceCard = sourceCardIndex and gameState.cards[sourceCardIndex] or nil
-
-    if not sourceCard
-        or not sourceCard.location
-        or sourceCard.location.kind ~= "grid"
-        or not tokenDefinition
-        or (count or 0) <= 0 then
-        return 0
-    end
-
-    local spawnedCount = 0
-    local preferredColumn = options and options.preferredColumn or nil
-    local ignoredCardIndex = options and options.ignoredCardIndex or nil
-    local openColumns = getClosestOpenGridColumns("PlayerRow", sourceCard.location.column, ignoredCardIndex, preferredColumn)
-
-    for _, column in ipairs(openColumns) do
-        if spawnedCount >= count then
-            break
-        end
-
-        if createGeneratedGridCard(tokenDefinition, "PlayerRow", column) then
-            spawnedCount = spawnedCount + 1
-        end
-    end
-
-    return spawnedCount
-end
-
-local function findPlayerCacheCard(cacheCardId)
-    for cardIndex, card in ipairs(gameState.cards) do
-        if card
-            and not isCardUnavailable(card)
-            and card.location
-            and card.location.kind == "grid"
-            and card.location.rowId == "PlayerRow"
-            and card.cardId == cacheCardId then
-            return cardIndex, card
-        end
-    end
-
-    return nil, nil
+    return spawnrules.spawnTokensNearPlayerCard(getSpawnContext(), sourceCardIndex, tokenDefinition, count, options)
 end
 
 local function createOrStackPlayerCacheNearCard(sourceCardIndex, cacheDefinition, count)
-    local sourceCard = sourceCardIndex and gameState.cards[sourceCardIndex] or nil
-    local stackCount = math.max(0, math.floor(tonumber(count) or 0))
-
-    if not sourceCard
-        or not sourceCard.location
-        or sourceCard.location.kind ~= "grid"
-        or not cacheDefinition
-        or stackCount <= 0 then
-        return 0
-    end
-
-    local _, existingCache = findPlayerCacheCard(cacheDefinition.id)
-
-    if existingCache then
-        existingCache.currentHealth = math.max(0, tonumber(existingCache.currentHealth) or 0) + stackCount
-        existingCache.maxHealth = math.max(existingCache.currentHealth, math.max(0, tonumber(existingCache.maxHealth) or 0))
-        return stackCount
-    end
-
-    local spawnedCache = nil
-    local openColumns = getClosestOpenGridColumns("PlayerRow", sourceCard.location.column)
-
-    for _, column in ipairs(openColumns) do
-        spawnedCache = createGeneratedGridCard(cacheDefinition, "PlayerRow", column)
-
-        if spawnedCache then
-            spawnedCache.currentHealth = stackCount
-            spawnedCache.maxHealth = stackCount
-            break
-        end
-    end
-
-    return spawnedCache and stackCount or 0
+    return spawnrules.createOrStackPlayerCacheNearCard(getSpawnContext(), sourceCardIndex, cacheDefinition, count)
 end
 
 local function drawCardFromPlayerDeck()
@@ -798,477 +537,51 @@ local function drawCardFromPlayerDeck()
 end
 
 local function beginKitReturnAnimation(hostCard, attachedKit, returningCard)
-    if not hostCard or not attachedKit or not returningCard then
-        return false
-    end
-
-    local hostCardIndex = nil
-
-    for cardIndex, candidateCard in ipairs(gameState.cards) do
-        if candidateCard == hostCard then
-            hostCardIndex = cardIndex
-            break
-        end
-    end
-
-    if not hostCardIndex then
-        return false
-    end
-
-    local drawX, drawY, expansionProgress, renderOptions = getCardDrawPosition(hostCard, hostCardIndex)
-    local badgeRect = carddraw.getKeywordBadgeRect(hostCard.setName, hostCard.cardId, drawX, drawY, renderOptions, "KWKIT")
-    local handLayout = getPlayerHandLayout()
-    local slot = handLayout and handLayout.slots[returningCard.location and returningCard.location.slotIndex or 0] or nil
-
-    if not badgeRect or not slot then
-        return false
-    end
-
-    local previewOptions = {
-        width = slot.width,
-        showLabelWhenCollapsed = true,
-        showHealthOnPortrait = false,
-        showBadgesInTextbox = true,
-        displayName = returningCard.displayName,
-        portraitPath = returningCard.portraitPath,
-    }
-    local cardWidth, cardHeight = carddraw.getCardSize(previewOptions)
-
-    gameState.kitReturnAnimations[#gameState.kitReturnAnimations + 1] = {
-        elapsed = 0,
-        duration = KIT_RETURN_TOTAL_DURATION,
-        badgeRect = {
-            x = badgeRect.x,
-            y = badgeRect.y,
-            size = badgeRect.size,
-        },
-        startX = badgeRect.x + (badgeRect.size / 2),
-        startY = badgeRect.y + (badgeRect.size / 2),
-        targetX = slot.x + (cardWidth / 2),
-        targetY = slot.y + (cardHeight / 2),
-        peakY = math.min(badgeRect.y, slot.y) - math.max(34, badgeRect.size * 1.8),
-        setName = attachedKit.setName,
-        cardId = attachedKit.cardId,
-        renderOptions = previewOptions,
-        cardWidth = cardWidth,
-        cardHeight = cardHeight,
-        returningCard = returningCard,
-    }
-
-    returningCard.returningToHandAnimation = true
-    return true
+    return cardanimations.beginKitReturnAnimation(getCardAnimationContext(), hostCard, attachedKit, returningCard)
 end
 
 local function updateKitReturnAnimations(dt)
-    for animationIndex = #gameState.kitReturnAnimations, 1, -1 do
-        local animation = gameState.kitReturnAnimations[animationIndex]
-        animation.elapsed = animation.elapsed + dt
-
-        if animation.elapsed >= animation.duration then
-            if animation.returningCard then
-                animation.returningCard.returningToHandAnimation = nil
-            end
-
-            table.remove(gameState.kitReturnAnimations, animationIndex)
-        end
-    end
+    cardanimations.updateKitReturnAnimations(getCardAnimationContext(), dt)
 end
 
 local function drawKitReturnAnimations()
-    for _, animation in ipairs(gameState.kitReturnAnimations) do
-        local elapsed = math.max(0, animation.elapsed)
-        local flashProgress = math.min(1, elapsed / KIT_RETURN_FLASH_DURATION)
-        local expandProgress = math.min(1, math.max(0, elapsed - KIT_RETURN_FLASH_DURATION) / KIT_RETURN_EXPAND_DURATION)
-        local flyProgress = math.min(1, math.max(0, elapsed - KIT_RETURN_FLASH_DURATION - KIT_RETURN_EXPAND_DURATION) / KIT_RETURN_FLY_DURATION)
-
-        if flashProgress < 1 then
-            local glowAlpha = (1 - flashProgress) * 0.55
-            local glowInset = 2 + (flashProgress * 6)
-
-            love.graphics.setColor(1, 0.92, 0.52, glowAlpha)
-            love.graphics.rectangle(
-                "fill",
-                animation.badgeRect.x - glowInset,
-                animation.badgeRect.y - glowInset,
-                animation.badgeRect.size + (glowInset * 2),
-                animation.badgeRect.size + (glowInset * 2),
-                6,
-                6
-            )
-        end
-
-        local centerX = animation.startX
-        local centerY = animation.startY
-        local scale = 0.22
-
-        if flyProgress > 0 then
-            local t = 1 - ((1 - flyProgress) * (1 - flyProgress))
-            local invT = 1 - t
-            centerX = (invT * invT * animation.startX) + (2 * invT * t * ((animation.startX + animation.targetX) / 2)) + (t * t * animation.targetX)
-            centerY = (invT * invT * animation.startY) + (2 * invT * t * animation.peakY) + (t * t * animation.targetY)
-            scale = 0.5 + (0.5 * t)
-        elseif expandProgress > 0 then
-            local t = 1 - ((1 - expandProgress) * (1 - expandProgress))
-            centerY = animation.startY - (18 * t)
-            scale = 0.22 + (0.42 * t)
-        end
-
-        love.graphics.push()
-        love.graphics.translate(centerX, centerY)
-        love.graphics.scale(scale, scale)
-        carddraw.drawCardState(
-            animation.setName,
-            animation.cardId,
-            -animation.cardWidth / 2,
-            -animation.cardHeight / 2,
-            0,
-            animation.renderOptions
-        )
-        love.graphics.pop()
-    end
-
-    love.graphics.setColor(1, 1, 1, 1)
-end
-
-local function easeOutCubic(t)
-    t = math.max(0, math.min(1, t or 0))
-    local invT = 1 - t
-    return 1 - (invT * invT * invT)
-end
-
-local function easeInOutCubic(t)
-    t = math.max(0, math.min(1, t or 0))
-
-    if t < 0.5 then
-        return 4 * t * t * t
-    end
-
-    local shifted = (-2 * t) + 2
-    return 1 - ((shifted * shifted * shifted) / 2)
-end
-
-local function drawAnimatedCard(setName, cardId, centerX, centerY, scale, alpha, renderOptions)
-    if (alpha or 0) <= 0.12 then
-        return
-    end
-
-    local cardWidth, cardHeight = carddraw.getCardSize(renderOptions)
-
-    love.graphics.push()
-    love.graphics.translate(centerX, centerY)
-    love.graphics.scale(scale, scale)
-    carddraw.drawCardState(
-        setName,
-        cardId,
-        -cardWidth / 2,
-        -cardHeight / 2,
-        0,
-        renderOptions
-    )
-
-    if alpha < 1 then
-        love.graphics.setColor(0.02, 0.025, 0.03, 1 - alpha)
-        love.graphics.rectangle("fill", -cardWidth / 2, -cardHeight / 2, cardWidth, cardHeight, 8, 8)
-    end
-
-    love.graphics.pop()
-    love.graphics.setColor(1, 1, 1, 1)
+    cardanimations.drawKitReturnAnimations(getCardAnimationContext())
 end
 
 local function updatePilotVehicleAnimations(dt)
-    for animationIndex = #gameState.pilotVehicleAnimations, 1, -1 do
-        local animation = gameState.pilotVehicleAnimations[animationIndex]
-        animation.elapsed = animation.elapsed + dt
-
-        if animation.elapsed >= animation.duration then
-            finishPilotVehicleAnimation(animation)
-            table.remove(gameState.pilotVehicleAnimations, animationIndex)
-        end
-    end
+    cardanimations.updatePilotVehicleAnimations(getCardAnimationContext(), dt)
 end
 
 updateMulliganAnimations = function(dt)
-    local promptTarget = gameState.mulliganActive and not gameState.mulliganResolving and 1 or 0
-    local promptStep = dt / MULLIGAN_PROMPT_FADE_DURATION
+    local animationContext = getCardAnimationContext()
 
-    if gameState.mulliganPromptAlpha < promptTarget then
-        gameState.mulliganPromptAlpha = math.min(promptTarget, gameState.mulliganPromptAlpha + promptStep)
-    elseif gameState.mulliganPromptAlpha > promptTarget then
-        gameState.mulliganPromptAlpha = math.max(promptTarget, gameState.mulliganPromptAlpha - promptStep)
-    end
+    cardanimations.updateMulliganAnimations(animationContext, dt)
 
-    if not gameState.mulliganResolving then
-        return
-    end
-
-    local animationsRemaining = false
-
-    for _, card in ipairs(gameState.cards) do
-        local animation = card and (card.mulliganInAnimation or card.mulliganOutAnimation) or nil
-
-        if animation then
-            animation.elapsed = math.min(animation.duration, (animation.elapsed or 0) + dt)
-
-            if animation.elapsed < animation.duration then
-                animationsRemaining = true
-            end
-        end
-    end
-
-    if animationsRemaining then
-        return
-    end
-
-    if gameState.mulliganPromptAlpha > 0.01 then
-        return
-    end
-
-    for cardIndex = #gameState.cards, 1, -1 do
-        local card = gameState.cards[cardIndex]
-
-        if card and card.mulliganOutAnimation then
-            table.remove(gameState.cards, cardIndex)
-        elseif card then
-            card.mulliganInAnimation = nil
-        end
-    end
-
-    deckrules.shuffleCardsIntoDeck(gameState.playerDeck, gameState.mulliganReturnedCards or {})
-    normalizeHandCardSlots()
-
-    gameState.mulliganReturnedCards = nil
-    gameState.mulliganResolving = false
-    gameState.mulliganActive = false
-    gameState.mulliganCompleted = true
+    gameState.mulliganPromptAlpha = animationContext.mulliganPromptAlpha
+    gameState.mulliganReturnedCards = animationContext.mulliganReturnedCards
+    gameState.mulliganResolving = animationContext.mulliganResolving
+    gameState.mulliganActive = animationContext.mulliganActive
+    gameState.mulliganCompleted = animationContext.mulliganCompleted
 end
 
 local function drawPilotVehicleAnimations()
-    for _, animation in ipairs(gameState.pilotVehicleAnimations) do
-        local progress = math.min(1, math.max(0, animation.elapsed / animation.duration))
-        local centerX = animation.drawX + (animation.cardWidth / 2)
-        local centerY = animation.drawY + (animation.cardHeight / 2)
-        local vehicleProgress = easeOutCubic(math.min(1, progress / 0.45))
-        local dockProgress = easeInOutCubic(math.max(0, math.min(1, (progress - 0.22) / 0.58)))
-        local settleProgress = easeOutCubic(math.max(0, math.min(1, (progress - 0.76) / 0.24)))
-        local pilotStartX = centerX
-        local pilotStartY = centerY
-        local pilotEndX = animation.drawX + (animation.cardWidth * 0.22)
-        local pilotEndY = animation.drawY + (animation.cardHeight * 0.24)
-        local pilotCenterX = pilotStartX + ((pilotEndX - pilotStartX) * dockProgress)
-        local pilotCenterY = pilotStartY + ((pilotEndY - pilotStartY) * dockProgress) - (14 * math.sin(dockProgress * math.pi))
-        local pilotScale = 1 - (0.68 * dockProgress)
-        local pilotAlpha = 1 - (0.82 * dockProgress)
-        local vehicleScale = 0.86 + (0.2 * vehicleProgress) - (0.06 * settleProgress)
-        local vehicleAlpha = math.min(1, vehicleProgress * 1.15)
-        local pulseAlpha = math.max(0, 1 - progress)
-        local pulseInset = 10 + (26 * progress)
-
-        love.graphics.setColor(0.5, 0.82, 1, 0.24 * pulseAlpha)
-        love.graphics.rectangle(
-            "line",
-            animation.drawX - pulseInset,
-            animation.drawY - pulseInset,
-            animation.cardWidth + (pulseInset * 2),
-            animation.cardHeight + (pulseInset * 2),
-            8,
-            8
-        )
-
-        drawAnimatedCard(
-            animation.vehicleSetName,
-            animation.vehicleCardId,
-            centerX,
-            centerY,
-            vehicleScale,
-            vehicleAlpha,
-            animation.vehicleRenderOptions
-        )
-
-        if pilotAlpha > 0.02 then
-            drawAnimatedCard(
-                animation.pilotSetName,
-                animation.pilotCardId,
-                pilotCenterX,
-                pilotCenterY,
-                pilotScale,
-                pilotAlpha,
-                animation.pilotRenderOptions
-            )
-        end
-    end
-
-    love.graphics.setColor(1, 1, 1, 1)
+    cardanimations.drawPilotVehicleAnimations(getCardAnimationContext())
 end
 
 releaseAttachedKits = function(card)
-    if not card
-        or card.deckOwner ~= "player"
-        or not gameState.playerDeck
-        or not card.attachedKitCards
-        or #card.attachedKitCards <= 0 then
-        return false
-    end
-
-    local releasedAny = false
-
-    for _, attachedKit in ipairs(card.attachedKitCards) do
-        local nextSlotIndex = getNextOpenHandSlot()
-        local kitCard = {
-            instanceId = attachedKit.instanceId,
-            setName = attachedKit.setName,
-            cardId = attachedKit.cardId,
-            displayName = attachedKit.displayName,
-            portraitPath = attachedKit.portraitPath,
-            deckOwner = "player",
-        }
-
-        if nextSlotIndex then
-            kitCard.location = {
-                kind = "hand",
-                slotIndex = nextSlotIndex,
-            }
-            gameState.cards[#gameState.cards + 1] = kitCard
-            gameState.cardExpansion[#gameState.cards] = 0
-            gameState.cardEntranceProgress[#gameState.cards] = 1
-            beginKitReturnAnimation(card, attachedKit, kitCard)
-        else
-            deckrules.discardCard(gameState.playerDeck, kitCard)
-        end
-
-        releasedAny = true
-    end
-
-    card.attachedKitCards = nil
-    return releasedAny
-end
-
-local function restoreAttachedPilotToSlot(cardIndex, vehicleCard)
-    local attachedPilot = vehicleCard and vehicleCard.attachedPilotCard or nil
-    local vehicleDefinition = vehicleCard and cardregistry.getCard(vehicleCard.setName, vehicleCard.cardId) or nil
-
-    if not cardIndex
-        or not vehicleCard
-        or not attachedPilot
-        or not keywordrules.cardHasKeyword(vehicleDefinition, "KWPILOT", vehicleCard)
-        or not vehicleCard.location
-        or vehicleCard.location.kind ~= "grid" then
-        return false
-    end
-
-    local pilotCard = {
-        instanceId = attachedPilot.instanceId,
-        setName = attachedPilot.setName,
-        cardId = attachedPilot.cardId,
-        deckOwner = attachedPilot.deckOwner or vehicleCard.deckOwner,
-        displayName = attachedPilot.displayName,
-        portraitPath = attachedPilot.portraitPath,
-        currentHealth = attachedPilot.currentHealth,
-        maxHealth = attachedPilot.maxHealth,
-        keywordValues = attachedPilot.keywordValues,
-        attachedKitCards = attachedPilot.attachedKitCards,
-        location = copyLocation(vehicleCard.location),
-    }
-
-    pilotCard.destroying = false
-    pilotCard.destroyed = false
-    pilotCard.sentToDiscard = nil
-    cardinstances.initializeHealth(pilotCard)
-    gameState.cards[cardIndex] = pilotCard
-    gameState.cardExpansion[cardIndex] = 0
-    gameState.cardEntranceProgress[cardIndex] = 1
-    warrules.clearCardRollState(cardIndex)
-
-    if turnrules.getCurrentPhase() == "War"
-        and turnrules.getCurrentWarSubphase() == "Engage" then
-        local pilotDefinition = cardregistry.getCard(pilotCard.setName, pilotCard.cardId)
-
-        warrules.rerollEntity(
-            warrules.getCardEntityKey(cardIndex),
-            pilotDefinition,
-            pilotCard.location.rowId == "OppRow",
-            pilotCard
-        )
-    end
-
-    return true
-end
-
-local function discardDestroyedCard(card, cardIndex)
-    if not card or card.sentToDiscard then
-        return nil
-    end
-
-    local cardDefinition = cardregistry.getCard(card.setName, card.cardId)
-
-    if cardDefinition and (cardDefinition.type == "token" or cardDefinition.type == "cache") then
-        card.sentToDiscard = true
-        restoreAttachedPilotToSlot(cardIndex, card)
-        return nil
-    end
-
-    if card.deckOwner == "player" and gameState.playerDeck then
-        releaseAttachedKits(card)
-        card.sentToDiscard = true
-        local discardedCard = deckrules.discardCard(gameState.playerDeck, card)
-        restoreAttachedPilotToSlot(cardIndex, card)
-        return discardedCard
-    end
-
-    if card.deckOwner == "champion" and gameState.championDeck then
-        card.sentToDiscard = true
-        local discardedCard = deckrules.discardCard(gameState.championDeck, card)
-        restoreAttachedPilotToSlot(cardIndex, card)
-        return discardedCard
-    end
-
-    restoreAttachedPilotToSlot(cardIndex, card)
-    return nil
+    return cardlifecycle.releaseAttachedKits(getCardLifecycleContext(), card)
 end
 
 local function removeCardFromPlay(cardIndex)
-    local card = gameState.cards[cardIndex]
+    return cardlifecycle.removeCardFromPlay(getCardLifecycleContext(), cardIndex)
+end
 
-    if not card then
-        return false
-    end
-
-    card.destroying = false
-    card.destroyed = true
-    card.sentToDiscard = true
-    warrules.clearCardRollState(cardIndex)
-
-    if gameState.selectedAttackerCardIndex == cardIndex then
-        gameState.selectedAttackerCardIndex = nil
-    end
-
-    if gameState.hoveredCardIndex == cardIndex then
-        gameState.hoveredCardIndex = nil
-    end
-
-    if gameState.expandedGridCardIndex == cardIndex then
-        gameState.expandedGridCardIndex = nil
-    end
-
-    restoreAttachedPilotToSlot(cardIndex, card)
-    return true
+local function expireCardFromPlay(cardIndex)
+    return cardlifecycle.expireCardFromPlay(getCardLifecycleContext(), cardIndex)
 end
 
 local function discardCardFromPlay(cardIndex)
-    local card = gameState.cards[cardIndex]
-
-    if not card then
-        return false
-    end
-
-    if card.deckOwner == "player" and gameState.playerDeck then
-        releaseAttachedKits(card)
-        deckrules.discardCard(gameState.playerDeck, card)
-    elseif card.deckOwner == "champion" and gameState.championDeck then
-        deckrules.discardCard(gameState.championDeck, card)
-    end
-
-    removeCardFromPlay(cardIndex)
-    return true
+    return cardlifecycle.discardCardFromPlay(getCardLifecycleContext(), cardIndex)
 end
 
 local function addObjectiveProgress(objectiveDefinition, amount, slotId)
@@ -1544,6 +857,7 @@ local function getPhaseControllerDeps()
         isGridCard = isGridCard,
         normalizeSetupCardSlots = normalizeSetupCardSlots,
         playHunterAddedSfxForCards = playHunterAddedSfxForCards,
+        expireCardFromPlay = expireCardFromPlay,
         removeCardFromPlay = removeCardFromPlay,
         updateInfiltrationEffect = updateInfiltrationEffect,
     }
@@ -1703,6 +1017,12 @@ local function isStrategyCard(card)
     })
 end
 
+local function isStrategyPhase()
+    return strategyrules.isStrategyPhase({
+        turnrules = turnrules,
+    })
+end
+
 local function getTomeUseContext()
     return {
         cards = gameState.cards,
@@ -1849,10 +1169,11 @@ local function resolvePlayedTroopCard(troopCardIndex)
     })
 end
 
-local function resolveDestroyedTroopCard(troopCardIndex)
+local function resolveDestroyedTroopCard(troopCardIndex, attachedKitCards)
     return trooprules.resolveDeath(troopCardIndex, {
         cards = gameState.cards,
         cardregistry = cardregistry,
+        attachedKitCards = attachedKitCards,
         drawCardFromPlayerDeck = drawCardFromPlayerDeck,
         spawnTokensNearPlayerCard = function(sourceCardIndex, tokenDefinition, count)
             local sourceCard = sourceCardIndex and gameState.cards[sourceCardIndex] or nil
@@ -1892,6 +1213,23 @@ addCardKeywordValue = function(cardIndex, keywordId, amount)
     end
 
     return nextValue
+end
+
+getCardLifecycleContext = function()
+    return {
+        state = gameState,
+        cardregistry = cardregistry,
+        sfxrules = sfxrules,
+        trooprules = trooprules,
+        turnrules = turnrules,
+        warrules = warrules,
+        addCardKeywordValue = addCardKeywordValue,
+        beginKitReturnAnimation = beginKitReturnAnimation,
+        copyLocation = copyLocation,
+        destructionDuration = DESTRUCTION_DURATION,
+        getNextOpenHandSlot = getNextOpenHandSlot,
+        resolveDestroyedTroopCard = resolveDestroyedTroopCard,
+    }
 end
 
 beginEndPhaseSacrificeSelection = function()
@@ -1962,142 +1300,10 @@ local function getEntitySourceRect(entityKey)
     return cardpresentation.getEntitySourceRect(entityKey, getCardPresentationContext())
 end
 
-local function copyRenderOptions(renderOptions)
-    local copiedOptions = {}
-
-    for key, value in pairs(renderOptions or {}) do
-        copiedOptions[key] = value
-    end
-
-    return copiedOptions
-end
-
-local function getHoveredCardPreview()
-    local cardIndex = gameState.hoveredCardIndex
-    local card = cardIndex and gameState.cards[cardIndex] or nil
-
-    if not card
-        or isCardDestroyed(card)
-        or card.returningToHandAnimation
-        or isCardUnavailable(card) then
-        return nil
-    end
-
-    local drawX, drawY, expansionProgress, renderOptions = getCardDrawPosition(card, cardIndex)
-    local cardWidth, collapsedHeight = carddraw.getCardSize(renderOptions)
-    local _, expandedHeight = carddraw.getExpandedCardSize(renderOptions)
-    local cardHeight = collapsedHeight + ((expandedHeight - collapsedHeight) * (expansionProgress or 0))
-
-    return {
-        kind = "card",
-        cardIndex = cardIndex,
-        card = card,
-        sourceRect = {
-            x = drawX,
-            y = drawY,
-            width = cardWidth,
-            height = cardHeight,
-        },
-        setName = card.setName,
-        cardId = card.cardId,
-        renderOptions = copyRenderOptions(renderOptions),
-    }
-end
-
-local function getHoveredTopSlotPreview()
-    local slotId = gameState.hoveredTopSlotId
-
-    if not slotId then
-        return nil
-    end
-
-    local slots = envdraw.getTopSlotLayouts(
-        turnrules.getCurrentPhase(),
-        gameState.activeChampion,
-        gameState.activeWarzone,
-        gameState.activePoi,
-        gameState.activePrimaryObjective,
-        gameState.activeIntel
-    )
-
-    for _, slot in ipairs(slots or {}) do
-        if slot.id == slotId and slot.definition and slot.imageRect then
-            local displayStates = warrules.getDisplayStates()
-
-            return {
-                kind = "topslot",
-                sourceRect = {
-                    x = slot.imageRect.x,
-                    y = slot.imageRect.y,
-                    width = slot.imageRect.width,
-                    height = slot.imageRect.height,
-                },
-                slotId = slot.id,
-                label = slot.nameText or slot.slotLabel or slot.id,
-                image = slot.image,
-                definition = slot.definition,
-                accentColor = slot.accentColor,
-                rollState = displayStates and displayStates[slot.id] or nil,
-            }
-        end
-    end
-
-    return nil
-end
-
-local function getHoveredJaclPreview(mouseX, mouseY)
-    local jaclLayout = envdraw.getBottomLeftPanelLayout(gameState.playerJacl)
-
-    if not jaclLayout then
-        return nil
-    end
-
-    local insidePanel = mouseX >= jaclLayout.panelX
-        and mouseX <= jaclLayout.panelX + jaclLayout.panelSize
-        and mouseY >= jaclLayout.panelY
-        and mouseY <= jaclLayout.panelY + jaclLayout.panelSize
-
-    if not insidePanel then
-        return nil
-    end
-
-    return {
-        kind = "jacl",
-        sourceRect = {
-            x = jaclLayout.panelX,
-            y = jaclLayout.panelY,
-            width = jaclLayout.panelSize,
-            height = jaclLayout.panelSize,
-        },
-        label = gameState.playerJacl and gameState.playerJacl.name or "JACL",
-        image = envdraw.getJaclArtImage(gameState.playerJacl),
-    }
-end
+local getHoverPreviewDeps
 
 local function getHoverPreviewState()
-    if gameState.draggedCardIndex
-        or gameState.fullArtImage
-        or gameState.isJaclDeckModalOpen
-        or gameState.isResourceExchangeModalOpen
-        or love.keyboard.isDown("lshift")
-        or love.keyboard.isDown("rshift") then
-        return nil
-    end
-
-    local hoveredCardPreview = getHoveredCardPreview()
-
-    if hoveredCardPreview then
-        return hoveredCardPreview
-    end
-
-    local hoveredTopSlotPreview = getHoveredTopSlotPreview()
-
-    if hoveredTopSlotPreview then
-        return hoveredTopSlotPreview
-    end
-
-    local mouseX, mouseY = love.mouse.getPosition()
-    return getHoveredJaclPreview(mouseX, mouseY)
+    return hoverpreview.getHoverPreviewState(gameState, getHoverPreviewDeps())
 end
 
 beginInfiltrationEffect = function(entityKey, generatedCardDefinition, count)
@@ -2194,6 +1400,7 @@ local function getEngageContext()
         cards = gameState.cards,
         hoveredCardIndex = gameState.hoveredCardIndex,
         selectedAttackerCardIndex = gameState.selectedAttackerCardIndex,
+        selectedAttackerTopSlotId = gameState.selectedAttackerTopSlotId,
         engageRerollCount = gameState.engageRerollCount,
         playerJacl = gameState.playerJacl,
         activePrimaryObjective = gameState.activePrimaryObjective,
@@ -2218,6 +1425,11 @@ local function getEngageContext()
         end,
         setSelectedAttackerCardIndex = function(cardIndex)
             gameState.selectedAttackerCardIndex = cardIndex
+            gameState.selectedAttackerTopSlotId = nil
+        end,
+        setSelectedAttackerTopSlotId = function(slotId)
+            gameState.selectedAttackerTopSlotId = slotId
+            gameState.selectedAttackerCardIndex = nil
         end,
         setExpandedGridCardIndex = function(cardIndex)
             gameState.expandedGridCardIndex = cardIndex
@@ -2299,6 +1511,27 @@ local function getModalDeps()
     }
 end
 
+getHoverPreviewDeps = function()
+    return {
+        abilityrules = abilityrules,
+        carddraw = carddraw,
+        cardregistry = cardregistry,
+        envdraw = envdraw,
+        sfxrules = sfxrules,
+        strategyrules = strategyrules,
+        tomerules = tomerules,
+        trooprules = trooprules,
+        turnrules = turnrules,
+        warrules = warrules,
+        getCardDrawPosition = getCardDrawPosition,
+        getCardMethodBadgeTarget = getCardMethodBadgeTarget,
+        getHoveredTopSlotId = getHoveredTopSlotId,
+        getModalDeps = getModalDeps,
+        isCardDestroyed = isCardDestroyed,
+        isCardUnavailable = isCardUnavailable,
+    }
+end
+
 local function isPointInsideJaclScratchBadge(mouseX, mouseY)
     return modals.isPointInsideJaclScratchBadge(mouseX, mouseY, envdraw, gameState.playerJacl)
 end
@@ -2325,6 +1558,24 @@ local function tryUseEngageReroll(mouseX, mouseY)
     return engagerules.tryUseReroll(mouseX, mouseY, getEngageContext())
 end
 
+local function getHoveredTopSlotRollBadgeId(mouseX, mouseY)
+    return envdraw.getTopSlotRollBadgeHit(
+        mouseX,
+        mouseY,
+        turnrules.getCurrentPhase(),
+        gameState.activeChampion,
+        gameState.activeWarzone,
+        gameState.activePoi,
+        gameState.activePrimaryObjective,
+        gameState.activeIntel,
+        warrules.getDisplayStates()
+    )
+end
+
+local function isAlliedTopSlot(slotId)
+    return slotId == "warzone" and gameState.activeWarzone and gameState.activeWarzone.allied == true or false
+end
+
 local function tryCancelSelectedEngageAttacker()
     return engagerules.tryCancelSelectedAttacker(getEngageContext())
 end
@@ -2337,6 +1588,7 @@ getTargetingContext = function()
         pendingStrategySelection = getPendingSelection(),
         primedActivatedAbility = gameState.primedActivatedAbility,
         selectedAttackerCardIndex = gameState.selectedAttackerCardIndex,
+        selectedAttackerTopSlotId = gameState.selectedAttackerTopSlotId,
         currentPhase = turnrules.getCurrentPhase(),
         displayStates = warrules.getDisplayStates(),
         activeChampion = gameState.activeChampion,
@@ -2394,225 +1646,11 @@ local function drawCardStateOverlays(card, cardIndex, drawX, drawY, expansionPro
 end
 
 function clearHoveredSpawnPreview()
-    gameState.hoveredTomeSpawnPreviewCard = nil
-    gameState.hoveredTomeSpawnPreviewCards = nil
-    gameState.hoveredTomeSpawnPreviewLabel = nil
-    gameState.hoveredTomeSpawnPreviewCardIndex = nil
-end
-
-local function updateHoveredSpawnPreview(card, cardIndex, allowGridPreview)
-    clearHoveredSpawnPreview()
-
-    local cardDefinition = card and cardregistry.getCard(card.setName, card.cardId) or nil
-
-    if tomerules.isSpawnTomeDefinition(cardDefinition) then
-        local targetCardId = tomerules.getFirstTargetCardId(cardDefinition)
-        local previewCardDefinition = targetCardId and cardregistry.getCardById(targetCardId) or nil
-
-        if previewCardDefinition then
-            gameState.hoveredTomeSpawnPreviewCards = { previewCardDefinition }
-            gameState.hoveredTomeSpawnPreviewCard = previewCardDefinition
-            gameState.hoveredTomeSpawnPreviewLabel = "SUMMON"
-            gameState.hoveredTomeSpawnPreviewCardIndex = cardIndex
-        end
-    elseif strategyrules.isSpawnStrategyDefinition(cardDefinition) then
-        local targetCardId = strategyrules.getFirstTargetCardId(cardDefinition)
-        local previewCardDefinition = targetCardId and cardregistry.getCardById(targetCardId) or nil
-
-        if previewCardDefinition then
-            gameState.hoveredTomeSpawnPreviewCards = { previewCardDefinition }
-            gameState.hoveredTomeSpawnPreviewCard = previewCardDefinition
-            gameState.hoveredTomeSpawnPreviewLabel = "SUMMON"
-            gameState.hoveredTomeSpawnPreviewCardIndex = cardIndex
-        end
-    elseif allowGridPreview or not (card.location and card.location.kind == "grid") then
-        local previewCardIds, previewLabel = trooprules.getPreviewCardIds(cardDefinition)
-
-        if previewCardIds and #previewCardIds > 0 then
-            local previewCardDefinitions = {}
-
-            for _, previewCardId in ipairs(previewCardIds) do
-                local previewCardDefinition = previewCardId and cardregistry.getCardById(previewCardId) or nil
-
-                if previewCardDefinition then
-                    previewCardDefinitions[#previewCardDefinitions + 1] = previewCardDefinition
-                end
-            end
-
-            if #previewCardDefinitions > 0 then
-                gameState.hoveredTomeSpawnPreviewCards = previewCardDefinitions
-                gameState.hoveredTomeSpawnPreviewCard = previewCardDefinitions[1]
-                gameState.hoveredTomeSpawnPreviewLabel = previewLabel
-                gameState.hoveredTomeSpawnPreviewCardIndex = cardIndex
-            end
-        end
-    end
-end
-
-local function attachDiceFaceSummonPreview(tooltip)
-    if tooltip and tooltip.summonCardId then
-        tooltip.previewCardDefinition = cardregistry.getCardById(tooltip.summonCardId)
-    end
-
-    if tooltip and tooltip.summonCardIds then
-        tooltip.previewCardDefinitions = {}
-
-        for _, summonCardId in ipairs(tooltip.summonCardIds) do
-            local previewCardDefinition = cardregistry.getCardById(summonCardId)
-
-            if previewCardDefinition then
-                tooltip.previewCardDefinitions[#tooltip.previewCardDefinitions + 1] = previewCardDefinition
-            end
-        end
-    end
-
-    return tooltip
-end
-
-local function clearHoveredCardAbilityPreview()
-    gameState.hoveredCardAbilityPreviewCards = nil
-    gameState.hoveredCardAbilityPreviewLabel = nil
-    gameState.hoveredCardAbilityPreviewDefinition = nil
-    gameState.hoveredCardAbilityPreviewCardIndex = nil
-end
-
-local function updateHoveredCardAbilityPreview(mouseX, mouseY)
-    clearHoveredCardAbilityPreview()
-
-    local hoveredMethodBadge = getCardMethodBadgeTarget(mouseX, mouseY)
-
-    if not hoveredMethodBadge then
-        return
-    end
-
-    local abilityDefinition = abilityrules.getCardMethodAbility(
-        hoveredMethodBadge.cardIndex,
-        hoveredMethodBadge.resource,
-        getModalDeps()
-    )
-    local effectArgs = abilityDefinition and abilityDefinition.effectArgs or nil
-    local previewCardId = nil
-
-    if abilityDefinition and abilityDefinition.effect == "pilot_vehicle_card" then
-        previewCardId = effectArgs and effectArgs.vehicleCardId or nil
-    elseif abilityDefinition and abilityDefinition.effect == "transform_card" then
-        previewCardId = effectArgs and effectArgs.targetCardId or nil
-    end
-
-    if not abilityDefinition then
-        return
-    end
-
-    local previewCardDefinition = previewCardId and cardregistry.getCardById(previewCardId) or nil
-
-    gameState.hoveredCardAbilityPreviewCards = previewCardDefinition and { previewCardDefinition } or nil
-    gameState.hoveredCardAbilityPreviewLabel = abilityDefinition.previewLabel or "CREATE"
-    gameState.hoveredCardAbilityPreviewDefinition = abilityDefinition
-    gameState.hoveredCardAbilityPreviewCardIndex = hoveredMethodBadge.cardIndex
+    hoverpreview.clearSpawnPreview(gameState)
 end
 
 local function updateHoveredCard()
-    local previousHoveredCardIndex = gameState.hoveredCardIndex
-    gameState.hoveredKeyword = nil
-    gameState.hoveredDiceFace = nil
-
-    if gameState.draggedCardIndex or gameState.isResourceExchangeModalOpen or gameState.isJaclDeckModalOpen then
-        gameState.hoveredCardIndex = nil
-        gameState.hoveredTopSlotId = nil
-        gameState.hoveredJaclSpecialDefinition = nil
-        gameState.hoveredJaclSpecialPreviewCard = nil
-        clearHoveredSpawnPreview()
-        clearHoveredCardAbilityPreview()
-        gameState.hoveredDiceFace = nil
-        return
-    end
-
-    local mouseX, mouseY = love.mouse.getPosition()
-    gameState.hoveredTopSlotId = getHoveredTopSlotId(mouseX, mouseY)
-    gameState.hoveredJaclSpecialDefinition = nil
-    gameState.hoveredJaclSpecialPreviewCard = nil
-    clearHoveredSpawnPreview()
-    clearHoveredCardAbilityPreview()
-    gameState.hoveredDiceFace = nil
-
-    gameState.hoveredDiceFace = attachDiceFaceSummonPreview(envdraw.getHoveredTopSlotDiceFace(
-        mouseX,
-        mouseY,
-        turnrules.getCurrentPhase(),
-        gameState.activeChampion,
-        gameState.activeWarzone,
-        gameState.activePoi,
-        gameState.activePrimaryObjective,
-        gameState.activeIntel,
-        warrules.getDisplayStates(),
-        gameState.expandedTopSlotId,
-        gameState.topSlotExpansion[gameState.expandedTopSlotId] or 0
-    ))
-
-    if gameState.hoveredCardIndex then
-        local activeCard = gameState.cards[gameState.hoveredCardIndex]
-
-        if activeCard and not activeCard.returningToHandAnimation and not isCardUnavailable(activeCard) then
-            local drawX, drawY, expansionProgress, renderOptions = getCardDrawPosition(activeCard, gameState.hoveredCardIndex)
-
-            if carddraw.isPointInsideDrawnCard(mouseX, mouseY, drawX, drawY, expansionProgress, nil, renderOptions) then
-                gameState.hoveredDiceFace = attachDiceFaceSummonPreview(carddraw.getHoveredDiceFace(activeCard.setName, activeCard.cardId, drawX, drawY, expansionProgress, renderOptions, mouseX, mouseY, warrules.getCardRollState(gameState.hoveredCardIndex))) or gameState.hoveredDiceFace
-                gameState.hoveredKeyword = carddraw.getHoveredKeyword(activeCard.setName, activeCard.cardId, drawX, drawY, renderOptions, mouseX, mouseY)
-                updateHoveredCardAbilityPreview(mouseX, mouseY)
-                updateHoveredSpawnPreview(activeCard, gameState.hoveredCardIndex, gameState.hoveredCardIndex == gameState.expandedGridCardIndex)
-                return
-            end
-        end
-    end
-
-    gameState.hoveredCardIndex = nil
-
-    for cardIndex = #gameState.cards, 1, -1 do
-        if not gameState.cards[cardIndex].returningToHandAnimation and not isCardUnavailable(gameState.cards[cardIndex]) then
-            local drawX, drawY, expansionProgress, renderOptions = getCardDrawPosition(gameState.cards[cardIndex], cardIndex)
-
-            if carddraw.isPointInsideDrawnCard(mouseX, mouseY, drawX, drawY, expansionProgress, nil, renderOptions) then
-                gameState.hoveredCardIndex = cardIndex
-                gameState.hoveredDiceFace = attachDiceFaceSummonPreview(carddraw.getHoveredDiceFace(gameState.cards[cardIndex].setName, gameState.cards[cardIndex].cardId, drawX, drawY, expansionProgress, renderOptions, mouseX, mouseY, warrules.getCardRollState(cardIndex))) or gameState.hoveredDiceFace
-                gameState.hoveredKeyword = carddraw.getHoveredKeyword(gameState.cards[cardIndex].setName, gameState.cards[cardIndex].cardId, drawX, drawY, renderOptions, mouseX, mouseY)
-                updateHoveredCardAbilityPreview(mouseX, mouseY)
-                updateHoveredSpawnPreview(gameState.cards[cardIndex], cardIndex, cardIndex == gameState.expandedGridCardIndex)
-                break
-            end
-        end
-    end
-
-    if not gameState.hoveredCardIndex and gameState.expandedGridCardIndex then
-        updateHoveredSpawnPreview(
-            gameState.cards[gameState.expandedGridCardIndex],
-            gameState.expandedGridCardIndex,
-            true
-        )
-    end
-
-    if gameState.hoveredCardIndex ~= nil
-        and gameState.hoveredCardIndex ~= previousHoveredCardIndex
-        and gameState.cards[gameState.hoveredCardIndex]
-        and gameState.cards[gameState.hoveredCardIndex].location.kind == "hand" then
-        sfxrules.playHover()
-    end
-
-    if not gameState.hoveredKeyword and gameState.playerJacl then
-        local hoveredMethodBadge = envdraw.getJaclMethodBadgeAt(mouseX, mouseY, gameState.playerJacl)
-
-        if hoveredMethodBadge then
-            gameState.hoveredJaclSpecialDefinition = abilityrules.getJaclMethodAbility(
-                gameState.playerJacl,
-                hoveredMethodBadge.resource,
-                getModalDeps()
-            )
-            local effectArgs = gameState.hoveredJaclSpecialDefinition and gameState.hoveredJaclSpecialDefinition.effectArgs or nil
-
-            if effectArgs and effectArgs.cardId then
-                gameState.hoveredJaclSpecialPreviewCard = cardregistry.getCardById(effectArgs.cardId)
-            end
-        end
-    end
+    hoverpreview.updateHoveredCard(gameState, getHoverPreviewDeps())
 end
 
 local function getInputControllerDeps()
@@ -2636,6 +1674,8 @@ local function getInputControllerDeps()
         getHoveredPlayerRollBadgeCardIndex = getHoveredPlayerRollBadgeCardIndex,
         getCardMethodBadgeTarget = getCardMethodBadgeTarget,
         getHoveredTopSlotId = getHoveredTopSlotId,
+        getHoveredTopSlotRollBadgeId = getHoveredTopSlotRollBadgeId,
+        isAlliedTopSlot = isAlliedTopSlot,
         getGridCardAt = getGridCardAt,
         getModalDeps = getModalDeps,
         getPhaseControllerDeps = getPhaseControllerDeps,
@@ -2651,6 +1691,7 @@ local function getInputControllerDeps()
             })
         end,
         isSetupCard = isSetupCard,
+        isStrategyPhase = isStrategyPhase,
         isStrategyCard = isStrategyCard,
         isTomeCard = function(card)
             return tomerules.isTomeCard(card, {
@@ -2690,6 +1731,7 @@ function love.load()
     gameState.expandedGridCardIndex = nil
     gameState.expandedTopSlotId = nil
     gameState.selectedAttackerCardIndex = nil
+    gameState.selectedAttackerTopSlotId = nil
     gameState.draggedCardIndex = nil
     gameState.draggedCardOrigin = nil
     gameState.dragOffsetX = 0
@@ -2797,24 +1839,7 @@ function love.update(dt)
     updatePilotVehicleAnimations(dt)
     updateMulliganAnimations(dt)
 
-    for cardIndex, card in ipairs(gameState.cards) do
-        if card.destroying then
-            card.destroyElapsed = (card.destroyElapsed or 0) + dt
-
-            if card.destroyElapsed >= DESTRUCTION_DURATION then
-                resolveDestroyedTroopCard(cardIndex)
-                trooprules.notifyPlayerRowUnitDefeated(cardIndex, {
-                    cards = gameState.cards,
-                    cardregistry = cardregistry,
-                    isCardUnavailable = isCardUnavailable,
-                    addCardKeywordValue = addCardKeywordValue,
-                })
-                card.destroying = false
-                card.destroyed = true
-                discardDestroyedCard(card, cardIndex)
-            end
-        end
-    end
+    cardlifecycle.updateDestroyedCards(getCardLifecycleContext(), dt)
 
     for entityKey, jitter in pairs(gameState.damageJitters) do
         jitter.elapsed = jitter.elapsed + dt
@@ -2921,6 +1946,9 @@ function love.draw()
         hoveredCardIndex = gameState.hoveredCardIndex,
         draggedCardIndex = gameState.draggedCardIndex,
         expandedGridCardIndex = gameState.expandedGridCardIndex,
+        pendingSelectionPrompt = gameState.pendingSacrificeSelection
+            and (gameState.pendingSacrificeSelection.prompt or "Choose a troop or token to sacrifice")
+            or nil,
         hoverPreview = getHoverPreviewState(),
         isJaclDeckModalOpen = gameState.isJaclDeckModalOpen,
         activeDeckModalDeck = gameState.activeDeckModalDeck,

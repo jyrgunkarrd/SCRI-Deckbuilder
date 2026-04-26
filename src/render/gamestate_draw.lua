@@ -394,7 +394,7 @@ function gamestatedraw.draw(ctx)
         ctx.envdraw.drawFullArtOverlay(ctx.fullArtImage)
     end
 
-    ctx.notifications.draw()
+    ctx.notifications.draw(ctx.pendingSelectionPrompt)
 end
 
 return gamestatedraw

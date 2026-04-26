@@ -47,7 +47,7 @@ function cardpresentation.getRenderOptions(card, cardIndex, ctx)
         local lethalPreviewOverkill = nil
 
         if card.location.rowId == "PlayerRow" and cardIndex then
-            damagePreviewCount = ctx.warrules.getIncomingDamagePreview(cardIndex, ctx.isWarRollSourceActive)
+            damagePreviewCount = ctx.warrules.getIncomingDamagePreview(cardIndex, ctx.isWarRollSourceActive, ctx.cards)
             blockedDamagePreviewCount = ctx.warrules.getBlockedDamagePreview(card, damagePreviewCount)
             healthDamagePreviewCount = ctx.warrules.getHealthDamagePreview(card, damagePreviewCount)
 
@@ -66,7 +66,7 @@ function cardpresentation.getRenderOptions(card, cardIndex, ctx)
             options.damagePreviewCount = healthDamagePreviewCount
             options.blockedDamagePreviewCount = blockedDamagePreviewCount
             options.lethalPreviewOverkill = lethalPreviewOverkill
-            options.dimmed = ctx.warrules.isCardExhausted(cardIndex)
+            options.dimmed = ctx.warrules.isCardExhausted(cardIndex) or card.preludeStrategyExhausted == true
             options.selected = ctx.selectedAttackerCardIndex == cardIndex
             return options
         end

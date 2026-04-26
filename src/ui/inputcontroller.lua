@@ -107,6 +107,7 @@ function inputcontroller.mousepressed(gameState, deps, x, y, button)
     deps.updateHoveredCard()
     gameState.hoveredTopSlotId = deps.getHoveredTopSlotId(x, y)
     local hoveredPlayerRollBadgeCardIndex = deps.getHoveredPlayerRollBadgeCardIndex(x, y)
+    local hoveredTopSlotRollBadgeId = deps.getHoveredTopSlotRollBadgeId and deps.getHoveredTopSlotRollBadgeId(x, y) or nil
     local clickedScratchBadge = deps.isPointInsideJaclScratchBadge(x, y)
     local clickedJaclPortrait = deps.isPointInsideJaclPortrait(x, y)
     local clickedJaclMethodBadge = deps.envdraw.getJaclMethodBadgeAt(x, y, gameState.playerJacl)
@@ -184,8 +185,17 @@ function inputcontroller.mousepressed(gameState, deps, x, y, button)
         return
     end
 
+    if button == 2
+        and hoveredTopSlotRollBadgeId
+        and deps.isAlliedTopSlot
+        and deps.isAlliedTopSlot(hoveredTopSlotRollBadgeId) then
+        deps.warrules.toggleTopSlotLock(hoveredTopSlotRollBadgeId)
+        return
+    end
+
     if button == 1
         and not gameState.selectedAttackerCardIndex
+        and not gameState.selectedAttackerTopSlotId
         and gameState.hoveredCardIndex
         and deps.tryUseTomeCard(gameState.hoveredCardIndex, x, y) then
         deps.sfxrules.playResourcePlay()
@@ -263,7 +273,9 @@ function inputcontroller.mousepressed(gameState, deps, x, y, button)
 
     if gameState.cards[gameState.hoveredCardIndex].location.kind == "hand" then
         local hoveredCard = gameState.cards[gameState.hoveredCardIndex]
-        local canDragStrategy = deps.isStrategyCard(hoveredCard) and deps.isEngagePhase()
+        local canDragStrategy = deps.isStrategyCard(hoveredCard)
+            and deps.isStrategyPhase
+            and deps.isStrategyPhase()
 
         if deps.turnrules.getCurrentPhase() ~= "Prelude" and not canDragStrategy then
             return

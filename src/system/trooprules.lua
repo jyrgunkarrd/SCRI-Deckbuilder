@@ -183,7 +183,9 @@ local function executeTroopEffect(troopDefinition, triggerName, state)
 end
 
 local function executeAttachedKitEffects(hostCard, triggerName, state)
-    for _, attachedKit in ipairs(hostCard and hostCard.attachedKitCards or {}) do
+    local attachedKitCards = state.attachedKitCards or hostCard and hostCard.attachedKitCards or {}
+
+    for _, attachedKit in ipairs(attachedKitCards) do
         local attachedDefinition = attachedKit and state.ctx.cardregistry.getCard(attachedKit.setName, attachedKit.cardId) or nil
 
         if attachedDefinition and attachedDefinition.func then
@@ -222,6 +224,7 @@ function trooprules.resolveDeath(troopCardIndex, ctx)
         troopCardIndex = troopCardIndex,
         troopCard = troopCard,
         definition = troopDefinition,
+        attachedKitCards = ctx.attachedKitCards,
         ctx = ctx,
     }
 

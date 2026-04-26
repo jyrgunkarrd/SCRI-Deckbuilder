@@ -41,6 +41,14 @@ local function isEngagePhase(ctx)
         and ctx.turnrules.getCurrentWarSubphase() == "Engage"
 end
 
+local function isStrategyPhase(ctx)
+    return ctx.turnrules.getCurrentPhase() == "Prelude" or isEngagePhase(ctx)
+end
+
+function strategyrules.isStrategyPhase(ctx)
+    return isStrategyPhase(ctx)
+end
+
 function strategyrules.isStrategyDefinition(cardDefinition)
     return cardDefinition and cardDefinition.type == "strategy" or false
 end
@@ -248,6 +256,8 @@ function strategyrules.resolvePendingSelection(selectedCardIndex, pendingSelecti
 end
 
 local function refreshEliteCards(ctx)
+    local shouldReroll = isEngagePhase(ctx)
+
     for cardIndex, card in ipairs(ctx.cards or {}) do
         if card
             and card.location
@@ -258,7 +268,13 @@ local function refreshEliteCards(ctx)
             local definition = ctx.cardregistry.getCard(card.setName, card.cardId)
 
             if keywordrules.cardHasKeyword(definition, ELITE_KEYWORD_ID, card) then
-                ctx.warrules.rerollEntity(ctx.warrules.getCardEntityKey(cardIndex), definition, false, card)
+                card.preludeStrategyExhausted = nil
+
+                if shouldReroll and ctx.warrules.refreshAndRerollCard then
+                    ctx.warrules.refreshAndRerollCard(cardIndex, definition, card)
+                elseif ctx.warrules.refreshCardExhaustion then
+                    ctx.warrules.refreshCardExhaustion(cardIndex)
+                end
             end
         end
     end
@@ -281,8 +297,10 @@ function strategyrules.canPlayStrategy(strategyCard, targetCardIndex, ctx)
     local strategyDefinition = strategyCard and ctx.cardregistry.getCard(strategyCard.setName, strategyCard.cardId) or nil
     local targetDefinition = targetCard and ctx.cardregistry.getCard(targetCard.setName, targetCard.cardId) or nil
     local targetRollState = targetCardIndex and ctx.warrules.getCardRollState(targetCardIndex) or nil
+    local targetIsReady = targetRollState and targetRollState.exhausted ~= true
+        or (not targetRollState and targetCard and targetCard.preludeStrategyExhausted ~= true)
 
-    return isEngagePhase(ctx)
+    return isStrategyPhase(ctx)
         and strategyrules.isStrategyDefinition(strategyDefinition)
         and strategyCard.location
         and strategyCard.location.kind == "hand"
@@ -291,8 +309,7 @@ function strategyrules.canPlayStrategy(strategyCard, targetCardIndex, ctx)
         and targetCard.location.kind == "grid"
         and targetCard.location.rowId == "PlayerRow"
         and strategyrules.isStrategistDefinition(targetDefinition)
-        and targetRollState
-        and targetRollState.exhausted ~= true
+        and targetIsReady
 end
 
 function strategyrules.playStrategy(strategyCardIndex, targetCardIndex, ctx)
@@ -327,8 +344,12 @@ function strategyrules.playStrategy(strategyCardIndex, targetCardIndex, ctx)
         return false
     end
 
-    if not ctx.warrules.consumeCardAttack(targetCardIndex) then
+    local targetRollState = ctx.warrules.getCardRollState(targetCardIndex)
+
+    if targetRollState and not ctx.warrules.consumeCardAttack(targetCardIndex) then
         return false
+    elseif not targetRollState then
+        state.targetCard.preludeStrategyExhausted = true
     end
 
     triggerStrategistExhaust(targetCardIndex, {

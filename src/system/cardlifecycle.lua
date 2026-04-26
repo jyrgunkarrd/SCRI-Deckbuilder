@@ -1,0 +1,281 @@
+local cardinstances = require("src.system.cardinstances")
+local deckrules = require("src.system.deckrules")
+local keywordrules = require("src.system.keywordrules")
+
+local cardlifecycle = {}
+
+local function resolveDefeatedCard(ctx, cardIndex, card)
+    local state = ctx and ctx.state or nil
+
+    if not state or not card then
+        return false
+    end
+
+    local attachedKitCards = card.attachedKitCards
+
+    cardlifecycle.releaseAttachedKits(ctx, card)
+    ctx.resolveDestroyedTroopCard(cardIndex, attachedKitCards)
+    ctx.trooprules.notifyPlayerRowUnitDefeated(cardIndex, {
+        cards = state.cards,
+        cardregistry = ctx.cardregistry,
+        isCardUnavailable = function(candidateCard)
+            return cardlifecycle.isCardUnavailable(candidateCard)
+        end,
+        addCardKeywordValue = ctx.addCardKeywordValue,
+    })
+    return true
+end
+
+function cardlifecycle.isCardDestroyed(card)
+    return card and card.destroyed == true
+end
+
+function cardlifecycle.isCardUnavailable(card)
+    return card == nil or card.destroyed == true or card.destroying == true or card.pilotVehicleAnimation == true
+end
+
+function cardlifecycle.startCardDestruction(ctx, cardIndex)
+    local state = ctx and ctx.state or nil
+    local card = state and state.cards[cardIndex] or nil
+
+    if not card or card.destroying or card.destroyed then
+        return
+    end
+
+    card.destroying = true
+    card.destroyElapsed = 0
+    card.destroySeed = love.math.random() * 1000
+    ctx.warrules.clearCardRollState(cardIndex)
+    ctx.sfxrules.playDestroy()
+
+    if state.selectedAttackerCardIndex == cardIndex then
+        state.selectedAttackerCardIndex = nil
+    end
+end
+
+function cardlifecycle.releaseAttachedKits(ctx, card)
+    local state = ctx and ctx.state or nil
+
+    if not card
+        or not state
+        or not state.playerDeck
+        or not card.attachedKitCards
+        or #card.attachedKitCards <= 0 then
+        return false
+    end
+
+    local releasedAny = false
+    local remainingAttachedKits = {}
+
+    for _, attachedKit in ipairs(card.attachedKitCards) do
+        local returnsToPlayer = attachedKit.deckOwner == "player"
+            or card.deckOwner == "player"
+            or (
+                card.location
+                and card.location.kind == "grid"
+                and card.location.rowId == "PlayerRow"
+            )
+
+        if returnsToPlayer then
+            local nextSlotIndex = ctx.getNextOpenHandSlot()
+            local kitCard = {
+                instanceId = attachedKit.instanceId,
+                setName = attachedKit.setName,
+                cardId = attachedKit.cardId,
+                displayName = attachedKit.displayName,
+                portraitPath = attachedKit.portraitPath,
+                deckOwner = "player",
+            }
+
+            if nextSlotIndex then
+                kitCard.location = {
+                    kind = "hand",
+                    slotIndex = nextSlotIndex,
+                }
+                state.cards[#state.cards + 1] = kitCard
+                state.cardExpansion[#state.cards] = 0
+                state.cardEntranceProgress[#state.cards] = 1
+                ctx.beginKitReturnAnimation(card, attachedKit, kitCard)
+            else
+                deckrules.discardCard(state.playerDeck, kitCard)
+            end
+
+            releasedAny = true
+        else
+            remainingAttachedKits[#remainingAttachedKits + 1] = attachedKit
+        end
+    end
+
+    card.attachedKitCards = #remainingAttachedKits > 0 and remainingAttachedKits or nil
+    return releasedAny
+end
+
+function cardlifecycle.restoreAttachedPilotToSlot(ctx, cardIndex, vehicleCard)
+    local state = ctx and ctx.state or nil
+    local attachedPilot = vehicleCard and vehicleCard.attachedPilotCard or nil
+    local vehicleDefinition = vehicleCard and ctx.cardregistry.getCard(vehicleCard.setName, vehicleCard.cardId) or nil
+
+    if not state
+        or not cardIndex
+        or not vehicleCard
+        or not attachedPilot
+        or not keywordrules.cardHasKeyword(vehicleDefinition, "KWPILOT", vehicleCard)
+        or not vehicleCard.location
+        or vehicleCard.location.kind ~= "grid" then
+        return false
+    end
+
+    local pilotCard = {
+        instanceId = attachedPilot.instanceId,
+        setName = attachedPilot.setName,
+        cardId = attachedPilot.cardId,
+        deckOwner = attachedPilot.deckOwner or vehicleCard.deckOwner,
+        displayName = attachedPilot.displayName,
+        portraitPath = attachedPilot.portraitPath,
+        currentHealth = attachedPilot.currentHealth,
+        maxHealth = attachedPilot.maxHealth,
+        keywordValues = attachedPilot.keywordValues,
+        attachedKitCards = attachedPilot.attachedKitCards,
+        location = ctx.copyLocation(vehicleCard.location),
+    }
+
+    pilotCard.destroying = false
+    pilotCard.destroyed = false
+    pilotCard.sentToDiscard = nil
+    cardinstances.initializeHealth(pilotCard)
+    state.cards[cardIndex] = pilotCard
+    state.cardExpansion[cardIndex] = 0
+    state.cardEntranceProgress[cardIndex] = 1
+    ctx.warrules.clearCardRollState(cardIndex)
+
+    if ctx.turnrules.getCurrentPhase() == "War"
+        and ctx.turnrules.getCurrentWarSubphase() == "Engage" then
+        local pilotDefinition = ctx.cardregistry.getCard(pilotCard.setName, pilotCard.cardId)
+
+        ctx.warrules.rerollEntity(
+            ctx.warrules.getCardEntityKey(cardIndex),
+            pilotDefinition,
+            pilotCard.location.rowId == "OppRow",
+            pilotCard
+        )
+    end
+
+    return true
+end
+
+function cardlifecycle.discardDestroyedCard(ctx, card, cardIndex)
+    local state = ctx and ctx.state or nil
+
+    if not state or not card or card.sentToDiscard then
+        return nil
+    end
+
+    local cardDefinition = ctx.cardregistry.getCard(card.setName, card.cardId)
+
+    if cardDefinition and (cardDefinition.type == "token" or cardDefinition.type == "cache") then
+        card.sentToDiscard = true
+        cardlifecycle.restoreAttachedPilotToSlot(ctx, cardIndex, card)
+        return nil
+    end
+
+    if card.deckOwner == "player" and state.playerDeck then
+        cardlifecycle.releaseAttachedKits(ctx, card)
+        card.sentToDiscard = true
+        local discardedCard = deckrules.discardCard(state.playerDeck, card)
+        cardlifecycle.restoreAttachedPilotToSlot(ctx, cardIndex, card)
+        return discardedCard
+    end
+
+    if card.deckOwner == "champion" and state.championDeck then
+        card.sentToDiscard = true
+        local discardedCard = deckrules.discardCard(state.championDeck, card)
+        cardlifecycle.restoreAttachedPilotToSlot(ctx, cardIndex, card)
+        return discardedCard
+    end
+
+    cardlifecycle.restoreAttachedPilotToSlot(ctx, cardIndex, card)
+    return nil
+end
+
+function cardlifecycle.removeCardFromPlay(ctx, cardIndex)
+    local state = ctx and ctx.state or nil
+    local card = state and state.cards[cardIndex] or nil
+
+    if not card then
+        return false
+    end
+
+    card.destroying = false
+    card.destroyed = true
+    card.sentToDiscard = true
+    ctx.warrules.clearCardRollState(cardIndex)
+
+    if state.selectedAttackerCardIndex == cardIndex then
+        state.selectedAttackerCardIndex = nil
+    end
+
+    if state.hoveredCardIndex == cardIndex then
+        state.hoveredCardIndex = nil
+    end
+
+    if state.expandedGridCardIndex == cardIndex then
+        state.expandedGridCardIndex = nil
+    end
+
+    cardlifecycle.restoreAttachedPilotToSlot(ctx, cardIndex, card)
+    return true
+end
+
+function cardlifecycle.expireCardFromPlay(ctx, cardIndex)
+    local state = ctx and ctx.state or nil
+    local card = state and state.cards[cardIndex] or nil
+
+    if not card or card.destroyed or card.sentToDiscard then
+        return false
+    end
+
+    resolveDefeatedCard(ctx, cardIndex, card)
+    return cardlifecycle.removeCardFromPlay(ctx, cardIndex)
+end
+
+function cardlifecycle.discardCardFromPlay(ctx, cardIndex)
+    local state = ctx and ctx.state or nil
+    local card = state and state.cards[cardIndex] or nil
+
+    if not card then
+        return false
+    end
+
+    if card.deckOwner == "player" and state.playerDeck then
+        cardlifecycle.releaseAttachedKits(ctx, card)
+        deckrules.discardCard(state.playerDeck, card)
+    elseif card.deckOwner == "champion" and state.championDeck then
+        deckrules.discardCard(state.championDeck, card)
+    end
+
+    cardlifecycle.removeCardFromPlay(ctx, cardIndex)
+    return true
+end
+
+function cardlifecycle.updateDestroyedCards(ctx, dt)
+    local state = ctx and ctx.state or nil
+
+    if not state then
+        return
+    end
+
+    for cardIndex, card in ipairs(state.cards) do
+        if card.destroying then
+            card.destroyElapsed = (card.destroyElapsed or 0) + dt
+
+            if card.destroyElapsed >= ctx.destructionDuration then
+                resolveDefeatedCard(ctx, cardIndex, card)
+                card.destroying = false
+                card.destroyed = true
+                cardlifecycle.discardDestroyedCard(ctx, card, cardIndex)
+            end
+        end
+    end
+end
+
+return cardlifecycle

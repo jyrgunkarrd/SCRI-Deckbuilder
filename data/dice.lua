@@ -165,6 +165,17 @@ local dice = {
         },
 
         {
+            id = "EXODMG10",
+            type = "ExWeap",
+            value = 10,
+            action = "attack",
+            target = "enemy_card",
+            autoReload = true,
+            facename = "Exotic Weapon Attack",
+            facedesc = "Deal damage to a target troop or Champion. This card gains Reloading.",
+        },
+
+        {
             id = "CQDMG2",
             type = "MeleeWeap",
             value = 2,
@@ -311,6 +322,27 @@ local dice = {
         id = "BBLK1",
         type = "BasicBlk",
         value = 1,
+        targ = "Blk",
+    },
+
+    {
+        id = "BBLK2",
+        type = "BasicBlk",
+        value = 2,
+        targ = "Blk",
+    },
+
+    {
+        id = "BBLK3",
+        type = "BasicBlk",
+        value = 3,
+        targ = "Blk",
+    },
+
+    {
+        id = "BBLK4",
+        type = "BasicBlk",
+        value = 4,
         targ = "Blk",
     },
 
@@ -548,9 +580,79 @@ local dice = {
     {
         id = "INF1",
         type = "BasicInf",
-        value = 5,
+        value = 1,
         targ = "Inf",
         cardgen = "HNTINFFM",
+    },
+
+    {
+        id = "INF2",
+        type = "BasicInf",
+        value = 2,
+        targ = "Inf",
+        cardgen = "HNTINFFM",
+    },
+
+    --- Warrant ---
+
+    {
+        id = "WARR1",
+        type = "Warrant",
+        value = 1,
+        targ = "IntCD",
+    },
+
+    {
+        id = "WARR2",
+        type = "Warrant",
+        value = 2,
+        targ = "IntCD",
+    },
+
+    {
+        id = "WARR3",
+        type = "Warrant",
+        value = 3,
+        targ = "IntCD",
+    },
+
+    --- Threat ---
+
+    {
+        id = "THR1",
+        type = "Threat",
+        value = 1,
+        targ = "WZOpp",
+    },
+
+    {
+        id = "THR2",
+        type = "Threat",
+        value = 2,
+        targ = "WZOpp",
+    },
+
+    {
+        id = "THR3",
+        type = "Threat",
+        value = 3,
+        targ = "WZOpp",
+    },
+
+    --- Objective ---
+
+    {
+        id = "OBJ1",
+        type = "RedButton",
+        value = 1,
+        targ = "Obj",
+    },
+
+    {
+        id = "OBJ2",
+        type = "RedButton",
+        value = 2,
+        targ = "Obj",
     },
 
     --- Summoning
