@@ -274,6 +274,19 @@ local function canUseUtilityRollState(rollState)
         or false
 end
 
+local function getEffectiveFaceValue(faceDefinition, normalizedBehavior, definition, sourceCard, isReloading)
+    local damageValue = isReloading and 0 or math.max(0, tonumber(faceDefinition and faceDefinition.value) or 0)
+
+    if not isReloading
+        and normalizedBehavior
+        and normalizedBehavior.immac == true
+        and isSourceAtFullHealth(definition, sourceCard) then
+        damageValue = damageValue * 2
+    end
+
+    return damageValue
+end
+
 local function buildLegacyTargetTypeFromNormalizedFace(faceDefinition)
     if not faceDefinition then
         return nil
@@ -470,8 +483,7 @@ local function buildRollState(entityKey, definition, faceIndices, isEnemy, prese
     local targetCard = nil
     local targetCardIndex = nil
     local targetColumn = nil
-    local baseDamageValue = math.max(0, tonumber(selectedFaceDefinition and selectedFaceDefinition.value) or 0)
-    local damageValue = isReloading and 0 or baseDamageValue
+    local damageValue = getEffectiveFaceValue(selectedFaceDefinition, normalizedBehavior, definition, sourceCard, isReloading)
     local targetType = isReloading and nil or effectiveTargetType
     local cardgen = selectedFaceDefinition and (selectedFaceDefinition.cardgen or getFirstTargetCardId(selectedFaceDefinition)) or nil
     local cardgenPool = selectedFaceDefinition and getTargetCardIds(selectedFaceDefinition) or {}
@@ -483,8 +495,6 @@ local function buildRollState(entityKey, definition, faceIndices, isEnemy, prese
         cardgenPool = {}
         area = false
         autoReload = false
-    elseif normalizedBehavior.immac == true and isSourceAtFullHealth(definition, sourceCard) then
-        damageValue = damageValue * 2
     end
 
     if isEnemy
@@ -918,6 +928,8 @@ local function findClosestLegalPlayerAttackTarget(cards, sourceDefinition, sourc
     return bestCardIndex
 end
 
+local rollStateDealsAreaDamageToCard
+
 function warrules.retargetIllegalEnemyAttacks(cards)
     local retargetedCount = 0
 
@@ -981,10 +993,17 @@ function warrules.redirectIncomingAttacks(cards, fromCardIndex, toCardIndex)
     local targetPreview = buildTargetCardPreview(targetCard)
 
     for _, rollState in pairs(warRollDisplayStates) do
+        local targetsFromCard = rollState
+            and (
+                rollState.targetCardIndex == fromCardIndex
+                or rollStateDealsAreaDamageToCard(rollState, fromCardIndex, cards)
+            )
+            or false
+
         if rollState
             and rollState.faceIndex
             and canTargetEnemyCard(rollState)
-            and rollState.targetCardIndex == fromCardIndex
+            and targetsFromCard
             and canAttackTarget(rollState.sourceDefinition, targetDefinition, rollState.sourceCard, targetCard, rollState, cards) then
             rollState.targetCardIndex = toCardIndex
             rollState.targetCard = targetPreview
@@ -1104,7 +1123,9 @@ function warrules.refreshCardRollValue(cardIndex, cards)
         return false
     end
 
-    rollState.damageValue = math.max(0, tonumber(badgeDefinition.value) or 0)
+    local normalizedBehavior = getNormalizedFaceBehavior(badgeDefinition)
+    local isReloading = hasReloadingKeyword(definition, card)
+    rollState.damageValue = getEffectiveFaceValue(badgeDefinition, normalizedBehavior, definition, card, isReloading)
     return true
 end
 
@@ -1227,7 +1248,7 @@ function warrules.triggerCounterStrikesOnTargeting(cards, activeChampion, dealDa
     return counterStrikeCount
 end
 
-local function rollStateDealsAreaDamageToCard(rollState, cardIndex, cards)
+rollStateDealsAreaDamageToCard = function(rollState, cardIndex, cards)
     if not rollState
         or rollState.area ~= true
         or not rollState.targetCardIndex

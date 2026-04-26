@@ -25,6 +25,11 @@ local decks = {
                 },
 
                 {
+                    cardId = "AEGFZSPEC",
+                    quantity = 2,
+                },
+
+                {
                     cardId = "AEGTMINGO",
                     quantity = 1,
                 },

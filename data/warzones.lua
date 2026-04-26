@@ -13,7 +13,7 @@ local warzones = {
         poi = "POI0001",
         allied = true, 
         method = {
-            { resource = "The Trigger", amount = 1 },
+            { resource = "The Scratch", amount = 1 },
         },
         flavor = "\"At Rachel's, we never forgot the little miracle that was 2-for-1 pizza.\"",
         D1 = "DRAWSAB1",

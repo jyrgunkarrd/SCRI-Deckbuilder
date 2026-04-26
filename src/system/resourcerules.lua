@@ -9,6 +9,8 @@ local METHOD_COLOR = { 0.953, 0.749, 0.208, 1 }
 local resourceCounts = {}
 local activeTransfers = {}
 local pendingGenerations = {}
+local queueTransfer
+local startNextPendingGeneration
 
 local function cloneColor(color)
     return { color[1], color[2], color[3], color[4] }
@@ -60,6 +62,25 @@ function resourcerules.addResource(resourceName, amount)
     end
 
     incrementResource(resourceName, resourceAmount)
+    return true
+end
+
+function resourcerules.addResourceFromSource(resourceName, amount, sourceCenter, panelLayout, resourceTrackerLayout)
+    local resourceAmount = math.max(0, math.floor(tonumber(amount) or 0))
+
+    if resourceAmount <= 0 then
+        return false
+    end
+
+    if not sourceCenter or not panelLayout or not resourceTrackerLayout then
+        return resourcerules.addResource(resourceName, resourceAmount)
+    end
+
+    for _ = 1, resourceAmount do
+        queueTransfer(sourceCenter, resourceName, panelLayout.scratchBadgeCenter, resourceTrackerLayout)
+    end
+
+    startNextPendingGeneration()
     return true
 end
 
@@ -132,7 +153,7 @@ function resourcerules.exchangeResourceForScratch(sourceResource)
     return true
 end
 
-local function queueTransfer(sourceCenter, targetResource, scratchTargetCenter, resourceTrackerLayout)
+queueTransfer = function(sourceCenter, targetResource, scratchTargetCenter, resourceTrackerLayout)
     if not sourceCenter or not targetResource or not scratchTargetCenter or not resourceTrackerLayout then
         return nil
     end
@@ -166,7 +187,7 @@ local function queueTransfer(sourceCenter, targetResource, scratchTargetCenter, 
     }
 end
 
-local function startNextPendingGeneration()
+startNextPendingGeneration = function()
     if #activeTransfers > 0 or #pendingGenerations == 0 then
         return
     end

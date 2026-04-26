@@ -18,6 +18,6 @@ local ally = {
         D6 = "SAB1",
     },
 
-    },
+}
 
 return ally

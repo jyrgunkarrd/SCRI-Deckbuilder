@@ -1435,8 +1435,20 @@ local function getEngageContext()
         addSyntac = function(amount)
             gameState.syntacCount = math.min(10, math.max(0, (gameState.syntacCount or 0) + math.max(0, tonumber(amount) or 0)))
         end,
-        addMethodResource = function(resourceName, amount)
-            return resourcerules.addResource(resourceName, amount)
+        addMethodResource = function(resourceName, amount, sourceEntityKey)
+            local sourceRect = sourceEntityKey and getEntitySourceRect(sourceEntityKey) or nil
+            local sourceCenter = sourceRect and {
+                x = sourceRect.x + (sourceRect.width / 2),
+                y = sourceRect.y + (sourceRect.height / 2),
+            } or nil
+
+            return resourcerules.addResourceFromSource(
+                resourceName,
+                amount,
+                sourceCenter,
+                envdraw.getBottomLeftPanelLayout(gameState.playerJacl),
+                envdraw.getResourceTrackerLayout()
+            )
         end,
         setSelectedAttackerCardIndex = function(cardIndex)
             gameState.selectedAttackerCardIndex = cardIndex

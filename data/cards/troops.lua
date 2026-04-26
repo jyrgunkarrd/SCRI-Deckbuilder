@@ -298,7 +298,7 @@ local troops = {
         textbox = "When this card enters play, summon a Fritz Droid token.",
         flavor = "\"I'm not a yanker. Never once pulled a plug.\"", 
         mcost = {
-            { resource = "The Gate", amount = 1 },
+            { resource = "The Scratch", amount = 2 },
         },
         D1 = "FZSMN",
         D2 = "TAC2",

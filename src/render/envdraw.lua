@@ -822,7 +822,7 @@ local function drawTopSlotEmphasisBadge(slot, imageRect)
 
     local badgeSize = math.max(20, snap(imageRect.width * TOP_SLOT_EMPHASIS_BADGE_SIZE_RATIO))
     local badgeInset = math.max(4, snap(imageRect.width * 0.04))
-    local badgeX = snap(imageRect.x + imageRect.width - badgeInset - badgeSize)
+    local badgeX = snap(imageRect.x + badgeInset)
     local badgeY = snap(imageRect.y + imageRect.height - badgeInset - badgeSize)
     local badgeFontSize = math.max(10, snap(badgeSize * 0.5))
     local badgeFont = getFont(CHAMP_LABEL_FONT_PATH, badgeFontSize)

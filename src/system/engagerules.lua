@@ -30,21 +30,33 @@ local function drawCardsForRoll(ctx, rollState)
     end
 end
 
-local function generateResourceForRoll(ctx, rollState)
+local function getSelectedRollSourceEntityKey(ctx)
+    if ctx.selectedAttackerCardIndex then
+        return ctx.warrules.getCardEntityKey(ctx.selectedAttackerCardIndex)
+    end
+
+    return ctx.selectedAttackerTopSlotId
+end
+
+local function generateResourceForRoll(ctx, rollState, sourceEntityKey)
     if not rollState or not rollState.generatedResource or not ctx.addMethodResource then
         return
     end
 
-    ctx.addMethodResource(rollState.generatedResource, rollState.damageValue or 0)
+    ctx.addMethodResource(
+        rollState.generatedResource,
+        rollState.damageValue or 0,
+        sourceEntityKey or getSelectedRollSourceEntityKey(ctx)
+    )
 end
 
-local function applyRollUtilitySideEffects(ctx, rollState)
+local function applyRollUtilitySideEffects(ctx, rollState, sourceEntityKey)
     if rollState and rollState.gainSyntac == true then
         ctx.addSyntac(rollState.damageValue or 0)
     end
 
     drawCardsForRoll(ctx, rollState)
-    generateResourceForRoll(ctx, rollState)
+    generateResourceForRoll(ctx, rollState, sourceEntityKey)
 end
 
 local function isUtilityRollState(rollState)
@@ -497,10 +509,17 @@ function engagerules.tryResolveClick(hoveredTopSlotId, ctx)
 
             if hoveredRollState and ctx.warrules.hasTargetType(hoveredRollState, "Inf") then
                 local generatedCardDefinition = cardregistry.getCardById(hoveredRollState.cardgen)
+                local sourceEntityKey = ctx.warrules.getCardEntityKey(ctx.hoveredCardIndex)
 
                 if generatedCardDefinition then
                     resolveImmediateCardAction(ctx, ctx.hoveredCardIndex, function()
-                        return ctx.beginInfiltrationEffect(ctx.warrules.getCardEntityKey(ctx.hoveredCardIndex), generatedCardDefinition, hoveredRollState.damageValue or 0)
+                        local resolved = ctx.beginInfiltrationEffect(sourceEntityKey, generatedCardDefinition, hoveredRollState.damageValue or 0)
+
+                        if resolved then
+                            applyRollUtilitySideEffects(ctx, hoveredRollState, sourceEntityKey)
+                        end
+
+                        return resolved
                     end)
                 end
 
@@ -510,10 +529,12 @@ function engagerules.tryResolveClick(hoveredTopSlotId, ctx)
             if hoveredRollState and ctx.warrules.hasTargetType(hoveredRollState, "smn") then
                 local generatedCardDefinition = cardregistry.getCardById(hoveredRollState.cardgen)
                 local spawnCount = math.max(0, math.floor(tonumber(hoveredRollState.damageValue) or 0))
+                local sourceEntityKey = ctx.warrules.getCardEntityKey(ctx.hoveredCardIndex)
 
                 if generatedCardDefinition and spawnCount > 0 and ctx.spawnTokensNearCard then
                     resolveImmediateCardAction(ctx, ctx.hoveredCardIndex, function()
                         ctx.spawnTokensNearCard(ctx.hoveredCardIndex, generatedCardDefinition, spawnCount)
+                        applyRollUtilitySideEffects(ctx, hoveredRollState, sourceEntityKey)
                         return true
                     end)
                 end
@@ -524,6 +545,7 @@ function engagerules.tryResolveClick(hoveredTopSlotId, ctx)
             if hoveredRollState and ctx.warrules.hasTargetType(hoveredRollState, "rsmn") then
                 local generatedCardDefinitions = {}
                 local spawnCount = math.max(0, math.floor(tonumber(hoveredRollState.damageValue) or 0))
+                local sourceEntityKey = ctx.warrules.getCardEntityKey(ctx.hoveredCardIndex)
 
                 for _, cardId in ipairs(hoveredRollState.cardgenPool or {}) do
                     local generatedCardDefinition = cardregistry.getCardById(cardId)
@@ -536,6 +558,7 @@ function engagerules.tryResolveClick(hoveredTopSlotId, ctx)
                 if #generatedCardDefinitions > 0 and spawnCount > 0 and ctx.spawnRandomTokensNearCard then
                     resolveImmediateCardAction(ctx, ctx.hoveredCardIndex, function()
                         ctx.spawnRandomTokensNearCard(ctx.hoveredCardIndex, generatedCardDefinitions, spawnCount)
+                        applyRollUtilitySideEffects(ctx, hoveredRollState, sourceEntityKey)
                         return true
                     end)
                 end
@@ -548,8 +571,10 @@ function engagerules.tryResolveClick(hoveredTopSlotId, ctx)
                     isUtilityRollState(hoveredRollState)
                     or ctx.warrules.hasTargetType(hoveredRollState, "Tac")
                 ) then
+                local sourceEntityKey = ctx.warrules.getCardEntityKey(ctx.hoveredCardIndex)
+
                 resolveImmediateCardAction(ctx, ctx.hoveredCardIndex, function()
-                    applyRollUtilitySideEffects(ctx, hoveredRollState)
+                    applyRollUtilitySideEffects(ctx, hoveredRollState, sourceEntityKey)
                     return true
                 end)
 
