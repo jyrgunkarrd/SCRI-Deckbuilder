@@ -16,6 +16,48 @@ local function clearSelectedAttacker(ctx)
     ctx.setSelectedAttackerCardIndex(nil)
 end
 
+local function drawCardsForRoll(ctx, rollState)
+    if not rollState or rollState.drawCards ~= true or not ctx.drawCardFromPlayerDeck then
+        return
+    end
+
+    local drawCount = math.max(0, math.floor(tonumber(rollState.damageValue) or 0))
+
+    for _ = 1, drawCount do
+        if not ctx.drawCardFromPlayerDeck() then
+            break
+        end
+    end
+end
+
+local function generateResourceForRoll(ctx, rollState)
+    if not rollState or not rollState.generatedResource or not ctx.addMethodResource then
+        return
+    end
+
+    ctx.addMethodResource(rollState.generatedResource, rollState.damageValue or 0)
+end
+
+local function applyRollUtilitySideEffects(ctx, rollState)
+    if rollState and rollState.gainSyntac == true then
+        ctx.addSyntac(rollState.damageValue or 0)
+    end
+
+    drawCardsForRoll(ctx, rollState)
+    generateResourceForRoll(ctx, rollState)
+end
+
+local function isUtilityRollState(rollState)
+    return rollState
+        and rollState.action == "utility"
+        and (
+            rollState.gainSyntac == true
+            or rollState.drawCards == true
+            or rollState.generatedResource ~= nil
+        )
+        or false
+end
+
 local function applyPain(ctx, cardIndex, rollState)
     if not rollState or rollState.pain ~= true then
         return
@@ -119,9 +161,7 @@ local function applyAttackSideEffects(ctx, rollState)
         ctx.addObjectiveProgress(ctx.activePrimaryObjective, -(rollState.damageValue or 0), "objective")
     end
 
-    if rollState and rollState.gainSyntac == true then
-        ctx.addSyntac(rollState.damageValue or 0)
-    end
+    applyRollUtilitySideEffects(ctx, rollState)
 
     if rollState and rollState.selfBlock == true and ctx.selectedAttackerCardIndex then
         local attackerCard = ctx.cards[ctx.selectedAttackerCardIndex]
@@ -170,9 +210,7 @@ local function applyCounterStrikeToAttacker(ctx, attackerCard, targetCard, targe
 end
 
 local function applyPlayerWarzoneSideEffects(ctx, rollState)
-    if rollState and rollState.gainSyntac == true then
-        ctx.addSyntac(rollState.damageValue or 0)
-    end
+    applyRollUtilitySideEffects(ctx, rollState)
 end
 
 local function canTargetEnemyWarzone(ctx, rollState)
@@ -198,9 +236,15 @@ local function canTargetSabotage(ctx, rollState)
 end
 
 local function applySabotageSideEffects(ctx, rollState)
-    if rollState and rollState.gainSyntac == true then
-        ctx.addSyntac(rollState.damageValue or 0)
+    applyRollUtilitySideEffects(ctx, rollState)
+end
+
+local function canApplySabotageToProgressTrack(ctx, objectiveDefinition, rollState)
+    if not ctx.canApplyObjectiveProgress then
+        return true
     end
+
+    return ctx.canApplyObjectiveProgress(objectiveDefinition, -(rollState.damageValue or 0))
 end
 
 function engagerules.tryResolveClick(hoveredTopSlotId, ctx)
@@ -227,6 +271,11 @@ function engagerules.tryResolveClick(hoveredTopSlotId, ctx)
         if ctx.selectedAttackerTopSlotId and (not selectedTopSlotDefinition or selectedTopSlotDefinition.allied ~= true or not ctx.warrules.canEntityAttack(ctx.selectedAttackerTopSlotId)) then
             clearSelectedAttacker(ctx)
             return false
+        end
+
+        if ctx.selectedAttackerCardIndex and ctx.warrules.refreshCardRollValue then
+            ctx.warrules.refreshCardRollValue(ctx.selectedAttackerCardIndex, ctx.cards)
+            attackerRollState = ctx.warrules.getCardRollState(ctx.selectedAttackerCardIndex)
         end
 
         if ctx.warrules.hasTargetType(attackerRollState, "Blk") then
@@ -276,13 +325,30 @@ function engagerules.tryResolveClick(hoveredTopSlotId, ctx)
             end
         end
 
-        if ctx.hoveredCardIndex == ctx.selectedAttackerCardIndex then
+        if ctx.selectedAttackerCardIndex and ctx.hoveredCardIndex == ctx.selectedAttackerCardIndex then
             clearSelectedAttacker(ctx)
+            return true
+        end
+
+        if ctx.selectedAttackerTopSlotId and hoveredTopSlotId == ctx.selectedAttackerTopSlotId then
+            clearSelectedAttacker(ctx)
+            return true
+        end
+
+        if isUtilityRollState(attackerRollState) then
+            resolveSelectedAttack(ctx, function()
+                applyRollUtilitySideEffects(ctx, attackerRollState)
+                return true
+            end)
             return true
         end
 
         if canTargetSabotage(ctx, attackerRollState) then
             if hoveredTopSlotId == "objective" and ctx.activePrimaryObjective then
+                if not canApplySabotageToProgressTrack(ctx, ctx.activePrimaryObjective, attackerRollState) then
+                    return true
+                end
+
                 resolveSelectedAttack(ctx, function()
                     ctx.addObjectiveProgress(ctx.activePrimaryObjective, -(attackerRollState.damageValue or 0), "objective")
                     applySabotageSideEffects(ctx, attackerRollState)
@@ -290,6 +356,10 @@ function engagerules.tryResolveClick(hoveredTopSlotId, ctx)
                 end)
                 return true
             elseif hoveredTopSlotId == "intel" and ctx.activeIntel then
+                if not canApplySabotageToProgressTrack(ctx, ctx.activeIntel, attackerRollState) then
+                    return true
+                end
+
                 resolveSelectedAttack(ctx, function()
                     ctx.addObjectiveProgress(ctx.activeIntel, -(attackerRollState.damageValue or 0), "intel")
                     applySabotageSideEffects(ctx, attackerRollState)
@@ -395,9 +465,20 @@ function engagerules.tryResolveClick(hoveredTopSlotId, ctx)
         and ctx.activeWarzone
         and ctx.activeWarzone.allied == true
         and ctx.warrules.canEntityAttack("warzone") then
+        local hoveredRollState = ctx.warrules.getDisplayStates()["warzone"]
+
         ctx.setSelectedAttackerTopSlotId("warzone")
+        ctx.selectedAttackerTopSlotId = "warzone"
         ctx.setExpandedGridCardIndex(nil)
         ctx.setExpandedTopSlotId(nil)
+
+        if isUtilityRollState(hoveredRollState) then
+            resolveSelectedAttack(ctx, function()
+                applyRollUtilitySideEffects(ctx, hoveredRollState)
+                return true
+            end)
+        end
+
         return true
     end
 
@@ -408,6 +489,10 @@ function engagerules.tryResolveClick(hoveredTopSlotId, ctx)
             and hoveredCard.location.kind == "grid"
             and hoveredCard.location.rowId == "PlayerRow"
             and ctx.warrules.canCardAttack(ctx.hoveredCardIndex) then
+            if ctx.warrules.refreshCardRollValue then
+                ctx.warrules.refreshCardRollValue(ctx.hoveredCardIndex, ctx.cards)
+            end
+
             local hoveredRollState = ctx.warrules.getCardRollState(ctx.hoveredCardIndex)
 
             if hoveredRollState and ctx.warrules.hasTargetType(hoveredRollState, "Inf") then
@@ -460,11 +545,11 @@ function engagerules.tryResolveClick(hoveredTopSlotId, ctx)
 
             if hoveredRollState
                 and (
-                    (hoveredRollState.action == "utility" and hoveredRollState.gainSyntac == true)
+                    isUtilityRollState(hoveredRollState)
                     or ctx.warrules.hasTargetType(hoveredRollState, "Tac")
                 ) then
                 resolveImmediateCardAction(ctx, ctx.hoveredCardIndex, function()
-                    ctx.addSyntac(hoveredRollState.damageValue or 0)
+                    applyRollUtilitySideEffects(ctx, hoveredRollState)
                     return true
                 end)
 

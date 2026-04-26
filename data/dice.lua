@@ -474,6 +474,46 @@ local dice = {
             facedesc = "Removes progress from an Objective or Intelligence asset. Gain SynTac.",
         },
 
+        {
+            id = "CASHSAB1",
+            type = "CashDetonator",
+            value = 1,
+            targ = "Sab",
+            genres = "The Scratch",
+            facename = "Extractive Sabotage",
+            facedesc = "Removes progress from an Objective or Intelligence asset. Gain scratch.",
+        },
+
+        {
+            id = "CASHSAB2",
+            type = "CashDetonator",
+            value = 2,
+            targ = "Sab",
+            genres = "The Scratch",
+            facename = "Extractive Sabotage",
+            facedesc = "Removes progress from an Objective or Intelligence asset. Gain Scratch.",
+        },
+
+        {
+            id = "DRAWSAB1",
+            type = "DrawDetonator",
+            value = 1,
+            targ = "Sab",
+            drawcard = true,
+            facename = "Critical Sabotage",
+            facedesc = "Removes progress from an Objective or Intelligence asset. Draw cards.",
+        },
+
+        {
+            id = "DRAWSAB2",
+            type = "DrawDetonator",
+            value = 2,
+            targ = "Sab",
+            drawcard = true,
+            facename = "Critical Sabotage",
+            facedesc = "Removes progress from an Objective or Intelligence asset. Draw cards.",
+        },
+
         --- Pain Sabotage ---
 
         {
@@ -583,6 +623,8 @@ local dice = {
         value = 1,
         targ = "Inf",
         cardgen = "HNTINFFM",
+        facename = "Infiltrate",
+        facedesc = "Add a hunter card to the player's deck.",
     },
 
     {
@@ -591,6 +633,8 @@ local dice = {
         value = 2,
         targ = "Inf",
         cardgen = "HNTINFFM",
+        facename = "Infiltrate",
+        facedesc = "Add a hunter card to the player's deck.",
     },
 
     --- Warrant ---
@@ -600,6 +644,8 @@ local dice = {
         type = "Warrant",
         value = 1,
         targ = "IntCD",
+        facename = "Warrant",
+        facedesc = "Remove progress from No Signal.",
     },
 
     {
@@ -607,6 +653,8 @@ local dice = {
         type = "Warrant",
         value = 2,
         targ = "IntCD",
+        facename = "Warrant",
+        facedesc = "Remove progress from No Signal.",
     },
 
     {
@@ -614,6 +662,8 @@ local dice = {
         type = "Warrant",
         value = 3,
         targ = "IntCD",
+        facename = "Warrant",
+        facedesc = "Remove progress from No Signal.",
     },
 
     --- Threat ---
@@ -623,6 +673,8 @@ local dice = {
         type = "Threat",
         value = 1,
         targ = "WZOpp",
+        facename = "Threaten",
+        facedesc = "Decrease the player's influence over a warzone.",
     },
 
     {
@@ -630,6 +682,8 @@ local dice = {
         type = "Threat",
         value = 2,
         targ = "WZOpp",
+        facename = "Threaten",
+        facedesc = "Decrease the player's influence over a warzone.",
     },
 
     {
@@ -637,6 +691,8 @@ local dice = {
         type = "Threat",
         value = 3,
         targ = "WZOpp",
+        facename = "Threaten",
+        facedesc = "Decrease the player's influence over a warzone.",
     },
 
     --- Objective ---
@@ -646,6 +702,8 @@ local dice = {
         type = "RedButton",
         value = 1,
         targ = "Obj",
+        facename = "Red Switch",
+        facedesc = "Increase the progress on an objective.",
     },
 
     {
@@ -653,6 +711,17 @@ local dice = {
         type = "RedButton",
         value = 2,
         targ = "Obj",
+        facename = "Red Switch",
+        facedesc = "Increase the progress on an objective.",
+    },
+
+    {
+        id = "OBJ3",
+        type = "RedButton",
+        value = 3,
+        targ = "Obj",
+        facename = "Red Switch",
+        facedesc = "Increase the progress on an objective.",
     },
 
     --- Summoning

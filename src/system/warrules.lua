@@ -263,6 +263,17 @@ local function canTargetPlayerWarzone(rollStateOrTargetType)
     return firstTargetTypeMatching(rollStateOrTargetType, PLAYER_WARZONE_TARGET_TYPES) ~= nil
 end
 
+local function canUseUtilityRollState(rollState)
+    return rollState
+        and rollState.action == "utility"
+        and (
+            rollState.gainSyntac == true
+            or rollState.drawCards == true
+            or rollState.generatedResource ~= nil
+        )
+        or false
+end
+
 local function buildLegacyTargetTypeFromNormalizedFace(faceDefinition)
     if not faceDefinition then
         return nil
@@ -328,6 +339,8 @@ local function getNormalizedFaceBehavior(faceDefinition)
             effectiveTargetType = nil,
             autoReload = false,
             gainSyntac = false,
+            drawCards = false,
+            generatedResource = nil,
             immac = false,
             lrange = false,
             heavy = false,
@@ -418,6 +431,13 @@ local function getNormalizedFaceBehavior(faceDefinition)
     local selfBlock = faceDefinition.selfBlock == true or hasTargetType(faceDefinition.targ, "closeatk")
     local selfHeal = faceDefinition.selfHeal == true or hasTargetType(faceDefinition.targ, "maulatk")
     local sabotageObjective = faceDefinition.sabotageObjective == true or hasTargetType(faceDefinition.targ, "AtkSab")
+    local drawCards = faceDefinition.drawcard == true
+    local generatedResource = faceDefinition.genres
+
+    if not action and (drawCards or generatedResource) then
+        action = "utility"
+        targetClass = "none"
+    end
 
     return {
         action = action,
@@ -425,6 +445,8 @@ local function getNormalizedFaceBehavior(faceDefinition)
         effectiveTargetType = effectiveTargetType,
         autoReload = autoReload,
         gainSyntac = gainSyntac,
+        drawCards = drawCards,
+        generatedResource = generatedResource,
         immac = immac,
         lrange = lrange,
         heavy = heavy,
@@ -506,6 +528,20 @@ local function buildRollState(entityKey, definition, faceIndices, isEnemy, prese
     elseif selectedFaceDefinition
         and not isReloading
         and (
+            (
+                normalizedBehavior.action == "sabotage"
+                and normalizedBehavior.targetClass == "objective_or_intel"
+            )
+            or hasTargetType(effectiveTargetType, "Sab")
+            or hasTargetType(effectiveTargetType, "TacSab")
+        )
+        and (objectiveTargetPreview or intelTargetPreview) then
+        targetType = firstTargetTypeMatching(effectiveTargetType, { "Sab", "TacSab" })
+            or "Sab"
+        targetCard = objectiveTargetPreview or intelTargetPreview
+    elseif selectedFaceDefinition
+        and not isReloading
+        and (
             normalizedBehavior.targetClass == "objective"
             or hasTargetType(effectiveTargetType, "Obj")
         )
@@ -560,6 +596,8 @@ local function buildRollState(entityKey, definition, faceIndices, isEnemy, prese
         area = area,
         pain = pain,
         gainSyntac = normalizedBehavior.gainSyntac,
+        drawCards = normalizedBehavior.drawCards,
+        generatedResource = normalizedBehavior.generatedResource,
         immac = normalizedBehavior.immac,
         lrange = normalizedBehavior.lrange,
         heavy = normalizedBehavior.heavy,
@@ -658,6 +696,7 @@ function warrules.canCardAttack(cardIndex)
             or hasTargetType(rollState, "smn")
             or hasTargetType(rollState, "Tac")
             or hasTargetType(rollState, "TacSab")
+            or canUseUtilityRollState(rollState)
             or canTargetPlayerWarzone(rollState)
         )
         and (rollState.damageValue or 0) > 0
@@ -678,6 +717,7 @@ function warrules.canEntityAttack(entityKey)
             or hasTargetType(rollState, "smn")
             or hasTargetType(rollState, "Tac")
             or hasTargetType(rollState, "TacSab")
+            or canUseUtilityRollState(rollState)
             or canTargetPlayerWarzone(rollState)
             or hasTargetType(rollState, "WZOpp")
         )

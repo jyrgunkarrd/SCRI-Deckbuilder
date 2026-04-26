@@ -610,6 +610,10 @@ local function addObjectiveProgress(objectiveDefinition, amount, slotId)
     return result.appliedChange
 end
 
+local function canApplyObjectiveProgress(objectiveDefinition, amount)
+    return objectiveprogressrules.canApplyProgress(objectiveDefinition, amount)
+end
+
 local function buildWarzoneControlContext(slotId)
     return {
         slotId = slotId,
@@ -1099,6 +1103,12 @@ local function tryPlayKitCard(kitCardIndex, targetCardIndex)
     return kitrules.playKit(kitCardIndex, targetCardIndex, {
         cards = gameState.cards,
         cardregistry = cardregistry,
+        canAffordCosts = function(costEntries)
+            return resourcerules.canAffordCosts(costEntries)
+        end,
+        payCosts = function(costEntries)
+            return resourcerules.payCosts(costEntries)
+        end,
         removeCardFromPlay = removeCardFromPlay,
     })
 end
@@ -1412,7 +1422,9 @@ local function getEngageContext()
         getCardDrawPosition = getCardDrawPosition,
         addBlockingToCard = addBlockingToCard,
         addObjectiveProgress = addObjectiveProgress,
+        canApplyObjectiveProgress = canApplyObjectiveProgress,
         addWarzoneControl = addWarzoneControl,
+        drawCardFromPlayerDeck = drawCardFromPlayerDeck,
         healCard = healCard,
         dealDamageToChampion = dealDamageToChampion,
         dealDamageToCard = dealDamageToCard,
@@ -1422,6 +1434,9 @@ local function getEngageContext()
         spawnRandomTokensNearCard = spawnRandomTokensNearCard,
         addSyntac = function(amount)
             gameState.syntacCount = math.min(10, math.max(0, (gameState.syntacCount or 0) + math.max(0, tonumber(amount) or 0)))
+        end,
+        addMethodResource = function(resourceName, amount)
+            return resourcerules.addResource(resourceName, amount)
         end,
         setSelectedAttackerCardIndex = function(cardIndex)
             gameState.selectedAttackerCardIndex = cardIndex

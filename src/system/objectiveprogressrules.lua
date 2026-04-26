@@ -57,4 +57,21 @@ function objectiveprogressrules.addProgress(objectiveDefinition, amount, context
     return result
 end
 
+function objectiveprogressrules.canApplyProgress(objectiveDefinition, amount)
+    if not objectiveDefinition or amount == nil then
+        return false
+    end
+
+    local currentPlan = tonumber(objectiveDefinition.plan) or 0
+    local maxPlan = tonumber(objectiveDefinition.max)
+    local nextPlan = currentPlan + (tonumber(amount) or 0)
+
+    if maxPlan ~= nil then
+        nextPlan = math.min(maxPlan, nextPlan)
+    end
+
+    nextPlan = math.max(0, nextPlan)
+    return nextPlan ~= currentPlan
+end
+
 return objectiveprogressrules

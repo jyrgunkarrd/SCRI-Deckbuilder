@@ -133,6 +133,7 @@ local PREVIEW_PIP_COLOR = { 1, 0.298, 0.298 }
 local INTEL_ACCENT_COLOR = { 0, 1, 0.98 }
 local INTEL_PLAN_COLOR = { 1, 0.486, 0.694 }
 local WARZONE_ACCENT_COLOR = { 1, 0.608, 0.145 }
+local ENEMY_WARZONE_INFLUENCE_COLOR = { 1, 0.607843, 0.141176 }
 local POI_ACCENT_COLOR = { 0.525, 0.831, 0.973 }
 local CHAMP_LABEL_FONT_SIZE = 18
 local CHAMP_SLOT_GAP = 22
@@ -1229,7 +1230,10 @@ buildTopStripLayout = function(championDefinition, currentPhase, warzoneDefiniti
     local championHealthPips = championDefinition and championDefinition.health or nil
     local championMaxPips = championDefinition and championDefinition.max or nil
     local warzoneControl = warzoneDefinition and warzoneDefinition.control and tostring(warzoneDefinition.control) or nil
-    local warzoneControlColor = (warzoneDefinition and (warzoneDefinition.control or 0) > 0) and TROOP_HEALTH_COLOR or CHAMP_ACCENT_COLOR
+    local warzoneControlColor = warzoneDefinition and warzoneDefinition.allied ~= true
+        and ENEMY_WARZONE_INFLUENCE_COLOR
+        or (warzoneDefinition and (warzoneDefinition.control or 0) > 0) and TROOP_HEALTH_COLOR
+        or CHAMP_ACCENT_COLOR
     local warzoneControlPips = warzoneDefinition and math.max(0, math.abs(warzoneDefinition.control or 0)) or nil
     local warzoneMaxPips = warzoneDefinition and warzoneDefinition.max or nil
     local poiControl = poiDefinition and poiDefinition.control and tostring(poiDefinition.control) or nil

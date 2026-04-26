@@ -48,6 +48,21 @@ function resourcerules.getResourceCount(resourceName)
     return resourceCounts[resourceName] or 0
 end
 
+function resourcerules.addResource(resourceName, amount)
+    if not resourceName then
+        return false
+    end
+
+    local resourceAmount = math.max(0, math.floor(tonumber(amount) or 0))
+
+    if resourceAmount <= 0 then
+        return false
+    end
+
+    incrementResource(resourceName, resourceAmount)
+    return true
+end
+
 function resourcerules.getActiveTransfers()
     return activeTransfers
 end

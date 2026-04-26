@@ -33,11 +33,14 @@ function kitrules.canPlayKit(kitCard, targetCardIndex, ctx)
     local kitDefinition = kitCard and ctx.cardregistry.getCard(kitCard.setName, kitCard.cardId) or nil
     local targetCard = targetCardIndex and ctx.cards[targetCardIndex] or nil
     local targetDefinition = targetCard and ctx.cardregistry.getCard(targetCard.setName, targetCard.cardId) or nil
+    local canAffordCosts = not ctx.canAffordCosts
+        or ctx.canAffordCosts(kitDefinition and kitDefinition.mcost or nil)
 
     return kitrules.isKitDefinition(kitDefinition)
         and kitCard.location
         and kitCard.location.kind == "hand"
         and kitrules.isValidAttachmentTarget(targetCard, targetDefinition)
+        and canAffordCosts
 end
 
 function kitrules.playKit(kitCardIndex, targetCardIndex, ctx)
@@ -46,6 +49,14 @@ function kitrules.playKit(kitCardIndex, targetCardIndex, ctx)
 
     if not kitrules.canPlayKit(kitCard, targetCardIndex, ctx) then
         return false
+    end
+
+    if ctx.payCosts then
+        local kitDefinition = ctx.cardregistry.getCard(kitCard.setName, kitCard.cardId)
+
+        if not ctx.payCosts(kitDefinition and kitDefinition.mcost or nil) then
+            return false
+        end
     end
 
     targetCard.attachedKitCards = targetCard.attachedKitCards or {}
