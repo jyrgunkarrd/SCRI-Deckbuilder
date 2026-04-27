@@ -51,6 +51,18 @@ local SYNTAC_BOX_LABEL_PADDING = 14
 local SYNTAC_BOX_TRACKER_PADDING = 14
 local SYNTAC_BOX_TRACKER_GAP = 16
 local SYNTAC_BOX_MAX_PIPS = 10
+local SYNTAC_BOX_LABEL_TEXT = "SynTac"
+local SYNTAC_REWARD_BUTTON_GAP = 8
+local SYNTAC_REWARD_BUTTON_PADDING = 12
+local SYNTAC_REWARD_BUTTON_TEXT_ICON_GAP = 8
+local SYNTAC_REWARD_BUTTON_ICON_GAP = 4
+local SYNTAC_REWARD_BUTTON_ICON_SIZE_RATIO = 0.58
+local SYNTAC_REWARD_BUTTON_DEFINITIONS = {
+    { id = "method", label = "Next Turn : +1 Method" },
+    { id = "draw", label = "Next Turn : +1 Draw" },
+    { id = "rerolls", label = "Next Turn : +2 Rerolls" },
+    { id = "scanner", label = "Mission End : +1 Scanner" },
+}
 local RESOURCE_TRACKER_MARGIN_X = 28
 local RESOURCE_TRACKER_VERTICAL_PADDING = 16
 local RESOURCE_TRACKER_COLUMN_WIDTH = 128
@@ -1993,6 +2005,39 @@ function envdraw.drawResourceExchangeModal(resourceCounts)
     love.graphics.setColor(1, 1, 1, 1)
 end
 
+function envdraw.getSyntacMethodModalLayout()
+    return envdraw.getResourceExchangeModalLayout()
+end
+
+function envdraw.drawSyntacMethodModal()
+    local windowWidth, windowHeight = love.graphics.getDimensions()
+    local layout = envdraw.getSyntacMethodModalLayout()
+
+    love.graphics.setColor(0.01, 0.01, 0.02, 0.72)
+    love.graphics.rectangle("fill", 0, 0, windowWidth, windowHeight)
+    love.graphics.setColor(0.06, 0.07, 0.09, 0.96)
+    love.graphics.rectangle("fill", layout.x, layout.y, layout.width, layout.height, 10, 10)
+    love.graphics.setColor(0.82, 0.85, 0.89, 0.78)
+    love.graphics.rectangle("line", layout.x, layout.y, layout.width, layout.height, 10, 10)
+    drawResourceGrid(layout.grid, {})
+    love.graphics.setColor(1, 1, 1, 1)
+end
+
+function envdraw.getSyntacMethodModalResourceAt(mouseX, mouseY)
+    local layout = envdraw.getSyntacMethodModalLayout()
+
+    for resourceName, hitBox in pairs(layout.grid.resourceHitBoxes or {}) do
+        if mouseX >= hitBox.x
+            and mouseX <= hitBox.x + hitBox.width
+            and mouseY >= hitBox.y
+            and mouseY <= hitBox.y + hitBox.height then
+            return resourceName
+        end
+    end
+
+    return nil
+end
+
 function envdraw.getResourceExchangeModalResourceAt(mouseX, mouseY)
     local layout = envdraw.getResourceExchangeModalLayout()
 
@@ -2612,17 +2657,40 @@ function envdraw.getRerollButtonLayout(jaclDefinition)
     }
 end
 
+local function getSyntacBoxContentMetrics(height)
+    local labelFont = getFont(JACL_LABEL_FONT_PATH, 16)
+    local labelWidth = labelFont:getWidth(SYNTAC_BOX_LABEL_TEXT)
+    local pipGap = math.max(1, snap(height * 0.06))
+    local pipSize = math.max(1, snap(math.max(1, height * 0.34)))
+    local totalPipWidth = (SYNTAC_BOX_MAX_PIPS * pipSize) + ((SYNTAC_BOX_MAX_PIPS - 1) * pipGap)
+    local contentWidth = SYNTAC_BOX_LABEL_PADDING
+        + labelWidth
+        + SYNTAC_BOX_TRACKER_GAP
+        + totalPipWidth
+        + SYNTAC_BOX_TRACKER_PADDING
+
+    return {
+        labelFont = labelFont,
+        labelWidth = labelWidth,
+        pipGap = pipGap,
+        pipSize = pipSize,
+        totalPipWidth = totalPipWidth,
+        contentWidth = snap(contentWidth),
+    }
+end
+
 function envdraw.getSyntacBoxLayout(jaclDefinition)
     local handLayout = envdraw.getPlayerHandLayout()
     local firstHandSlot = handLayout.slots[1]
     local lastHandSlot = handLayout.slots[#handLayout.slots]
     local rerollLayout = envdraw.getRerollButtonLayout(jaclDefinition)
+    local metrics = getSyntacBoxContentMetrics(rerollLayout.height)
 
     if not firstHandSlot or not lastHandSlot then
         return {
-            x = rerollLayout.x,
+            x = snap((rerollLayout.x + rerollLayout.width) - metrics.contentWidth),
             y = rerollLayout.y,
-            width = rerollLayout.width,
+            width = metrics.contentWidth,
             height = rerollLayout.height,
         }
     end
@@ -2630,13 +2698,93 @@ function envdraw.getSyntacBoxLayout(jaclDefinition)
     local firstVisualBounds = getHandSlotVisualBounds(firstHandSlot)
     local lastVisualBounds = getHandSlotVisualBounds(lastHandSlot)
     local rightEdge = lastVisualBounds.x + lastVisualBounds.width
+    local availableWidth = rightEdge - firstVisualBounds.x
+    local width = math.min(availableWidth, metrics.contentWidth)
 
     return {
-        x = firstVisualBounds.x,
+        x = snap(rightEdge - width),
         y = rerollLayout.y,
-        width = rightEdge - firstVisualBounds.x,
+        width = width,
         height = rerollLayout.height,
     }
+end
+
+local function getSyntacRewardButtonLayouts(jaclDefinition, syntacLayout)
+    local layout = syntacLayout or envdraw.getSyntacBoxLayout(jaclDefinition)
+    local handLayout = envdraw.getPlayerHandLayout()
+    local firstHandSlot = handLayout.slots[1]
+    local leftEdge = layout.x
+
+    if firstHandSlot then
+        leftEdge = getHandSlotVisualBounds(firstHandSlot).x
+    else
+        leftEdge = envdraw.getRerollButtonLayout(jaclDefinition).x
+    end
+
+    local labelFont = getFont(JACL_LABEL_FONT_PATH, 16)
+    local iconSize = math.max(1, snap(layout.height * SYNTAC_REWARD_BUTTON_ICON_SIZE_RATIO))
+    local buttonLayouts = {}
+    local totalWidth = 0
+
+    for _, definition in ipairs(SYNTAC_REWARD_BUTTON_DEFINITIONS) do
+        local labelText = definition.label
+        local buttonWidth = snap(
+            (SYNTAC_REWARD_BUTTON_PADDING * 2)
+            + labelFont:getWidth(labelText)
+            + SYNTAC_REWARD_BUTTON_TEXT_ICON_GAP
+            + (iconSize * 2)
+            + SYNTAC_REWARD_BUTTON_ICON_GAP
+        )
+
+        buttonLayouts[#buttonLayouts + 1] = {
+            id = definition.id,
+            label = labelText,
+            width = buttonWidth,
+        }
+        totalWidth = totalWidth + buttonWidth
+    end
+
+    totalWidth = totalWidth + ((#buttonLayouts - 1) * SYNTAC_REWARD_BUTTON_GAP)
+
+    local startX = snap(layout.x - SYNTAC_REWARD_BUTTON_GAP - totalWidth)
+    if startX < leftEdge then
+        startX = snap(leftEdge)
+    end
+
+    local x = startX
+    for _, button in ipairs(buttonLayouts) do
+        button.x = x
+        button.y = layout.y
+        button.height = layout.height
+        button.iconSize = iconSize
+        button.font = labelFont
+        x = x + button.width + SYNTAC_REWARD_BUTTON_GAP
+    end
+
+    return buttonLayouts
+end
+
+function envdraw.getSyntacRewardButtonAt(mouseX, mouseY, jaclDefinition)
+    for _, button in ipairs(getSyntacRewardButtonLayouts(jaclDefinition)) do
+        if mouseX >= button.x
+            and mouseX <= button.x + button.width
+            and mouseY >= button.y
+            and mouseY <= button.y + button.height then
+            return button
+        end
+    end
+
+    return nil
+end
+
+function envdraw.getSyntacRewardButtonLayout(buttonId, jaclDefinition)
+    for _, button in ipairs(getSyntacRewardButtonLayouts(jaclDefinition)) do
+        if button.id == buttonId then
+            return button
+        end
+    end
+
+    return nil
 end
 
 function envdraw.drawRerollButton(jaclDefinition, rerollCount, enabled)
@@ -2667,14 +2815,105 @@ function envdraw.drawRerollButton(jaclDefinition, rerollCount, enabled)
     love.graphics.setColor(1, 1, 1, 1)
 end
 
-function envdraw.drawSyntacBox(jaclDefinition, syntacCount)
+local function drawSyntacRewardButtons(jaclDefinition, syntacLayout, rewardButtonState)
+    local buttonLayouts = getSyntacRewardButtonLayouts(jaclDefinition, syntacLayout)
+    local scratchImage = getMethodImage(JACL_SCRATCH_RESOURCE_NAME)
+    local buttonStates = rewardButtonState or {}
+
+    for _, button in ipairs(buttonLayouts) do
+        local isExhausted = buttonStates[button.id] == true
+        local chosenMethodResource = button.id == "method" and buttonStates.methodResource or nil
+        local alpha = isExhausted and 0.38 or 1
+
+        love.graphics.setColor(0.12, 0.13, 0.16, 0.92 * alpha)
+        love.graphics.rectangle("fill", button.x, button.y, button.width, button.height)
+        love.graphics.setColor(0.82, 0.85, 0.89, 0.78 * alpha)
+        love.graphics.rectangle("line", button.x, button.y, button.width, button.height)
+
+        love.graphics.setFont(button.font)
+        love.graphics.setColor(0.93, 0.93, 0.95, alpha)
+
+        local textX = snap(button.x + SYNTAC_REWARD_BUTTON_PADDING)
+        local textY = snap(button.y + ((button.height - button.font:getHeight()) / 2))
+        love.graphics.print(button.label, textX, textY)
+
+        local iconY = snap(button.y + ((button.height - button.iconSize) / 2))
+        local iconX = snap(textX + button.font:getWidth(button.label) + SYNTAC_REWARD_BUTTON_TEXT_ICON_GAP)
+
+        if chosenMethodResource then
+            local methodImage = getMethodImage(chosenMethodResource)
+            local badgeSize = button.iconSize
+            local badgeX = iconX + ((button.iconSize * 2 + SYNTAC_REWARD_BUTTON_ICON_GAP - badgeSize) / 2)
+
+            love.graphics.setColor(1, 1, 1, 1)
+            if methodImage then
+                love.graphics.draw(
+                    methodImage,
+                    badgeX,
+                    iconY,
+                    0,
+                    badgeSize / methodImage:getWidth(),
+                    badgeSize / methodImage:getHeight()
+                )
+            else
+                love.graphics.rectangle("line", badgeX, iconY, badgeSize, badgeSize)
+            end
+        elseif scratchImage then
+            love.graphics.setColor(1, 1, 1, alpha)
+            for iconIndex = 0, 1 do
+                love.graphics.draw(
+                    scratchImage,
+                    iconX + (iconIndex * (button.iconSize + SYNTAC_REWARD_BUTTON_ICON_GAP)),
+                    iconY,
+                    0,
+                    button.iconSize / scratchImage:getWidth(),
+                    button.iconSize / scratchImage:getHeight()
+                )
+            end
+        else
+            love.graphics.setColor(0.58, 0.9, 0.96, alpha)
+            for iconIndex = 0, 1 do
+                love.graphics.rectangle(
+                    "line",
+                    iconX + (iconIndex * (button.iconSize + SYNTAC_REWARD_BUTTON_ICON_GAP)),
+                    iconY,
+                    button.iconSize,
+                    button.iconSize
+                )
+            end
+        end
+
+        if isExhausted and not chosenMethodResource then
+            for iconIndex = 0, 1 do
+                local exhaustedIconX = iconX + (iconIndex * (button.iconSize + SYNTAC_REWARD_BUTTON_ICON_GAP))
+
+                love.graphics.setColor(0, 0, 0, 0.42)
+                love.graphics.rectangle("fill", exhaustedIconX, iconY, button.iconSize, button.iconSize)
+                love.graphics.setColor(0.42, 0.44, 0.48, 0.78)
+                love.graphics.line(
+                    exhaustedIconX + 3,
+                    iconY + button.iconSize - 3,
+                    exhaustedIconX + button.iconSize - 3,
+                    iconY + 3
+                )
+            end
+        end
+    end
+
+    love.graphics.setColor(1, 1, 1, 1)
+end
+
+function envdraw.drawSyntacBox(jaclDefinition, syntacCount, rewardButtonState)
     local layout = envdraw.getSyntacBoxLayout(jaclDefinition)
-    local labelFont = getFont(JACL_LABEL_FONT_PATH, 16)
-    local labelText = "SynTac"
+    local metrics = getSyntacBoxContentMetrics(layout.height)
+    local labelFont = metrics.labelFont
+    local labelText = SYNTAC_BOX_LABEL_TEXT
     local pipCount = math.min(SYNTAC_BOX_MAX_PIPS, math.max(0, math.floor(tonumber(syntacCount) or 0)))
     local maxCount = SYNTAC_BOX_MAX_PIPS
     local textX = snap(layout.x + SYNTAC_BOX_LABEL_PADDING)
     local textY = snap(layout.y + ((layout.height - labelFont:getHeight()) / 2))
+
+    drawSyntacRewardButtons(jaclDefinition, layout, rewardButtonState)
 
     love.graphics.setColor(0.12, 0.13, 0.16, 0.92)
     love.graphics.rectangle("fill", layout.x, layout.y, layout.width, layout.height)
@@ -2691,7 +2930,7 @@ function envdraw.drawSyntacBox(jaclDefinition, syntacCount)
     local trackerHeight = math.max(1, layout.height - 8)
     local columnCount = maxCount
     local rowCount = math.max(1, math.ceil(maxCount / columnCount))
-    local pipGap = math.max(1, snap(layout.height * 0.06))
+    local pipGap = metrics.pipGap
     local pipSizeByWidth = (trackerWidth - ((columnCount - 1) * pipGap)) / math.max(1, columnCount)
     local pipSizeByHeight = (trackerHeight - ((rowCount - 1) * pipGap)) / rowCount
     local pipSize = math.max(1, snap(math.min(pipSizeByWidth, pipSizeByHeight, math.max(1, layout.height * 0.34))))

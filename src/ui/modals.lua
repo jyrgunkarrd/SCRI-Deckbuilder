@@ -32,6 +32,10 @@ function modals.isPointInsideResourceExchangeModal(mouseX, mouseY, envdraw)
     return isPointInsideRect(mouseX, mouseY, envdraw.getResourceExchangeModalLayout())
 end
 
+function modals.isPointInsideSyntacMethodModal(mouseX, mouseY, envdraw)
+    return isPointInsideRect(mouseX, mouseY, envdraw.getSyntacMethodModalLayout())
+end
+
 function modals.isPointInsideJaclDeckModal(mouseX, mouseY, envdraw, activeDeckModalDeck, jaclDeckModalScroll)
     return isPointInsideRect(mouseX, mouseY, envdraw.getJaclDeckModalLayout(activeDeckModalDeck, {
         top = { scrollY = jaclDeckModalScroll.deck },
@@ -177,6 +181,32 @@ function modals.handleResourceExchangeMousePressed(x, y, button, state, deps)
         modals.tryExchangeScratchForModalResource(x, y, state, deps)
     elseif button == 2 then
         modals.tryExchangeModalResourceForScratch(x, y, state, deps)
+    end
+
+    return true
+end
+
+function modals.handleSyntacMethodModalMousePressed(x, y, button, state, deps)
+    if not state.isSyntacMethodModalOpen then
+        return false
+    end
+
+    if button == 2 or not modals.isPointInsideSyntacMethodModal(x, y, deps.envdraw) then
+        if deps.cancelSyntacMethodChoice then
+            deps.cancelSyntacMethodChoice(state)
+        else
+            state.isSyntacMethodModalOpen = false
+        end
+
+        return true
+    end
+
+    if button == 1 then
+        local resourceName = deps.envdraw.getSyntacMethodModalResourceAt(x, y)
+
+        if resourceName and deps.chooseSyntacMethodResource then
+            deps.chooseSyntacMethodResource(resourceName, state)
+        end
     end
 
     return true

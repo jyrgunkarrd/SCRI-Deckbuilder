@@ -453,6 +453,7 @@ local troops = {
         subclass = "Troop",
         health = 10,
         max = 10,
+        keyword = { "KWFLY" },
         flavor = "A vessel from another time, willing to assist but unable to persist.",
         D1 = "PDMG8",
         D2 = "PDMG6",

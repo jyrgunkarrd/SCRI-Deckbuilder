@@ -16,6 +16,7 @@ local function handleModals(x, y, button, deps)
     local modalDeps = deps.getModalDeps()
 
     if deps.modals.handleDeckModalMousePressed(x, y, button, modalState, modalDeps)
+        or deps.modals.handleSyntacMethodModalMousePressed(x, y, button, modalState, modalDeps)
         or deps.modals.handleResourceExchangeMousePressed(x, y, button, modalState, modalDeps)
         or deps.modals.handlePrimedSpecialMousePressed(x, y, button, modalState, modalDeps) then
         deps.applyModalState(modalState)
@@ -132,6 +133,11 @@ function inputcontroller.mousepressed(gameState, deps, x, y, button)
     end
 
     if button == 1 and deps.tryUseEngageReroll(x, y) then
+        return
+    end
+
+    if button == 1 and deps.tryUseSyntacRewardButton and deps.tryUseSyntacRewardButton(x, y) then
+        clearHoverAndExpansion(gameState)
         return
     end
 

@@ -130,6 +130,7 @@ function hoverpreview.getHoverPreviewState(state, deps)
     if state.draggedCardIndex
         or state.fullArtImage
         or state.isJaclDeckModalOpen
+        or state.isSyntacMethodModalOpen
         or state.isResourceExchangeModalOpen
         or love.keyboard.isDown("lshift")
         or love.keyboard.isDown("rshift") then
@@ -271,7 +272,7 @@ function hoverpreview.updateHoveredCard(state, deps)
     state.hoveredKeyword = nil
     state.hoveredDiceFace = nil
 
-    if state.draggedCardIndex or state.isResourceExchangeModalOpen or state.isJaclDeckModalOpen then
+    if state.draggedCardIndex or state.isResourceExchangeModalOpen or state.isSyntacMethodModalOpen or state.isJaclDeckModalOpen then
         state.hoveredCardIndex = nil
         state.hoveredTopSlotId = nil
         state.hoveredJaclSpecialDefinition = nil

@@ -83,6 +83,9 @@ local function completeEndPhase(gameState, deps)
     deps.clearAllBlocking()
     deps.addObjectiveProgress(gameState.activePrimaryObjective, deps.getEndPhaseObjectiveProgress())
     deps.warrules.resetPlayerCardStates(gameState.cards)
+    if deps.clearTemporaryRerollBonus then
+        deps.clearTemporaryRerollBonus()
+    end
     gameState.engageRerollCount = 2
     deps.turnrules.advancePhase()
     phasecontroller.enterCurrentPhase(gameState, deps)
@@ -226,6 +229,9 @@ function phasecontroller.enterCurrentPhase(gameState, deps)
 
         local gridCardGenerators = buildStartPhaseGenerators(gameState, deps)
         deps.resourcerules.enterStartPhase(gameState.playerJacl, deps.envdraw.getBottomLeftPanelLayout(gameState.playerJacl), deps.envdraw.getResourceTrackerLayout(), gridCardGenerators)
+        if deps.resolveSyntacRewardButtons then
+            deps.resolveSyntacRewardButtons()
+        end
         gameState.waitingForStartGeneration = true
     elseif currentPhase == "House" then
         deps.championplayrules.playHouseCardAndQueueKeywords(gameState.championPlayState, deps.getChampionPlayContext())
@@ -236,6 +242,10 @@ function phasecontroller.enterCurrentPhase(gameState, deps)
         deps.sfxrules.playPhaseEnd()
         deps.warrules.beginPhase(deps.getTopSlotRollTargets(), gameState.cards, gameState.activePrimaryObjective, gameState.activeIntel, gameState.activeWarzone)
     elseif currentPhase == "End" then
+        if deps.clearTemporaryRerollBonus then
+            deps.clearTemporaryRerollBonus()
+        end
+
         if deps.beginEndPhaseSacrificeSelection
             and deps.beginEndPhaseSacrificeSelection(gameState) then
             return
@@ -291,6 +301,13 @@ function phasecontroller.beginRetaliateFromEngage(gameState, deps)
     gameState.selectedAttackerCardIndex = nil
     gameState.selectedAttackerTopSlotId = nil
     deps.turnrules.advanceWarSubphase()
+    if deps.getRetaliationPhaseObjectiveProgress then
+        local hunterProgress = math.max(0, tonumber(deps.getRetaliationPhaseObjectiveProgress()) or 0)
+
+        if hunterProgress > 0 then
+            deps.addObjectiveProgress(gameState.activePrimaryObjective, hunterProgress)
+        end
+    end
     deps.warrules.triggerCounterStrikesOnTargeting(
         gameState.cards,
         gameState.activeChampion,
@@ -322,6 +339,10 @@ function phasecontroller.update(gameState, deps, dt)
     if gameState.waitingForStartGeneration
         and deps.turnrules.getCurrentPhase() == "Start"
         and deps.resourcerules.isGenerationComplete() then
+        if deps.clearResolvedSyntacMethodReward then
+            deps.clearResolvedSyntacMethodReward()
+        end
+
         gameState.waitingForStartGeneration = false
         deps.turnrules.advancePhase()
         phasecontroller.enterCurrentPhase(gameState, deps)
@@ -394,7 +415,7 @@ function phasecontroller.update(gameState, deps, dt)
         local nextWarSubphase = deps.turnrules.advanceWarSubphase()
 
         if nextWarSubphase == "Engage" then
-            gameState.engageRerollCount = 2
+            gameState.engageRerollCount = 2 + math.max(0, tonumber(deps.getEngageRerollBonus and deps.getEngageRerollBonus()) or 0)
             deps.sfxrules.playEngage()
             deps.notifications.push("Engage!")
         end

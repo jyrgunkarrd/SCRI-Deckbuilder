@@ -97,7 +97,12 @@ local gameState = {
     waitingForStartGeneration = false,
     championPlayState = championplayrules.createState(),
     engageRerollCount = 2,
+    engageRerollBonus = 0,
     syntacCount = 0,
+    syntacRewardButtons = {},
+    syntacMethodRewardAnimating = false,
+    isSyntacMethodModalOpen = false,
+    syntacPendingMethodChoicePaid = false,
     isResourceExchangeModalOpen = false,
     isJaclDeckModalOpen = false,
     jaclDeckModalScroll = {
@@ -536,6 +541,80 @@ local function drawCardFromPlayerDeck()
     return drawnCard
 end
 
+local function resolveSyntacRewardButtons()
+    local rewardButtons = gameState.syntacRewardButtons or {}
+    local nextRewardButtons = {}
+
+    if rewardButtons.draw then
+        drawCardFromPlayerDeck()
+    end
+
+    if rewardButtons.rerolls then
+        gameState.engageRerollBonus = math.max(0, tonumber(gameState.engageRerollBonus) or 0) + 2
+    end
+
+    if rewardButtons.method and rewardButtons.methodResource then
+        local methodButton = envdraw.getSyntacRewardButtonLayout("method", gameState.playerJacl)
+        local sourceCenter = methodButton and {
+            x = methodButton.x + (methodButton.width / 2),
+            y = methodButton.y + (methodButton.height / 2),
+        } or nil
+
+        resourcerules.addResourceFromSource(
+            rewardButtons.methodResource,
+            1,
+            sourceCenter,
+            envdraw.getBottomLeftPanelLayout(gameState.playerJacl),
+            envdraw.getResourceTrackerLayout()
+        )
+
+        nextRewardButtons.method = true
+        nextRewardButtons.methodResource = rewardButtons.methodResource
+        gameState.syntacMethodRewardAnimating = true
+    end
+
+    gameState.syntacRewardButtons = nextRewardButtons
+end
+
+local function clearResolvedSyntacMethodReward()
+    if gameState.syntacMethodRewardAnimating then
+        gameState.syntacMethodRewardAnimating = false
+        gameState.syntacRewardButtons = {}
+    end
+end
+
+local function clearTemporaryRerollBonus()
+    gameState.engageRerollBonus = 0
+
+    if gameState.engageRerollCount > 2 then
+        gameState.engageRerollCount = 2
+    end
+end
+
+local function refundPendingSyntacMethodChoice()
+    if gameState.syntacPendingMethodChoicePaid then
+        resourcerules.addResource("The Scratch", 2)
+        sfxrules.playResourcePlay()
+        gameState.syntacPendingMethodChoicePaid = false
+    end
+
+    gameState.isSyntacMethodModalOpen = false
+end
+
+local function chooseSyntacMethodResource(resourceName)
+    if not gameState.syntacPendingMethodChoicePaid or not resourceName then
+        return false
+    end
+
+    gameState.syntacRewardButtons = gameState.syntacRewardButtons or {}
+    gameState.syntacRewardButtons.method = true
+    gameState.syntacRewardButtons.methodResource = resourceName
+    gameState.syntacPendingMethodChoicePaid = false
+    gameState.isSyntacMethodModalOpen = false
+    sfxrules.playResourcePlay()
+    return true
+end
+
 local function beginKitReturnAnimation(hostCard, attachedKit, returningCard)
     return cardanimations.beginKitReturnAnimation(getCardAnimationContext(), hostCard, attachedKit, returningCard)
 end
@@ -708,7 +787,11 @@ local function getHunterEmphasisInHand()
 end
 
 local function getEndPhaseObjectiveProgress()
-    return (gameState.activePrimaryObjective and gameState.activePrimaryObjective.emphasis or 0) + getHunterEmphasisInHand()
+    return gameState.activePrimaryObjective and gameState.activePrimaryObjective.emphasis or 0
+end
+
+local function getRetaliationPhaseObjectiveProgress()
+    return getHunterEmphasisInHand()
 end
 
 initializeCardHealthState = function(card)
@@ -836,6 +919,8 @@ local function getPhaseControllerDeps()
         beginInfiltrationEffect = beginInfiltrationEffect,
         beginEndPhaseSacrificeSelection = beginEndPhaseSacrificeSelection,
         beginPoiGeneratedCardTransformation = beginPoiGeneratedCardTransformation,
+        clearResolvedSyntacMethodReward = clearResolvedSyntacMethodReward,
+        clearTemporaryRerollBonus = clearTemporaryRerollBonus,
         clearAllBlocking = clearAllBlocking,
         createGeneratedSupportCard = createGeneratedSupportCard,
         dealDamageToCard = dealDamageToCard,
@@ -852,7 +937,11 @@ local function getPhaseControllerDeps()
         end,
         getCardDrawPosition = getCardDrawPosition,
         getChampionPlayContext = getChampionPlayContext,
+        getEngageRerollBonus = function()
+            return gameState.engageRerollBonus or 0
+        end,
         getEndPhaseObjectiveProgress = getEndPhaseObjectiveProgress,
+        getRetaliationPhaseObjectiveProgress = getRetaliationPhaseObjectiveProgress,
         getReplacementIntel = getReplacementIntel,
         getSetupCardCount = getSetupCardCount,
         getTopSlotRollTargets = getTopSlotRollTargets,
@@ -861,6 +950,7 @@ local function getPhaseControllerDeps()
         isGridCard = isGridCard,
         normalizeSetupCardSlots = normalizeSetupCardSlots,
         playHunterAddedSfxForCards = playHunterAddedSfxForCards,
+        resolveSyntacRewardButtons = resolveSyntacRewardButtons,
         expireCardFromPlay = expireCardFromPlay,
         removeCardFromPlay = removeCardFromPlay,
         updateInfiltrationEffect = updateInfiltrationEffect,
@@ -1482,6 +1572,55 @@ local function canOpenPlayerDeckModal()
     return turnrules.getCurrentPhase() == "Prelude" or isEngagePhase()
 end
 
+local function canUseSyntacRewardButtons()
+    return turnrules.getCurrentPhase() == "Prelude" or isEngagePhase()
+end
+
+local function tryUseSyntacRewardButton(mouseX, mouseY)
+    local button = envdraw.getSyntacRewardButtonAt(mouseX, mouseY, gameState.playerJacl)
+
+    if not button or (button.id ~= "method" and button.id ~= "draw" and button.id ~= "rerolls") then
+        return false
+    end
+
+    if not canUseSyntacRewardButtons() then
+        sfxrules.playPlayReject()
+        return true
+    end
+
+    gameState.syntacRewardButtons = gameState.syntacRewardButtons or {}
+
+    if gameState.syntacRewardButtons[button.id] then
+        sfxrules.playPlayReject()
+        return true
+    end
+
+    if button.id == "method" and gameState.syntacPendingMethodChoicePaid then
+        sfxrules.playPlayReject()
+        return true
+    end
+
+    if not resourcerules.payCosts({
+        { resource = "The Scratch", amount = 2 },
+    }) then
+        sfxrules.playPlayReject()
+        return true
+    end
+
+    if button.id == "method" then
+        gameState.syntacPendingMethodChoicePaid = true
+        gameState.isSyntacMethodModalOpen = true
+        gameState.isResourceExchangeModalOpen = false
+        gameState.isJaclDeckModalOpen = false
+        sfxrules.playResourcePlay()
+        return true
+    end
+
+    gameState.syntacRewardButtons[button.id] = true
+    sfxrules.playResourcePlay()
+    return true
+end
+
 local function getHoveredPlayerRollBadgeCardIndex(mouseX, mouseY)
     return engagerules.getHoveredPlayerRollBadgeCardIndex(mouseX, mouseY, getEngageContext())
 end
@@ -1490,6 +1629,7 @@ local function buildModalState()
     return {
         playerJacl = gameState.playerJacl,
         activePrimaryObjective = gameState.activePrimaryObjective,
+        isSyntacMethodModalOpen = gameState.isSyntacMethodModalOpen,
         isResourceExchangeModalOpen = gameState.isResourceExchangeModalOpen,
         isJaclDeckModalOpen = gameState.isJaclDeckModalOpen,
         jaclDeckModalScroll = gameState.jaclDeckModalScroll,
@@ -1500,6 +1640,7 @@ local function buildModalState()
 end
 
 local function applyModalState(modalState)
+    gameState.isSyntacMethodModalOpen = modalState.isSyntacMethodModalOpen
     gameState.isResourceExchangeModalOpen = modalState.isResourceExchangeModalOpen
     gameState.isJaclDeckModalOpen = modalState.isJaclDeckModalOpen
     gameState.jaclDeckPreviewCard = modalState.jaclDeckPreviewCard
@@ -1535,6 +1676,14 @@ local function getModalDeps()
         end,
         addObjectiveProgress = addObjectiveProgress,
         copyLocation = copyLocation,
+        cancelSyntacMethodChoice = function(state)
+            refundPendingSyntacMethodChoice()
+            state.isSyntacMethodModalOpen = gameState.isSyntacMethodModalOpen
+        end,
+        chooseSyntacMethodResource = function(resourceName, state)
+            chooseSyntacMethodResource(resourceName)
+            state.isSyntacMethodModalOpen = gameState.isSyntacMethodModalOpen
+        end,
     }
 end
 
@@ -1738,6 +1887,7 @@ local function getInputControllerDeps()
         tryPlayStrategyCard = tryPlayStrategyCard,
         tryResolvePendingStrategySelection = tryResolvePendingStrategySelection,
         tryUseTomeCard = tryUseTomeCard,
+        tryUseSyntacRewardButton = tryUseSyntacRewardButton,
         tryOpenFullArt = tryOpenFullArt,
         tryCancelSelectedEngageAttacker = tryCancelSelectedEngageAttacker,
         tryResolveEngageClick = tryResolveEngageClick,
@@ -1778,7 +1928,12 @@ function love.load()
     notifications.reset()
     championplayrules.resetState(gameState.championPlayState)
     gameState.engageRerollCount = 2
+    gameState.engageRerollBonus = 0
     gameState.syntacCount = 0
+    gameState.syntacRewardButtons = {}
+    gameState.syntacMethodRewardAnimating = false
+    gameState.isSyntacMethodModalOpen = false
+    gameState.syntacPendingMethodChoicePaid = false
     gameState.isResourceExchangeModalOpen = false
     gameState.isJaclDeckModalOpen = false
     gameState.jaclDeckModalScroll.deck = 0
@@ -1969,6 +2124,8 @@ function love.draw()
         playerJacl = gameState.playerJacl,
         engageRerollCount = gameState.engageRerollCount,
         syntacCount = gameState.syntacCount,
+        syntacRewardButtons = gameState.syntacRewardButtons,
+        getRetaliationPhaseObjectiveProgress = getRetaliationPhaseObjectiveProgress,
         cards = gameState.cards,
         hoveredCardIndex = gameState.hoveredCardIndex,
         draggedCardIndex = gameState.draggedCardIndex,
@@ -1983,6 +2140,7 @@ function love.draw()
         jaclDeckModalScroll = gameState.jaclDeckModalScroll,
         jaclDeckPreviewCard = gameState.jaclDeckPreviewCard,
         isResourceExchangeModalOpen = gameState.isResourceExchangeModalOpen,
+        isSyntacMethodModalOpen = gameState.isSyntacMethodModalOpen,
         hoveredKeyword = gameState.hoveredKeyword,
         hoveredDiceFace = gameState.hoveredDiceFace,
         hoveredJaclSpecialDefinition = gameState.hoveredJaclSpecialDefinition,

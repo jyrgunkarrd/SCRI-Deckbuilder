@@ -25,6 +25,11 @@ function gamestatedraw.draw(ctx)
         ctx.activePrimaryObjective and ctx.activePrimaryObjective.id or nil,
         ctx.isWarRollSourceActive
     )
+
+    if currentPhase == "Prelude" and ctx.getRetaliationPhaseObjectiveProgress then
+        objectivePreviewPips = objectivePreviewPips + math.max(0, tonumber(ctx.getRetaliationPhaseObjectiveProgress()) or 0)
+    end
+
     local intelPreviewPips = ctx.warrules.getIntelProgressPreview(
         ctx.activeIntel and ctx.activeIntel.id or nil,
         ctx.isWarRollSourceActive
@@ -96,7 +101,7 @@ function gamestatedraw.draw(ctx)
         ctx.envdraw.drawRerollButton(ctx.playerJacl, ctx.engageRerollCount, ctx.engageRerollCount > 0)
     end
 
-    ctx.envdraw.drawSyntacBox(ctx.playerJacl, ctx.syntacCount)
+    ctx.envdraw.drawSyntacBox(ctx.playerJacl, ctx.syntacCount, ctx.syntacRewardButtons)
     ctx.envdraw.drawBottomLeftPanel(ctx.playerJacl, ctx.resourcerules.getResourceCounts())
     ctx.envdraw.drawPlayerHand()
 
@@ -288,6 +293,8 @@ function gamestatedraw.draw(ctx)
         if ctx.jaclDeckPreviewCard then
             ctx.envdraw.drawJaclDeckPreviewModal(ctx.jaclDeckPreviewCard)
         end
+    elseif ctx.isSyntacMethodModalOpen then
+        ctx.envdraw.drawSyntacMethodModal()
     elseif ctx.isResourceExchangeModalOpen then
         ctx.envdraw.drawResourceExchangeModal(ctx.resourcerules.getResourceCounts())
     elseif ctx.hoveredDiceFace then

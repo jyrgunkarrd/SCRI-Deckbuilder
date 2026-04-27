@@ -11,7 +11,6 @@ local warzones = {
         max = 6,
         type = "warzone",
         poi = "POI0001",
-        allied = true, 
         method = {
             { resource = "The Scratch", amount = 1 },
         },
