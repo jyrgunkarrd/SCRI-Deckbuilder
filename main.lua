@@ -240,6 +240,10 @@ local function beginPoiGeneratedCardTransformation(poiDefinition, generatedCardI
     return topsloteffects.beginPoiGeneratedCardTransformation(poiDefinition, generatedCardId, getNextOpenHandSlot)
 end
 
+local function beginObjectiveHunterDeckTransformation(objectiveDefinition, generatedCardId)
+    return topsloteffects.beginObjectiveHunterDeckTransformation(objectiveDefinition, generatedCardId)
+end
+
 local function copyLocation(location)
     return cardinstances.copyLocation(location)
 end
@@ -511,6 +515,34 @@ local function createOrStackPlayerCacheNearCard(sourceCardIndex, cacheDefinition
     return spawnrules.createOrStackPlayerCacheNearCard(getSpawnContext(), sourceCardIndex, cacheDefinition, count)
 end
 
+local function resolveEnemyEncounter(sourceCardIndex, enemyDefinition)
+    local sourceCard = sourceCardIndex and gameState.cards[sourceCardIndex] or nil
+
+    if not sourceCard
+        or not sourceCard.location
+        or sourceCard.location.kind ~= "grid"
+        or sourceCard.location.rowId ~= "OppRow"
+        or not enemyDefinition
+        or not enemyDefinition.encounter
+        or not enemyDefinition.encounter.spawns then
+        return 0
+    end
+
+    local spawnedCount = 0
+
+    for _, spawnEntry in ipairs(enemyDefinition.encounter.spawns or {}) do
+        local enemyId = spawnEntry.enemyId or spawnEntry.cardId or spawnEntry.id
+        local count = math.max(0, math.floor(tonumber(spawnEntry.count) or 0))
+        local spawnDefinition = enemyId and cardregistry.getCardById(enemyId) or nil
+
+        if spawnDefinition and count > 0 then
+            spawnedCount = spawnedCount + spawnTokensNearCard(sourceCardIndex, spawnDefinition, count)
+        end
+    end
+
+    return spawnedCount
+end
+
 local function drawCardFromPlayerDeck()
     local nextSlotIndex = getNextOpenHandSlot()
 
@@ -684,6 +716,10 @@ local function addObjectiveProgress(objectiveDefinition, amount, slotId)
 
     if result.escalationId then
         beginObjectiveEscalation(objectiveDefinition, result.escalationId)
+    end
+
+    if result.hunterId then
+        beginObjectiveHunterDeckTransformation(objectiveDefinition, result.hunterId)
     end
 
     return result.appliedChange
@@ -883,6 +919,7 @@ local function getChampionPlayContext()
         getOppRow = getOppRow,
         isGridRowColumnOccupied = isGridRowColumnOccupied,
         initializeCardHealthState = initializeCardHealthState,
+        resolveEnemyEncounter = resolveEnemyEncounter,
     }
 end
 

@@ -6,6 +6,7 @@ function objectiveprogressrules.addProgress(objectiveDefinition, amount, context
         progressEffect = nil,
         shouldDestroyIntel = false,
         escalationId = nil,
+        hunterId = nil,
     }
 
     if not objectiveDefinition or amount == nil then
@@ -47,10 +48,14 @@ function objectiveprogressrules.addProgress(objectiveDefinition, amount, context
         local escalationId = objectiveDefinition.escalation or objectiveDefinition.escalate
 
         if maxPlan ~= nil
-            and (tonumber(objectiveDefinition.plan) or 0) >= maxPlan
-            and escalationId
-            and not context.objectiveEscalationActive then
-            result.escalationId = escalationId
+            and (tonumber(objectiveDefinition.plan) or 0) >= maxPlan then
+            if objectiveDefinition.hunterid then
+                result.hunterId = objectiveDefinition.hunterid
+            end
+
+            if escalationId and not context.objectiveEscalationActive then
+                result.escalationId = escalationId
+            end
         end
     end
 

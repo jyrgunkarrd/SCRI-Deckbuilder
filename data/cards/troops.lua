@@ -373,8 +373,8 @@ local troops = {
             mcost = {
                 { resource = "The Beast", amount = 1 },
             },    
-        D1 = "EXODMG5",
-        D2 = "EXODMG5",
+        D1 = "EXORNGDMG5",
+        D2 = "EXORNGDMG5",
         D3 = "CQDMG2",
         D4 = "CQDMG2",
         D5 = "NUL",

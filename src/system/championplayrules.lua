@@ -89,7 +89,13 @@ function championplayrules.playHouseCard(ctx)
     ctx.cardEntranceProgress[playedCardIndex] = 1
     sfxrules.playUnitPlay()
 
-    return cardregistry.getCard(card.setName, card.cardId)
+    local playedCardDefinition = cardregistry.getCard(card.setName, card.cardId)
+
+    if ctx.resolveEnemyEncounter then
+        ctx.resolveEnemyEncounter(playedCardIndex, playedCardDefinition)
+    end
+
+    return playedCardDefinition
 end
 
 function championplayrules.queueKeywordPlays(state, cardDefinition, playDelay)

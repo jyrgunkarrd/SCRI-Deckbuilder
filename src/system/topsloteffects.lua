@@ -215,9 +215,36 @@ function topsloteffects.beginPoiGeneratedCardTransformation(poiDefinition, gener
         elapsed = 0,
         duration = POI_HUNTER_TRANSFORMATION_DURATION,
         seed = love.math.random() * 1000,
+        sourceSlotId = "poi",
         sourcePoi = poiDefinition,
         generatedCardDefinition = generatedCardDefinition,
         targetLocation = targetLocation,
+    }
+    return true
+end
+
+function topsloteffects.beginObjectiveHunterDeckTransformation(objectiveDefinition, generatedCardId)
+    if not objectiveDefinition or not generatedCardId then
+        return false
+    end
+
+    local generatedCardDefinition = cardregistry.getCardById(generatedCardId)
+
+    if not generatedCardDefinition then
+        return false
+    end
+
+    carddraw.preloadPortrait(generatedCardDefinition.setName, generatedCardDefinition.id)
+    poiHunterTransformationEffect = {
+        elapsed = 0,
+        duration = POI_HUNTER_TRANSFORMATION_DURATION,
+        seed = love.math.random() * 1000,
+        sourceSlotId = "objective",
+        sourceObjective = objectiveDefinition,
+        generatedCardDefinition = generatedCardDefinition,
+        targetLocation = {
+            kind = "deck",
+        },
     }
     return true
 end
@@ -299,6 +326,7 @@ function topsloteffects.update(dt)
 
         if poiHunterTransformationEffect.elapsed >= poiHunterTransformationEffect.duration then
             events.poiHunterTransformationComplete = {
+                sourceSlotId = poiHunterTransformationEffect.sourceSlotId,
                 generatedCardDefinition = poiHunterTransformationEffect.generatedCardDefinition,
                 targetLocation = poiHunterTransformationEffect.targetLocation,
             }
@@ -375,7 +403,9 @@ function topsloteffects.getRenderStates()
         states.poiHunterTransformation = {
             progress = progressFor(poiHunterTransformationEffect),
             seed = poiHunterTransformationEffect.seed,
+            sourceSlotId = poiHunterTransformationEffect.sourceSlotId,
             sourcePoi = poiHunterTransformationEffect.sourcePoi,
+            sourceObjective = poiHunterTransformationEffect.sourceObjective,
             generatedCardDefinition = poiHunterTransformationEffect.generatedCardDefinition,
             targetLocation = poiHunterTransformationEffect.targetLocation,
         }

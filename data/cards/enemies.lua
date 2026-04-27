@@ -7,7 +7,6 @@ local enemies = {
     
     {
         id = "EN0001",
-        keyword = {"KEY0001"},
         name = "Forgiven",
         classname = "Enemy",
         subclass = "Troop",
@@ -31,6 +30,11 @@ local enemies = {
         textbox = "Plunder or strike: Create a Flair in hand if you don't already have one.",
         health = 7,
         max = 7,
+        encounter = {
+            spawns = {
+                { enemyId = "EN0001", count = 2 },
+            },
+        },
         D1 = "ARDMG1",
         D2 = "BDMG3",
         D3 = "BDMG2",

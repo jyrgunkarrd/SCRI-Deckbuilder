@@ -89,10 +89,6 @@ local decks = {
             name = "DemoChamp",
             cards = {
                 {
-                    cardId = "EN0001",
-                    quantity = 10,
-                },
-                {
                     cardId = "EN0002",
                     quantity = 5,
                 },

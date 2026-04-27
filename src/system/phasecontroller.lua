@@ -380,7 +380,9 @@ function phasecontroller.update(gameState, deps, dt)
         )
 
         if generatedCard then
-            gameState.activePoi = nil
+            if not effect.sourceSlotId or effect.sourceSlotId == "poi" then
+                gameState.activePoi = nil
+            end
         end
 
         if deps.turnrules.getCurrentPhase() == "End" then

@@ -165,6 +165,18 @@ local dice = {
         },
 
         {
+            id = "EXORNGDMG5",
+            type = "ExRngWeap",
+            value = 5,
+            action = "attack",
+            target = "enemy_card",
+            autoReload = true,
+            lrange = true,
+            facename = "Exotic Long Range Weapon Attack",
+            facedesc = "Deal damage to a target troop or Champion. This card gains Reloading. May attack Flying targets.",
+        },
+
+        {
             id = "EXODMG10",
             type = "ExWeap",
             value = 10,
@@ -173,6 +185,18 @@ local dice = {
             autoReload = true,
             facename = "Exotic Weapon Attack",
             facedesc = "Deal damage to a target troop or Champion. This card gains Reloading.",
+        },
+
+        {
+            id = "EXOARDMG10",
+            type = "ExoBeam",
+            value = 10,
+            action = "attack",
+            target = "enemy_card",
+            autoReload = true,
+            area = true,
+            facename = "Exotic Area Weapon Attack",
+            facedesc = "Deal damage to a target troop and adjacent troops or Champion. This card gains Reloading.",
         },
 
         {

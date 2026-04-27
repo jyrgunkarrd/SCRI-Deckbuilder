@@ -697,26 +697,34 @@ local function drawPoiFlipTransition(poiSlot, effect)
 end
 
 local function drawPoiHunterTransformation(slots, effect)
-    if not slots or not effect or not effect.sourcePoi or not effect.generatedCardDefinition then
+    if not slots or not effect or not effect.generatedCardDefinition then
         return
     end
 
-    local poiSlot = nil
+    local sourceSlot = nil
+    local sourceSlotId = effect.sourceSlotId or "poi"
 
     for _, slot in ipairs(slots) do
-        if slot.id == "poi" then
-            poiSlot = slot
+        if slot.id == sourceSlotId then
+            sourceSlot = slot
             break
         end
     end
 
-    if not poiSlot or not poiSlot.imageRect then
+    if not sourceSlot or not sourceSlot.imageRect then
         return
     end
 
     local progress = clamp(effect.progress or 0, 0, 1)
-    local sourceRect = poiSlot.imageRect
-    local sourceImage = getWarzoneImage(effect.sourcePoi.id)
+    local sourceRect = sourceSlot.imageRect
+    local sourceImage = nil
+
+    if sourceSlotId == "objective" and effect.sourceObjective then
+        sourceImage = getObjectiveImage(effect.sourceObjective.id)
+    elseif effect.sourcePoi then
+        sourceImage = getWarzoneImage(effect.sourcePoi.id)
+    end
+
     local targetLocation = effect.targetLocation or {}
     local startX = sourceRect.x
     local startY = sourceRect.y
@@ -749,7 +757,7 @@ local function drawPoiHunterTransformation(slots, effect)
     local drawY = lerp(startY, targetY, moveProgress)
     local drawWidth = lerp(startWidth, targetWidth, moveProgress)
     local drawHeight = lerp(startHeight, targetHeight, moveProgress)
-    local poiAlpha = targetLocation.kind == "hand"
+    local sourceAlpha = targetLocation.kind == "hand"
         and (1 - morphProgress)
         or (1 - clamp((progress - 0.2) / 0.8, 0, 1))
     local hunterAlpha = targetLocation.kind == "hand" and morphProgress or 0
@@ -760,8 +768,8 @@ local function drawPoiHunterTransformation(slots, effect)
     love.graphics.line(startX + (startWidth / 2), startY + (startHeight / 2), drawX + (drawWidth / 2), drawY + (drawHeight / 2))
     love.graphics.setLineWidth(1)
 
-    if sourceImage and poiAlpha > 0 then
-        love.graphics.setColor(1, 1, 1, poiAlpha)
+    if sourceImage and sourceAlpha > 0 then
+        love.graphics.setColor(1, 1, 1, sourceAlpha)
         love.graphics.draw(
             sourceImage,
             drawX,
