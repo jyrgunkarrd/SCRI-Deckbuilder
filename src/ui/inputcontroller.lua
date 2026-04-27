@@ -95,6 +95,15 @@ function inputcontroller.mousepressed(gameState, deps, x, y, button)
         return
     end
 
+    if gameState.primedSyntacAbility and button == 2 then
+        if deps.refundPrimedSyntacAbility then
+            deps.refundPrimedSyntacAbility()
+        end
+
+        clearHoverAndExpansion(gameState)
+        return
+    end
+
     if button == 2
         and (love.keyboard.isDown("lctrl") or love.keyboard.isDown("rctrl"))
         and deps.tryOpenFullArt(x, y) then
@@ -113,6 +122,30 @@ function inputcontroller.mousepressed(gameState, deps, x, y, button)
     local clickedJaclPortrait = deps.isPointInsideJaclPortrait(x, y)
     local clickedJaclMethodBadge = deps.envdraw.getJaclMethodBadgeAt(x, y, gameState.playerJacl)
     local clickedCardMethodBadge = deps.getCardMethodBadgeTarget and deps.getCardMethodBadgeTarget(x, y) or nil
+
+    if gameState.primedSyntacAbility then
+        if button == 2 then
+            if deps.refundPrimedSyntacAbility then
+                deps.refundPrimedSyntacAbility()
+            end
+
+            clearHoverAndExpansion(gameState)
+            return
+        end
+
+        if button == 1 then
+            if deps.tryResolvePrimedSyntacAbility
+                and deps.tryResolvePrimedSyntacAbility(gameState.hoveredCardIndex, gameState.hoveredTopSlotId) then
+                clearHoverAndExpansion(gameState)
+                return
+            end
+
+            deps.sfxrules.playPlayReject()
+            return
+        end
+
+        return
+    end
 
     if deps.hasPendingStrategySelection and deps.hasPendingStrategySelection() then
         if button == 2 and deps.cancelPendingStrategySelection then
@@ -133,6 +166,11 @@ function inputcontroller.mousepressed(gameState, deps, x, y, button)
     end
 
     if button == 1 and deps.tryUseEngageReroll(x, y) then
+        return
+    end
+
+    if button == 1 and deps.tryPrimeSyntacAbility and deps.tryPrimeSyntacAbility(x, y) then
+        clearHoverAndExpansion(gameState)
         return
     end
 

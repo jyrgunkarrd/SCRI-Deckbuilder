@@ -282,6 +282,10 @@ function gamestatedraw.draw(ctx)
         end
     end
 
+    local mouseX, mouseY = love.mouse.getPosition()
+    local syntacHovered = not ctx.primedSyntacAbility
+        and ctx.envdraw.isPointInsideSyntacBox(mouseX, mouseY, ctx.playerJacl)
+
     if ctx.mulliganActive then
         -- Mulligan owns input and hover UI until DONE is clicked.
     elseif ctx.isJaclDeckModalOpen then
@@ -297,6 +301,8 @@ function gamestatedraw.draw(ctx)
         ctx.envdraw.drawSyntacMethodModal()
     elseif ctx.isResourceExchangeModalOpen then
         ctx.envdraw.drawResourceExchangeModal(ctx.resourcerules.getResourceCounts())
+    elseif syntacHovered then
+        ctx.envdraw.drawSyntacTooltip(ctx.playerJacl)
     elseif ctx.hoveredDiceFace then
         ctx.carddraw.drawDiceFaceTooltip(ctx.hoveredDiceFace)
 
@@ -388,13 +394,18 @@ function gamestatedraw.draw(ctx)
         )
     end
 
-    if ctx.hoverPreview and not ctx.mulliganActive then
+    if ctx.hoverPreview and not ctx.mulliganActive and not syntacHovered then
         ctx.envdraw.drawHoverPreview(ctx.hoverPreview, ctx.drawCardStateOverlays)
     end
 
     if ctx.primedActivatedAbility and ctx.primedActivatedAbility.resourceName and not ctx.mulliganActive then
         local mouseX, mouseY = love.mouse.getPosition()
         ctx.envdraw.drawFloatingMethodBadge(ctx.primedActivatedAbility.resourceName, mouseX + 16, mouseY + 16)
+    end
+
+    if ctx.primedSyntacAbility and not ctx.mulliganActive then
+        local mouseX, mouseY = love.mouse.getPosition()
+        ctx.envdraw.drawSyntacCursorIndicator(mouseX, mouseY)
     end
 
     if ctx.fullArtImage then

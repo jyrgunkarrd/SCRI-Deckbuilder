@@ -10,7 +10,7 @@ local enemies = {
         name = "Forgiven",
         classname = "Enemy",
         subclass = "Troop",
-        textbox = "Plunder or strike: Create a Flair in hand if you don't already have one.",
+        flavor = "Those who break Sermon City's laws are Forgiven; they repay this act of grace with a life of service, garbed permanently in the image pf Our Lord Father as a display of profound faith and gratitude.",
         health = 3,
         max = 3,
         D1 = "BDMG3",
@@ -27,7 +27,8 @@ local enemies = {
         classname = "Enemy",
         subclass = "Troop",
         keyword = { "KWTOUGH"},
-        textbox = "Plunder or strike: Create a Flair in hand if you don't already have one.",
+        textbox = "Squad:\n\nForgiven x2",
+        flavor = "Confessors attend to the final rites of the Forgiven, accepting any last words of apology or prayer on behalf of Our Lord Father.",
         health = 7,
         max = 7,
         encounter = {
@@ -41,6 +42,28 @@ local enemies = {
         D4 = "BDMG2",
         D5 = "BDMG2",
         D6 = "BDMG1",
+    },
+
+    {
+        id = "ENSEEN",
+        name = "Seen",
+        classname = "Enemy",
+        subclass = "Troop",
+        textbox = "Squad:\n\nForgiven x2",
+        flavor = "The Seen are the backbone of Sermon City's volunteer security forces - those who take up arms after witnessing an act of the divine.",
+        health = 6,
+        max = 6,
+        encounter = {
+            spawns = {
+                { enemyId = "EN0001", count = 2 },
+            },
+        },
+        D1 = "BDMG4",
+        D2 = "BDMG4",
+        D3 = "BDMG3",
+        D4 = "BDMG3",
+        D5 = "ARDMG1",
+        D6 = "ARDMG1",
     },
 
 }

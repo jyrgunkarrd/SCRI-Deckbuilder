@@ -433,6 +433,16 @@ Mammoth - deals 1 damage, Slain units become Meat:
 
 Crossbones has 24 HP; fist stage mt athena has 6 threat 
 
+Syntac bar: 
+
+ - First 2 pips should be gold.
+ - Need a 'Lexurgy' hover tooltip that says it can Damage, Block, Sabotage or Influence
+ - Needs to change border to gold when 2 pips are ready.
+ - When 2 pips are ready, can be clicked to attach a little text box with 2 gold diamond pips to the cursor. Clicking on target gives context-sensitive result.
+
+
+We should replace our bespoke preview code with just one function that can apply everywhere; a preview entry in a defintion that provides the text for the bottom label and the target for the preview. 
+
 
 We want to change enemy decks / cards so that each one spawns a little encounter. Enemies that can't find a spot to go will absord enemies in order to get placed - gaining the Growth keyword and incrementing it by the current health of the unit absorbed x Rank of the unit. 
 
@@ -452,4 +462,8 @@ At the halfway point of a run, the player can choose to put some items into a ca
 
 
 3 floor, 10 fights per floor + 3 non-fight nodes. 2 milestone encounters per floor with the booster packs. 
+
+
+
+
 

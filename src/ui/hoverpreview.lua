@@ -128,6 +128,7 @@ end
 
 function hoverpreview.getHoverPreviewState(state, deps)
     if state.draggedCardIndex
+        or state.primedSyntacAbility
         or state.fullArtImage
         or state.isJaclDeckModalOpen
         or state.isSyntacMethodModalOpen

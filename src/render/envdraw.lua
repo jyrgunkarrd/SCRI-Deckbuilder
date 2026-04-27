@@ -52,6 +52,22 @@ local SYNTAC_BOX_TRACKER_PADDING = 14
 local SYNTAC_BOX_TRACKER_GAP = 16
 local SYNTAC_BOX_MAX_PIPS = 10
 local SYNTAC_BOX_LABEL_TEXT = "SynTac"
+local SYNTAC_BOX_PIP_COLOR = { 0.58, 0.9, 0.96 }
+local SYNTAC_BOX_GOLD_COLOR = { 1, 0.855, 0.255 }
+local SYNTAC_TOOLTIP_HEADER_TEXT = "LEXURGY :"
+local SYNTAC_TOOLTIP_BODY_TEXT = "2 Damage or\n2 Block or\n2 Sabotage or\n2 Infuence"
+local SYNTAC_TOOLTIP_PADDING = 12
+local SYNTAC_TOOLTIP_GAP = 8
+local SYNTAC_TOOLTIP_HEADER_BODY_GAP = 8
+local SYNTAC_TOOLTIP_HEADER_ICON_GAP = 10
+local SYNTAC_TOOLTIP_PIP_GAP = 4
+local SYNTAC_TOOLTIP_PIP_SIZE = 12
+local SYNTAC_TOOLTIP_TITLE_SIZE = 16
+local SYNTAC_TOOLTIP_BODY_SIZE = 13
+local SYNTAC_CURSOR_BOX_PADDING = 10
+local SYNTAC_CURSOR_BOX_GAP = 8
+local SYNTAC_CURSOR_PIP_SIZE = 14
+local SYNTAC_CURSOR_PIP_GAP = 5
 local SYNTAC_REWARD_BUTTON_GAP = 8
 local SYNTAC_REWARD_BUTTON_PADDING = 12
 local SYNTAC_REWARD_BUTTON_TEXT_ICON_GAP = 8
@@ -2717,6 +2733,28 @@ function envdraw.getSyntacBoxLayout(jaclDefinition)
     }
 end
 
+function envdraw.isPointInsideSyntacBox(mouseX, mouseY, jaclDefinition)
+    local layout = envdraw.getSyntacBoxLayout(jaclDefinition)
+
+    return mouseX >= layout.x
+        and mouseX <= layout.x + layout.width
+        and mouseY >= layout.y
+        and mouseY <= layout.y + layout.height
+end
+
+local function drawDiamondPip(mode, x, y, size)
+    local centerX = x + (size / 2)
+    local centerY = y + (size / 2)
+
+    love.graphics.polygon(
+        mode,
+        centerX, y,
+        x + size, centerY,
+        centerX, y + size,
+        x, centerY
+    )
+end
+
 local function getSyntacRewardButtonLayouts(jaclDefinition, syntacLayout)
     local layout = syntacLayout or envdraw.getSyntacBoxLayout(jaclDefinition)
     local handLayout = envdraw.getPlayerHandLayout()
@@ -2925,7 +2963,11 @@ function envdraw.drawSyntacBox(jaclDefinition, syntacCount, rewardButtonState)
 
     love.graphics.setColor(0.12, 0.13, 0.16, 0.92)
     love.graphics.rectangle("fill", layout.x, layout.y, layout.width, layout.height)
-    love.graphics.setColor(0.82, 0.85, 0.89, 0.78)
+    if pipCount >= 2 then
+        love.graphics.setColor(SYNTAC_BOX_GOLD_COLOR[1], SYNTAC_BOX_GOLD_COLOR[2], SYNTAC_BOX_GOLD_COLOR[3], 0.88)
+    else
+        love.graphics.setColor(0.82, 0.85, 0.89, 0.78)
+    end
     love.graphics.rectangle("line", layout.x, layout.y, layout.width, layout.height)
 
     love.graphics.setFont(labelFont)
@@ -2947,31 +2989,19 @@ function envdraw.drawSyntacBox(jaclDefinition, syntacCount, rewardButtonState)
     local startX = snap(trackerRight - totalGridWidth)
     local startY = snap(layout.y + ((layout.height - totalGridHeight) / 2))
 
-    local function drawDiamondPip(mode, x, y, size)
-        local centerX = x + (size / 2)
-        local centerY = y + (size / 2)
-
-        love.graphics.polygon(
-            mode,
-            centerX, y,
-            x + size, centerY,
-            centerX, y + size,
-            x, centerY
-        )
-    end
-
-    love.graphics.setColor(0.58, 0.9, 0.96, 0.45)
-
     for pipIndex = 0, maxCount - 1 do
         local row = math.floor(pipIndex / columnCount)
         local column = pipIndex % columnCount
         local pipX = startX + (column * (pipSize + pipGap))
         local pipY = startY + (row * (pipSize + pipGap))
 
+        if pipIndex < 2 then
+            love.graphics.setColor(SYNTAC_BOX_GOLD_COLOR[1], SYNTAC_BOX_GOLD_COLOR[2], SYNTAC_BOX_GOLD_COLOR[3], 0.5)
+        else
+            love.graphics.setColor(SYNTAC_BOX_PIP_COLOR[1], SYNTAC_BOX_PIP_COLOR[2], SYNTAC_BOX_PIP_COLOR[3], 0.45)
+        end
         drawDiamondPip("line", pipX, pipY, pipSize)
     end
-
-    love.graphics.setColor(0.58, 0.9, 0.96, 1)
 
     for pipIndex = 0, pipCount - 1 do
         local row = math.floor(pipIndex / columnCount)
@@ -2979,9 +3009,109 @@ function envdraw.drawSyntacBox(jaclDefinition, syntacCount, rewardButtonState)
         local pipX = startX + (column * (pipSize + pipGap))
         local pipY = startY + (row * (pipSize + pipGap))
 
+        if pipIndex < 2 then
+            love.graphics.setColor(SYNTAC_BOX_GOLD_COLOR[1], SYNTAC_BOX_GOLD_COLOR[2], SYNTAC_BOX_GOLD_COLOR[3], 1)
+        else
+            love.graphics.setColor(SYNTAC_BOX_PIP_COLOR[1], SYNTAC_BOX_PIP_COLOR[2], SYNTAC_BOX_PIP_COLOR[3], 1)
+        end
         drawDiamondPip("fill", pipX, pipY, pipSize)
     end
 
+    love.graphics.setColor(1, 1, 1, 1)
+end
+
+function envdraw.drawSyntacTooltip(jaclDefinition)
+    local layout = envdraw.getSyntacBoxLayout(jaclDefinition)
+    local previousFont = love.graphics.getFont()
+    local titleFont = getFont(JACL_LABEL_FONT_PATH, SYNTAC_TOOLTIP_TITLE_SIZE)
+    local bodyFont = getFont(JACL_LABEL_FONT_PATH, SYNTAC_TOOLTIP_BODY_SIZE)
+    local headerTextWidth = titleFont:getWidth(SYNTAC_TOOLTIP_HEADER_TEXT)
+    local headerIconWidth = (SYNTAC_TOOLTIP_PIP_SIZE * 2) + SYNTAC_TOOLTIP_PIP_GAP
+    local headerWidth = headerTextWidth + SYNTAC_TOOLTIP_HEADER_ICON_GAP + headerIconWidth
+    local bodyLines = {}
+
+    for line in SYNTAC_TOOLTIP_BODY_TEXT:gmatch("([^\n]+)") do
+        bodyLines[#bodyLines + 1] = line
+    end
+
+    local bodyWidth = 0
+    for _, line in ipairs(bodyLines) do
+        bodyWidth = math.max(bodyWidth, bodyFont:getWidth(line))
+    end
+
+    local tooltipWidth = snap((SYNTAC_TOOLTIP_PADDING * 2) + math.max(headerWidth, bodyWidth))
+    local tooltipHeight = snap(
+        (SYNTAC_TOOLTIP_PADDING * 2)
+        + titleFont:getHeight()
+        + SYNTAC_TOOLTIP_HEADER_BODY_GAP
+        + (#bodyLines * bodyFont:getHeight())
+    )
+    local windowWidth = love.graphics.getWidth()
+    local tooltipX = snap(layout.x + ((layout.width - tooltipWidth) / 2))
+    local tooltipY = snap(layout.y - SYNTAC_TOOLTIP_GAP - tooltipHeight)
+
+    tooltipX = snap(math.max(8, math.min(tooltipX, windowWidth - tooltipWidth - 8)))
+    tooltipY = snap(math.max(8, tooltipY))
+
+    love.graphics.setColor(0.02, 0.025, 0.03, 0.42)
+    love.graphics.rectangle("fill", tooltipX - 6, tooltipY - 6, tooltipWidth + 12, tooltipHeight + 12, 8, 8)
+    love.graphics.setColor(0.05, 0.05, 0.06, 0.96)
+    love.graphics.rectangle("fill", tooltipX, tooltipY, tooltipWidth, tooltipHeight, 6, 6)
+    love.graphics.setColor(SYNTAC_BOX_GOLD_COLOR[1], SYNTAC_BOX_GOLD_COLOR[2], SYNTAC_BOX_GOLD_COLOR[3], 0.88)
+    love.graphics.rectangle("line", tooltipX, tooltipY, tooltipWidth, tooltipHeight, 6, 6)
+
+    local headerX = tooltipX + SYNTAC_TOOLTIP_PADDING
+    local headerY = tooltipY + SYNTAC_TOOLTIP_PADDING
+    love.graphics.setFont(titleFont)
+    love.graphics.setColor(0.95, 0.96, 0.98, 1)
+    love.graphics.print(SYNTAC_TOOLTIP_HEADER_TEXT, headerX, headerY)
+
+    local pipX = snap(headerX + headerTextWidth + SYNTAC_TOOLTIP_HEADER_ICON_GAP)
+    local pipY = snap(headerY + ((titleFont:getHeight() - SYNTAC_TOOLTIP_PIP_SIZE) / 2))
+    love.graphics.setColor(SYNTAC_BOX_GOLD_COLOR[1], SYNTAC_BOX_GOLD_COLOR[2], SYNTAC_BOX_GOLD_COLOR[3], 1)
+    drawDiamondPip("fill", pipX, pipY, SYNTAC_TOOLTIP_PIP_SIZE)
+    drawDiamondPip("fill", pipX + SYNTAC_TOOLTIP_PIP_SIZE + SYNTAC_TOOLTIP_PIP_GAP, pipY, SYNTAC_TOOLTIP_PIP_SIZE)
+
+    love.graphics.setFont(bodyFont)
+    love.graphics.setColor(0.82, 0.85, 0.89, 0.98)
+    for lineIndex, line in ipairs(bodyLines) do
+        love.graphics.print(
+            line,
+            tooltipX + SYNTAC_TOOLTIP_PADDING,
+            headerY + titleFont:getHeight() + SYNTAC_TOOLTIP_HEADER_BODY_GAP + ((lineIndex - 1) * bodyFont:getHeight())
+        )
+    end
+
+    love.graphics.setFont(previousFont)
+    love.graphics.setColor(1, 1, 1, 1)
+end
+
+function envdraw.drawSyntacCursorIndicator(mouseX, mouseY)
+    local previousFont = love.graphics.getFont()
+    local pipAreaWidth = (SYNTAC_CURSOR_PIP_SIZE * 2) + SYNTAC_CURSOR_PIP_GAP
+    local boxWidth = (SYNTAC_CURSOR_BOX_PADDING * 2) + pipAreaWidth
+    local boxHeight = (SYNTAC_CURSOR_BOX_PADDING * 2) + SYNTAC_CURSOR_PIP_SIZE
+    local windowWidth, windowHeight = love.graphics.getDimensions()
+    local boxX = snap((mouseX or 0) + SYNTAC_CURSOR_BOX_GAP)
+    local boxY = snap((mouseY or 0) + SYNTAC_CURSOR_BOX_GAP)
+
+    boxX = snap(math.max(8, math.min(boxX, windowWidth - boxWidth - 8)))
+    boxY = snap(math.max(8, math.min(boxY, windowHeight - boxHeight - 8)))
+
+    love.graphics.setColor(0.02, 0.025, 0.03, 0.44)
+    love.graphics.rectangle("fill", boxX - 5, boxY - 5, boxWidth + 10, boxHeight + 10, 8, 8)
+    love.graphics.setColor(0.05, 0.05, 0.06, 0.94)
+    love.graphics.rectangle("fill", boxX, boxY, boxWidth, boxHeight, 6, 6)
+    love.graphics.setColor(SYNTAC_BOX_GOLD_COLOR[1], SYNTAC_BOX_GOLD_COLOR[2], SYNTAC_BOX_GOLD_COLOR[3], 0.9)
+    love.graphics.rectangle("line", boxX, boxY, boxWidth, boxHeight, 6, 6)
+
+    local pipX = snap(boxX + SYNTAC_CURSOR_BOX_PADDING)
+    local pipY = snap(boxY + SYNTAC_CURSOR_BOX_PADDING)
+    love.graphics.setColor(SYNTAC_BOX_GOLD_COLOR[1], SYNTAC_BOX_GOLD_COLOR[2], SYNTAC_BOX_GOLD_COLOR[3], 1)
+    drawDiamondPip("fill", pipX, pipY, SYNTAC_CURSOR_PIP_SIZE)
+    drawDiamondPip("fill", pipX + SYNTAC_CURSOR_PIP_SIZE + SYNTAC_CURSOR_PIP_GAP, pipY, SYNTAC_CURSOR_PIP_SIZE)
+
+    love.graphics.setFont(previousFont)
     love.graphics.setColor(1, 1, 1, 1)
 end
 
