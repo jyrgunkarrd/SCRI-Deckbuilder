@@ -91,22 +91,71 @@ local function completeEndPhase(gameState, deps)
     phasecontroller.enterCurrentPhase(gameState, deps)
 end
 
+local function shouldFizzleCardRetaliation(gameState, deps, retaliation)
+    if not retaliation
+        or not deps.warrules.canTargetEnemyCard(retaliation)
+        or not retaliation.targetCardIndex
+    then
+        return false
+    end
+
+    local targetCard = gameState.cards and gameState.cards[retaliation.targetCardIndex] or nil
+
+    -- Existing behavior already handles destroyed/unavailable targets by doing nothing.
+    -- This helper is only for attacks that became illegal while the target is still there.
+    if not targetCard or deps.isCardUnavailable(targetCard) then
+        return false
+    end
+
+    local targetDefinition = deps.cardregistry.getCard(targetCard.setName, targetCard.cardId)
+
+    return not deps.warrules.canAttackTarget(
+        retaliation.sourceDefinition,
+        targetDefinition,
+        retaliation.sourceCard,
+        targetCard,
+        retaliation,
+        gameState.cards
+    )
+end
+
 local function resolveRetaliation(gameState, deps, retaliation)
+    if retaliation.pain == true then
+        local sourceCardIndex = getCardIndexFromEntityKey(retaliation.entityKey)
+        local sourceCard = sourceCardIndex and gameState.cards[sourceCardIndex] or nil
+
+        if sourceCard and not deps.isCardUnavailable(sourceCard) then
+            deps.dealDamageToCard(sourceCard, retaliation.damageValue or 0)
+        end
+    end
+
+    if shouldFizzleCardRetaliation(gameState, deps, retaliation) then
+        if deps.notifications then
+            deps.notifications.push("Attack fizzled!")
+        end
+
+        deps.warrules.clearEntityRollState(retaliation.entityKey)
+        return
+    end
+
     if retaliation.targetType == "Obj"
         and retaliation.targetCard
         and retaliation.targetCard.kind == "objective"
         and gameState.activePrimaryObjective
         and gameState.activePrimaryObjective.id == retaliation.targetCard.objectiveId then
         deps.addObjectiveProgress(gameState.activePrimaryObjective, retaliation.damageValue or 0)
+
     elseif retaliation.targetType == "WZOpp"
         and gameState.activeWarzone then
         deps.addWarzoneControl(gameState.activeWarzone, -(retaliation.damageValue or 0), "warzone")
+
     elseif retaliation.targetType == "IntCD"
         and retaliation.targetCard
         and retaliation.targetCard.kind == "intel"
         and gameState.activeIntel
         and gameState.activeIntel.id == retaliation.targetCard.objectiveId then
         deps.addObjectiveProgress(gameState.activeIntel, -(retaliation.damageValue or 0), "intel")
+
     elseif retaliation.targetType == "Inf"
         and retaliation.targetCard
         and retaliation.targetCard.kind == "deck" then
@@ -115,6 +164,7 @@ local function resolveRetaliation(gameState, deps, retaliation)
         if generatedCardDefinition then
             deps.beginInfiltrationEffect(retaliation.entityKey, generatedCardDefinition, retaliation.damageValue or 0)
         end
+
     else
         local targetCard = gameState.cards[retaliation.targetCardIndex]
         local shouldApplyAreaDamage = targetCard and not deps.isCardUnavailable(targetCard)
@@ -126,15 +176,6 @@ local function resolveRetaliation(gameState, deps, retaliation)
 
         if retaliation.targetType == "AtkSab" and gameState.activePrimaryObjective then
             deps.addObjectiveProgress(gameState.activePrimaryObjective, retaliation.damageValue or 0)
-        end
-    end
-
-    if retaliation.pain == true then
-        local sourceCardIndex = getCardIndexFromEntityKey(retaliation.entityKey)
-        local sourceCard = sourceCardIndex and gameState.cards[sourceCardIndex] or nil
-
-        if sourceCard and not deps.isCardUnavailable(sourceCard) then
-            deps.dealDamageToCard(sourceCard, retaliation.damageValue or 0)
         end
     end
 

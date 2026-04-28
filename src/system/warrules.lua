@@ -1428,18 +1428,22 @@ function warrules.beginRetaliatePhase(topSlotTargets, cards)
                 or hasTargetType(rollState, "WZOpp")
                 or (hasTargetType(rollState, "IntCD") and rollState.targetCard and rollState.targetCard.kind == "intel")
             ) then
-            pendingRetaliations[#pendingRetaliations + 1] = {
-                entityKey = target.id,
-                targetType = firstEnemyCardTargetType(rollState)
-                    or firstTargetTypeMatching(rollState, { "Inf", "Obj", "WZOpp", "IntCD" }),
-                targetCardIndex = rollState.targetCardIndex,
-                targetCard = rollState.targetCard,
-                damageValue = rollState.damageValue,
-                cardgen = rollState.cardgen,
-                area = rollState.area,
-                pain = rollState.pain,
-                isTopSlot = true,
-            }
+                pendingRetaliations[#pendingRetaliations + 1] = {
+                    entityKey = target.id,
+                    sourceDefinition = rollState.sourceDefinition,
+                    sourceCard = rollState.sourceCard,
+                    targetType = firstEnemyCardTargetType(rollState)
+                        or firstTargetTypeMatching(rollState, { "Inf", "Obj", "WZOpp", "IntCD" }),
+                    targetCardIndex = rollState.targetCardIndex,
+                    targetCard = rollState.targetCard,
+                    damageValue = rollState.damageValue,
+                    cardgen = rollState.cardgen,
+                    area = rollState.area,
+                    pain = rollState.pain,
+                    lrange = rollState.lrange,
+                    heavy = rollState.heavy,
+                    isTopSlot = true,
+                }
         end
     end
 
@@ -1474,18 +1478,22 @@ function warrules.beginRetaliatePhase(topSlotTargets, cards)
                 or hasTargetType(rollState, "WZOpp")
                 or (hasTargetType(rollState, "IntCD") and rollState.targetCard and rollState.targetCard.kind == "intel")
             ) then
-            pendingRetaliations[#pendingRetaliations + 1] = {
-                entityKey = entityKey,
-                targetType = firstEnemyCardTargetType(rollState)
-                    or firstTargetTypeMatching(rollState, { "Inf", "Obj", "WZOpp", "IntCD" }),
-                targetCardIndex = rollState.targetCardIndex,
-                targetCard = rollState.targetCard,
-                damageValue = rollState.damageValue,
-                cardgen = rollState.cardgen,
-                area = rollState.area,
-                pain = rollState.pain,
-                isTopSlot = false,
-            }
+                pendingRetaliations[#pendingRetaliations + 1] = {
+                    entityKey = entityKey,
+                    sourceDefinition = rollState.sourceDefinition,
+                    sourceCard = rollState.sourceCard,
+                    targetType = firstEnemyCardTargetType(rollState)
+                        or firstTargetTypeMatching(rollState, { "Inf", "Obj", "WZOpp", "IntCD" }),
+                    targetCardIndex = rollState.targetCardIndex,
+                    targetCard = rollState.targetCard,
+                    damageValue = rollState.damageValue,
+                    cardgen = rollState.cardgen,
+                    area = rollState.area,
+                    pain = rollState.pain,
+                    lrange = rollState.lrange,
+                    heavy = rollState.heavy,
+                    isTopSlot = false,
+                }
         end
     end
 end

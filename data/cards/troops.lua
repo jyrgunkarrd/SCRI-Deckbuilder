@@ -18,6 +18,7 @@ local troops = {
         method = {
             { resource = "The Trigger", amount = 1 },
         },
+        keyword = { "KWEVA"},
         agentAbilities = {
             {
                 id = "betty_recode",
