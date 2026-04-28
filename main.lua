@@ -30,6 +30,7 @@ local infiltrationrules = require("src.system.infiltrationrules")
 local strategyrules = require("src.system.strategyrules")
 local tomerules = require("src.system.tomerules")
 local trooprules = require("src.system.trooprules")
+local previewrules = require("src.system.previewrules")
 syntacrules = require("src.system.syntacrules")
 spawncontroller = require("src.system.spawncontroller")
 gameactions = require("src.system.gameactions")
@@ -1147,6 +1148,7 @@ local function getContextBuilderRules()
         envdraw = envdraw,
         envrules = envrules,
         keywordrules = keywordrules,
+        previewrules = previewrules,
         kitrules = kitrules,
         modals = modals,
         notifications = notifications,

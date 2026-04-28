@@ -268,6 +268,7 @@ function contextbuilders.getHoverPreviewDeps(c)
         abilityrules = c.abilityrules,
         carddraw = c.carddraw,
         cardregistry = c.cardregistry,
+        previewrules = c.previewrules,
         envdraw = c.envdraw,
         sfxrules = c.sfxrules,
         strategyrules = c.strategyrules,

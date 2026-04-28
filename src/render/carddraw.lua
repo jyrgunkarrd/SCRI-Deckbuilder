@@ -1579,6 +1579,9 @@ local function buildDiceFaceTooltip(faceDefinition, cardX, cardY, cardWidth)
     end
 
     return {
+        
+        definition = faceDefinition,
+        preview = faceDefinition.preview,
         name = faceDefinition.facename or faceDefinition.type or faceDefinition.id or "Die Face",
         text = faceDefinition.facedesc or "",
         cardX = cardX,
@@ -1587,6 +1590,7 @@ local function buildDiceFaceTooltip(faceDefinition, cardX, cardY, cardWidth)
         cardWidth = cardWidth,
         summonCardId = summonCardId,
         summonCardIds = summonCardIds,
+        
     }
 end
 
