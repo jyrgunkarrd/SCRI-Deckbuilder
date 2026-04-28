@@ -2,8 +2,105 @@ local cardinstances = require("src.system.cardinstances")
 local damagerules = require("src.system.damagerules")
 local objectiveprogressrules = require("src.system.objectiveprogressrules")
 local warzonecontrolrules = require("src.system.warzonecontrolrules")
+local cardregistry = require("src.system.cardregistry")
+local keywordrules = require("src.system.keywordrules")
+local temporaryeffects = require("src.system.temporaryeffects")
+
+local EVASION_KEYWORD_ID = "KWEVA"
+local FAIR_WEATHER_KEYWORD_ID = "KWFAIR"
+local FLYING_KEYWORD_ID = "KWFLY"
+local ENEMY_ROW_ID = "OppRow"
+
+local function getCardDefinition(card)
+    if not card then
+        return nil
+    end
+
+    return cardregistry.getCard(card.setName, card.cardId)
+end
+
+local function cardHasKeyword(card, keywordId)
+    local cardDefinition = getCardDefinition(card)
+    return keywordrules.cardHasKeyword(cardDefinition, keywordId, card)
+end
+
+local function isLiveGridCard(card)
+    if not card
+        or not card.location
+        or card.location.kind ~= "grid"
+        or card.destroyed
+        or card.destroying
+    then
+        return false
+    end
+
+    local currentHealth = tonumber(card.currentHealth)
+    if currentHealth ~= nil and currentHealth <= 0 then
+        return false
+    end
+
+    return true
+end
+
+local function isLiveEnemyGridCard(card)
+    return isLiveGridCard(card)
+        and card.location.rowId == ENEMY_ROW_ID
+end
+
+local function countLiveEnemyCardsInRow(cards, rowId)
+    local count = 0
+
+    for _, card in ipairs(cards or {}) do
+        if isLiveEnemyGridCard(card) and card.location.rowId == rowId then
+            count = count + 1
+        end
+    end
+
+    return count
+end
+
+local function applyEvasionIfNeeded(card, damageResult)
+    if not card
+        or not damageResult
+        or (tonumber(damageResult.healthDamage) or 0) <= 0
+    then
+        return false
+    end
+
+    if not cardHasKeyword(card, EVASION_KEYWORD_ID) then
+        return false
+    end
+
+    temporaryeffects.addCardKeyword(card, FLYING_KEYWORD_ID)
+    return true
+end
 
 local gameactions = {}
+
+function gameactions.resolveFairWeatherEnemies(ctx)
+    local state = ctx and ctx.state or nil
+    if not state or not state.cards then
+        return 0
+    end
+
+    local defeatedCount = 0
+
+    for cardIndex, card in ipairs(state.cards) do
+        if isLiveEnemyGridCard(card)
+            and cardHasKeyword(card, FAIR_WEATHER_KEYWORD_ID)
+        then
+            local rowId = card.location.rowId
+            local rowEnemyCount = countLiveEnemyCardsInRow(state.cards, rowId)
+
+            if rowEnemyCount == 1 then
+                ctx.startCardDestruction(cardIndex)
+                defeatedCount = defeatedCount + 1
+            end
+        end
+    end
+
+    return defeatedCount
+end
 
 function gameactions.addObjectiveProgress(ctx, objectiveDefinition, amount, slotId)
     local state = ctx.state
@@ -88,6 +185,7 @@ end
 
 function gameactions.dealDamageToCard(ctx, card, amount, suppressFeedback)
     local damageResult = damagerules.dealDamageToCard(card, amount)
+    applyEvasionIfNeeded(card, damageResult)
 
     if damageResult and damageResult.changed and not suppressFeedback then
         local damagedCardIndex = nil
@@ -106,6 +204,10 @@ function gameactions.dealDamageToCard(ctx, card, amount, suppressFeedback)
                 ctx.startCardDestruction(damagedCardIndex)
             end
         end
+    end
+
+    if damageResult and damageResult.changed then
+        gameactions.resolveFairWeatherEnemies(ctx)
     end
 
     return damageResult

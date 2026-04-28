@@ -88,6 +88,17 @@ local keywords = {
             name = "Bulletproof",
             text = "Damage dealt to this card is reduced to 1.",
         },
+
+        {
+            id = "KWEVA",
+            name = "Evasion",
+            text = "Whenever this card is damaged, it gains Flying until the End phase.",
+        },
+        {
+            id = "KWFAIR",
+            name = "Fair Weather",
+            text = "If all other enemies are defeated, this card is automatically defeated.",
+        },
 }
 
 return keywords
