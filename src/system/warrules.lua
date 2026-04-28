@@ -263,6 +263,28 @@ local function canTargetPlayerWarzone(rollStateOrTargetType)
     return firstTargetTypeMatching(rollStateOrTargetType, PLAYER_WARZONE_TARGET_TYPES) ~= nil
 end
 
+local function isEnemyGridCard(card)
+    return card
+        and card.location
+        and card.location.kind == "grid"
+        and card.location.rowId == "OppRow"
+        and not card.destroyed
+        and not card.destroying
+end
+
+local function rollStateHasResolvableRetaliation(rollState)
+    return rollState
+        and rollState.faceIndex
+        and (rollState.damageValue or 0) > 0
+        and (
+            (canTargetEnemyCard(rollState) and rollState.targetCardIndex)
+            or (hasTargetType(rollState, "Inf") and rollState.targetCard and rollState.targetCard.kind == "deck")
+            or (hasTargetType(rollState, "Obj") and rollState.targetCard and rollState.targetCard.kind == "objective")
+            or hasTargetType(rollState, "WZOpp")
+            or (hasTargetType(rollState, "IntCD") and rollState.targetCard and rollState.targetCard.kind == "intel")
+        )
+end
+
 local function canUseUtilityRollState(rollState)
     return rollState
         and rollState.action == "utility"
@@ -1283,6 +1305,26 @@ function warrules.getIncomingDamagePreview(cardIndex, isSourceActive, cards)
     end
 
     return incomingDamage
+end
+
+function warrules.getPainDamagePreview(cardIndex, isSourceActive, cards)
+    local entityKey = warrules.getCardEntityKey(cardIndex)
+    local rollState = warRollDisplayStates[entityKey]
+    local sourceCard = cards and cards[cardIndex] or nil
+
+    if not isEnemyGridCard(sourceCard)
+        or not rollState
+        or rollState.pain ~= true
+        or not rollStateHasResolvableRetaliation(rollState)
+    then
+        return 0
+    end
+
+    if isSourceActive ~= nil and not isSourceActive(entityKey, rollState) then
+        return 0
+    end
+
+    return math.max(0, tonumber(rollState.damageValue) or 0)
 end
 
 function warrules.getBlockedDamagePreview(card, incomingDamage)

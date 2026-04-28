@@ -50,7 +50,15 @@ function cardpresentation.getRenderOptions(card, cardIndex, ctx)
             damagePreviewCount = ctx.warrules.getIncomingDamagePreview(cardIndex, ctx.isWarRollSourceActive, ctx.cards)
             blockedDamagePreviewCount = ctx.warrules.getBlockedDamagePreview(card, damagePreviewCount)
             healthDamagePreviewCount = ctx.warrules.getHealthDamagePreview(card, damagePreviewCount)
-
+        
+            if card.currentHealth and healthDamagePreviewCount >= card.currentHealth then
+                lethalPreviewOverkill = math.max(0, healthDamagePreviewCount - card.currentHealth)
+            end
+        elseif card.location.rowId == "OppRow" and cardIndex and ctx.warrules.getPainDamagePreview then
+            damagePreviewCount = ctx.warrules.getPainDamagePreview(cardIndex, ctx.isWarRollSourceActive, ctx.cards)
+            blockedDamagePreviewCount = ctx.warrules.getBlockedDamagePreview(card, damagePreviewCount)
+            healthDamagePreviewCount = ctx.warrules.getHealthDamagePreview(card, damagePreviewCount)
+        
             if card.currentHealth and healthDamagePreviewCount >= card.currentHealth then
                 lethalPreviewOverkill = math.max(0, healthDamagePreviewCount - card.currentHealth)
             end
