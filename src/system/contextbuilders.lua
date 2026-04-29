@@ -1,5 +1,50 @@
 local contextbuilders = {}
 
+function contextbuilders.mergeContextGroups(baseContext, contextGroups)
+    local context = baseContext or {}
+
+    for _, group in ipairs(contextGroups or {}) do
+        for key, value in pairs(group or {}) do
+            context[key] = value
+        end
+    end
+
+    return context
+end
+
+function contextbuilders.getGameActionsContext(c)
+    return {
+        state = c.state,
+        envdraw = c.envdraw,
+        sfxrules = c.sfxrules,
+        warrules = c.warrules,
+        topsloteffects = c.topsloteffects,
+        damageJitterDuration = c.damageJitterDuration,
+        damageJitterMagnitude = c.damageJitterMagnitude,
+        beginObjectiveEscalation = c.beginObjectiveEscalation,
+        beginObjectiveHunterDeckTransformation = c.beginObjectiveHunterDeckTransformation,
+        beginWarzoneTransformation = c.beginWarzoneTransformation,
+        beginPoiEmergenceEffect = c.beginPoiEmergenceEffect,
+        beginPoiFlipEffect = c.beginPoiFlipEffect,
+        beginPoiGeneratedCardTransformation = c.beginPoiGeneratedCardTransformation,
+        getDamageJitterKeyForCard = c.getDamageJitterKeyForCard,
+        startCardDestruction = c.startCardDestruction,
+        startChampionDestruction = c.startChampionDestruction,
+        startIntelDestruction = c.startIntelDestruction,
+        triggerDamageFeedback = c.triggerDamageFeedback,
+    }
+end
+
+function contextbuilders.getHunterControllerContext(c)
+    return {
+        state = c.state,
+        cardregistry = c.cardregistry,
+        objectiverules = c.objectiverules,
+        sfxrules = c.sfxrules,
+        isCardDestroyed = c.isCardDestroyed,
+    }
+end
+
 function contextbuilders.getChampionPlayContext(c)
     local state = c.state
 
@@ -8,10 +53,58 @@ function contextbuilders.getChampionPlayContext(c)
         cards = state.cards,
         cardExpansion = state.cardExpansion,
         cardEntranceProgress = state.cardEntranceProgress,
+        cardregistry = c.cardregistry,
+        sfxrules = c.sfxrules,
         getOppRow = c.getOppRow,
         isGridRowColumnOccupied = c.isGridRowColumnOccupied,
         initializeCardHealthState = c.initializeCardHealthState,
-        resolveEnemyEncounter = c.resolveEnemyEncounter,
+        spawnTokensNearCard = c.spawnTokensNearCard,
+    }
+end
+
+function contextbuilders.getCardPlayControllerContext(c)
+    return {
+        state = c.state,
+        carddraw = c.carddraw,
+        cardregistry = c.cardregistry,
+        keywordrules = c.keywordrules,
+        kitrules = c.kitrules,
+        notifications = c.notifications,
+        resourcerules = c.resourcerules,
+        strategyrules = c.strategyrules,
+        tomerules = c.tomerules,
+        trooprules = c.trooprules,
+        turnrules = c.turnrules,
+        warrules = c.warrules,
+        createOrStackPlayerCacheNearCard = c.createOrStackPlayerCacheNearCard,
+        dealDamageToCard = c.dealDamageToCard,
+        dealDirectDamageToCard = c.dealDirectDamageToCard,
+        dealDamageToChampion = c.dealDamageToChampion,
+        discardCardFromPlay = c.discardCardFromPlay,
+        drawCardFromPlayerDeck = c.drawCardFromPlayerDeck,
+        enterCurrentPhase = c.enterCurrentPhase,
+        getCardDrawPosition = c.getCardDrawPosition,
+        removeCardFromPlay = c.removeCardFromPlay,
+        spawnTokensNearCard = c.spawnTokensNearCard,
+        spawnTokensNearPlayerCard = c.spawnTokensNearPlayerCard,
+        startCardDestruction = c.startCardDestruction,
+    }
+end
+
+function contextbuilders.getSyntacAbilityContext(c)
+    return {
+        state = c.state,
+        envdraw = c.envdraw,
+        sfxrules = c.sfxrules,
+        resourcerules = c.resourcerules,
+        cardregistry = c.cardregistry,
+        addBlockingToCard = c.addBlockingToCard,
+        dealDamageToCard = c.dealDamageToCard,
+        dealDamageToChampion = c.dealDamageToChampion,
+        addWarzoneControl = c.addWarzoneControl,
+        addObjectiveProgress = c.addObjectiveProgress,
+        getCurrentPhase = c.turnrules.getCurrentPhase,
+        isEngagePhase = c.isEngagePhase,
     }
 end
 
@@ -33,6 +126,7 @@ function contextbuilders.getPhaseControllerDeps(c)
         turnrules = c.turnrules,
         temporaryeffects = c.temporaryeffects,
         warrules = c.warrules,
+        addBlockingToCard = c.addBlockingToCard,
         addObjectiveProgress = c.addObjectiveProgress,
         addSetupAgents = c.addSetupAgents,
         addWarzoneControl = c.addWarzoneControl,
@@ -42,8 +136,10 @@ function contextbuilders.getPhaseControllerDeps(c)
         clearResolvedSyntacMethodReward = c.clearResolvedSyntacMethodReward,
         clearTemporaryRerollBonus = c.clearTemporaryRerollBonus,
         clearAllBlocking = c.clearAllBlocking,
+        clearEnemyGuardCarryBlocking = c.clearEnemyGuardCarryBlocking,
         createGeneratedSupportCard = c.createGeneratedSupportCard,
         dealDamageToCard = c.dealDamageToCard,
+        dealDirectDamageToCard = c.dealDirectDamageToCard,
         dealDamageToChampion = c.dealDamageToChampion,
         drawCardFromPlayerDeck = c.drawCardFromPlayerDeck,
         healCard = c.healCard,
@@ -157,6 +253,7 @@ function contextbuilders.getEngageContext(c)
         healCard = c.healCard,
         dealDamageToChampion = c.dealDamageToChampion,
         dealDamageToCard = c.dealDamageToCard,
+        dealDirectDamageToCard = c.dealDirectDamageToCard,
         resolveKilledEnemyByPlayerCard = c.resolveKilledEnemyByPlayerCard,
         beginInfiltrationEffect = c.beginInfiltrationEffect,
         spawnTokensNearCard = c.spawnTokensNearCard,
@@ -230,6 +327,7 @@ function contextbuilders.getModalDeps(c)
         resourcerules = c.resourcerules,
         abilityrules = c.abilityrules,
         cardregistry = c.cardregistry,
+        previewrules = c.previewrules,
         cards = state.cards,
         isCardUnavailable = c.isCardUnavailable,
         sfxrules = c.sfxrules,
@@ -271,9 +369,6 @@ function contextbuilders.getHoverPreviewDeps(c)
         previewrules = c.previewrules,
         envdraw = c.envdraw,
         sfxrules = c.sfxrules,
-        strategyrules = c.strategyrules,
-        tomerules = c.tomerules,
-        trooprules = c.trooprules,
         turnrules = c.turnrules,
         warrules = c.warrules,
         getCardDrawPosition = c.getCardDrawPosition,

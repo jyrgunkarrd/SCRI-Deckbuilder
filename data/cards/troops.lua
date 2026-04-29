@@ -18,7 +18,6 @@ local troops = {
         method = {
             { resource = "The Trigger", amount = 1 },
         },
-        keyword = { "KWEVA"},
         agentAbilities = {
             {
                 id = "betty_recode",
@@ -42,6 +41,10 @@ local troops = {
                 effectArgs = {
                     vehicleCardId = "B6POC",
                 },
+                preview = {
+                    label = "VEHICLE",
+                    cardId = "B6POC",
+                },
             },
         },
         D1 = "IMMACRNGDMG3",
@@ -61,6 +64,10 @@ local troops = {
         func = "killmeattok",
         value = 1,
         textbox = "When this card defeats an enemy, establish a Meat cache.",
+        preview = {
+            label = "CACHE",
+            cardId = "MEATTOK",
+        },
         health = 7,
         max = 7,
         deck = "AGMAM",
@@ -297,6 +304,10 @@ local troops = {
         func = "Spawn",
         target = { "AEGFZTOK" },
         textbox = "When this card enters play, summon a Fritz Droid token.",
+        preview = {
+            label = "SUMMON",
+            cardId = "AEGFZTOK",
+        },
         flavor = "\"I'm not a yanker. Never once pulled a plug.\"", 
         mcost = {
             { resource = "The Scratch", amount = 2 },
@@ -345,6 +356,10 @@ local troops = {
         value = 1,
         target = "B6DEPTOK",
         textbox = "When this card is defeated, summon a Psycho Limb token.",
+        preview = {
+            label = "SUMMON",
+            cardId = "B6DEPTOK",
+        },
         flavor = "Viewed as an 'obsolete' platform, the Vicky series warrior androids have never been more relevant.", 
         mcost = {
             { resource = "The Trigger", amount = 1 },
@@ -370,6 +385,10 @@ local troops = {
         func = "killmeattok",
         value = 1,
         textbox = "When this card defeats an enemy, establish a Meat cache.",
+        preview = {
+            label = "CACHE",
+            cardId = "MEATTOK",
+        },
         flavor = "\"...Sure, tell you what - you get a saddle on me without losing your hair, teeth and eyeballs, and then you can ride me all day long. Deal?\"", 
             mcost = {
                 { resource = "The Beast", amount = 1 },

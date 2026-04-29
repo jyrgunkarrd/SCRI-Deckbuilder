@@ -437,8 +437,9 @@ local function getEffectiveFaceDefinition(cardDefinition, faceIndex, card)
     local growthValue = card
         and math.max(0, tonumber(keywordrules.getCardKeywordValue(card, cardDefinition, "KWGRO")) or 0)
         or 0
+    local rageMultiplier = card and keywordrules.isRageActive(card, cardDefinition) and 2 or 1
 
-    if growthValue <= 0 or baseFaceDefinition.value == nil then
+    if (growthValue <= 0 and rageMultiplier <= 1) or baseFaceDefinition.value == nil then
         return baseFaceDefinition
     end
 
@@ -448,7 +449,7 @@ local function getEffectiveFaceDefinition(cardDefinition, faceIndex, card)
         effectiveFaceDefinition[key] = value
     end
 
-    effectiveFaceDefinition.value = math.max(0, tonumber(baseFaceDefinition.value) or 0) + growthValue
+    effectiveFaceDefinition.value = (math.max(0, tonumber(baseFaceDefinition.value) or 0) + growthValue) * rageMultiplier
     return effectiveFaceDefinition
 end
 
@@ -1527,55 +1528,9 @@ function carddraw.getCardRollBadgeRect(drawX, drawY, options)
     return badgeX, badgeY, badgeWidth, badgeHeight
 end
 
-local function diceFaceHasTargetType(faceDefinition, targetType)
-    if not faceDefinition or not faceDefinition.targ then
-        return false
-    end
-
-    local normalizedTargetType = type(targetType) == "string" and targetType:lower() or targetType
-    local targetTypes = type(faceDefinition.targ) == "table" and faceDefinition.targ or { faceDefinition.targ }
-
-    for _, candidate in ipairs(targetTypes) do
-        local normalizedCandidate = type(candidate) == "string" and candidate:lower() or candidate
-
-        if normalizedCandidate == normalizedTargetType then
-            return true
-        end
-    end
-
-    return false
-end
-
 local function buildDiceFaceTooltip(faceDefinition, cardX, cardY, cardWidth)
     if not faceDefinition then
         return nil
-    end
-
-    local summonCardId = nil
-    local summonCardIds = nil
-
-    if diceFaceHasTargetType(faceDefinition, "smn") or diceFaceHasTargetType(faceDefinition, "rsmn") then
-        if faceDefinition.cardgen then
-            summonCardId = faceDefinition.cardgen
-        elseif type(faceDefinition.target) == "table" then
-            summonCardId = faceDefinition.target[1]
-        else
-            summonCardId = faceDefinition.target
-        end
-
-        if type(faceDefinition.target) == "table" then
-            summonCardIds = {}
-
-            for _, targetCardId in ipairs(faceDefinition.target) do
-                if targetCardId then
-                    summonCardIds[#summonCardIds + 1] = targetCardId
-                end
-            end
-        elseif faceDefinition.target then
-            summonCardIds = { faceDefinition.target }
-        elseif faceDefinition.cardgen then
-            summonCardIds = { faceDefinition.cardgen }
-        end
     end
 
     return {
@@ -1588,8 +1543,6 @@ local function buildDiceFaceTooltip(faceDefinition, cardX, cardY, cardWidth)
         cardY = cardY,
         cardHeight = nil,
         cardWidth = cardWidth,
-        summonCardId = summonCardId,
-        summonCardIds = summonCardIds,
         
     }
 end

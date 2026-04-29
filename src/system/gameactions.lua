@@ -47,6 +47,16 @@ local function isLiveEnemyGridCard(card)
         and card.location.rowId == ENEMY_ROW_ID
 end
 
+local function findCardIndex(cards, card)
+    for cardIndex, candidateCard in ipairs(cards or {}) do
+        if candidateCard == card then
+            return cardIndex
+        end
+    end
+
+    return nil
+end
+
 local function countLiveEnemyCardsInRow(cards, rowId)
     local count = 0
 
@@ -187,17 +197,14 @@ function gameactions.dealDamageToCard(ctx, card, amount, suppressFeedback)
     local damageResult = damagerules.dealDamageToCard(card, amount)
     applyEvasionIfNeeded(card, damageResult)
 
-    if damageResult and damageResult.changed and not suppressFeedback then
-        local damagedCardIndex = nil
+    if damageResult and damageResult.changed then
+        local damagedCardIndex = findCardIndex(ctx.state.cards, card)
 
-        for cardIndex, candidateCard in ipairs(ctx.state.cards) do
-            if candidateCard == card then
-                damagedCardIndex = cardIndex
-                break
-            end
+        if damagedCardIndex and ctx.warrules and ctx.warrules.refreshCardRollValue then
+            ctx.warrules.refreshCardRollValue(damagedCardIndex, ctx.state.cards)
         end
 
-        if damagedCardIndex then
+        if damagedCardIndex and not suppressFeedback then
             ctx.triggerDamageFeedback(ctx.getDamageJitterKeyForCard(damagedCardIndex))
 
             if damageResult.killed then
@@ -213,8 +220,33 @@ function gameactions.dealDamageToCard(ctx, card, amount, suppressFeedback)
     return damageResult
 end
 
-function gameactions.addBlockingToCard(card, amount)
-    return damagerules.addBlockingToCard(card, amount)
+function gameactions.dealDirectDamageToCard(ctx, card, amount, suppressFeedback)
+    local damageResult = damagerules.dealDirectDamageToCard(card, amount)
+    applyEvasionIfNeeded(card, damageResult)
+
+    if damageResult and damageResult.changed then
+        local damagedCardIndex = findCardIndex(ctx.state.cards, card)
+
+        if damagedCardIndex and ctx.warrules and ctx.warrules.refreshCardRollValue then
+            ctx.warrules.refreshCardRollValue(damagedCardIndex, ctx.state.cards)
+        end
+
+        if damagedCardIndex and not suppressFeedback then
+            ctx.triggerDamageFeedback(ctx.getDamageJitterKeyForCard(damagedCardIndex))
+
+            if damageResult.killed then
+                ctx.startCardDestruction(damagedCardIndex)
+            end
+        end
+
+        gameactions.resolveFairWeatherEnemies(ctx)
+    end
+
+    return damageResult
+end
+
+function gameactions.addBlockingToCard(card, amount, options)
+    return damagerules.addBlockingToCard(card, amount, options)
 end
 
 function gameactions.healCard(card, amount)
@@ -244,6 +276,10 @@ end
 
 function gameactions.clearAllBlocking(ctx)
     return damagerules.clearAllBlocking(ctx.state.cards)
+end
+
+function gameactions.clearEnemyGuardCarryBlocking(ctx)
+    return damagerules.clearEnemyGuardCarryBlocking(ctx.state.cards)
 end
 
 function gameactions.dealDamageToChampion(ctx, amount, suppressFeedback)

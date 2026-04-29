@@ -6,6 +6,7 @@ local sfxrules = require("src.audio.sfxrules")
 local engagerules = {}
 local COUNTER_STRIKE_KEYWORD_ID = "KWCNTR"
 local RELOADING_KEYWORD_ID = "KWRLD"
+local WOUND_KEYWORD_ID = "KWWOUND"
 local RELOADING_KEYWORD_VALUE = 2
 
 function engagerules.isEngagePhase(ctx)
@@ -221,6 +222,16 @@ local function applyCounterStrikeToAttacker(ctx, attackerCard, targetCard, targe
     ctx.dealDamageToCard(attackerCard, counterDamage)
 end
 
+local function applyWoundToTarget(targetEntity, targetDefinition, rollState)
+    local woundValue = rollState and rollState.wound == true and math.max(0, tonumber(rollState.damageValue) or 0) or 0
+
+    if woundValue <= 0 or not targetEntity or not targetDefinition then
+        return nil
+    end
+
+    return keywordrules.addCardKeywordValue(targetEntity, targetDefinition, WOUND_KEYWORD_ID, woundValue)
+end
+
 local function applyPlayerWarzoneSideEffects(ctx, rollState)
     applyRollUtilitySideEffects(ctx, rollState)
 end
@@ -426,6 +437,9 @@ function engagerules.tryResolveClick(hoveredTopSlotId, ctx)
                 end
 
                 ctx.dealDamageToChampion(attackerRollState.damageValue or 0)
+                if attackerCard then
+                    applyWoundToTarget(ctx.activeChampion, ctx.activeChampion, attackerRollState)
+                end
                 applyAttackSideEffects(ctx, attackerRollState)
                 return true
             end)
@@ -450,6 +464,10 @@ function engagerules.tryResolveClick(hoveredTopSlotId, ctx)
                         end
 
                         local damageResult = ctx.dealDamageToCard(targetCard, attackerRollState.damageValue or 0)
+
+                        if attackerCard then
+                            applyWoundToTarget(targetCard, targetDefinition, attackerRollState)
+                        end
 
                         if damageResult and damageResult.killed and ctx.resolveKilledEnemyByPlayerCard and ctx.selectedAttackerCardIndex then
                             ctx.resolveKilledEnemyByPlayerCard(ctx.selectedAttackerCardIndex, ctx.hoveredCardIndex)

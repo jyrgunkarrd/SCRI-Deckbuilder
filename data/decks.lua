@@ -89,7 +89,7 @@ local decks = {
             name = "DemoChamp",
             cards = {
                 {
-                    cardId = "EN0002",
+                    cardId = "ENFEN",
                     quantity = 5,
                 },
             },

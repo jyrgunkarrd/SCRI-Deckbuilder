@@ -211,6 +211,17 @@ local dice = {
         },
 
         {
+            id = "CQDMG3",
+            type = "MeleeWeap",
+            value = 3,
+            action = "attack",
+            target = "enemy_card",
+            selfBlock = true,
+            facename = "Close Quarters Attack",
+            facedesc = "Deal damage to a target troop or Champion. This card gains block.",
+        },
+
+        {
             id = "CQDMG1",
             type = "MeleeWeap",
             value = 1,
@@ -275,6 +286,49 @@ local dice = {
             immac = true,
         },
 
+        {
+            id = "WDMG1",
+            type = "WoundDmg",
+            value = 1,
+            targ = "Atk",
+            facename = "Wound Attack",
+            facedesc = "Deal damage to a target troop or Champion. Inflict the Wound condition.",
+            wound = true,
+        },
+
+        {
+            id = "WDMG2",
+            type = "WoundDmg",
+            value = 2,
+            targ = "Atk",
+            facename = "Wound Attack",
+            facedesc = "Deal damage to a target troop or Champion. Inflict the Wound condition.",
+            wound = true,
+        },
+
+        {
+            id = "AWDMG1",
+            type = "AreaWoundDmg",
+            value = 1,
+            targ = "Atk",
+            facename = "Area Wound Attack",
+            facedesc = "Deal damage to a target troop and adjacent troops or Champion. Inflict the Wound condition.",
+            wound = true,
+            area = true,
+        },
+
+        {
+            id = "AWDMG2",
+            type = "AreaWoundDmg",
+            value = 2,
+            targ = "Atk",
+            facename = "Area Wound Attack",
+            facedesc = "Deal damage to a target troop and adjacent troops or Champion. Inflict the Wound condition.",
+            wound = true,
+            area = true,
+        },
+
+
     -- Pain Damage ---
 
 
@@ -337,6 +391,30 @@ local dice = {
         pain = true,
         facename = "Suicide Attack",
         facedesc = "Deal damage to a target troop or Champion. Deal damage to this card.",
+
+    },
+
+    {
+        id = "ARPDMG1",
+        type = "AreaPainDmg",
+        value = 1,
+        targ = "Atk",
+        pain = true,
+        area = true,
+        facename = "Area Suicide Attack",
+        facedesc = "Deal damage to a target troop and adjacent troops or Champion. Deal damage to this card.",
+
+    },
+
+    {
+        id = "ARPDMG2",
+        type = "AreaPainDmg",
+        value = 2,
+        targ = "Atk",
+        pain = true,
+        area = true,
+        facename = "Area Suicide Attack",
+        facedesc = "Deal damage to a target troop and adjacent troops or Champion. Deal damage to this card.",
 
     },
 
@@ -649,6 +727,10 @@ local dice = {
         cardgen = "HNTINFFM",
         facename = "Infiltrate",
         facedesc = "Add a hunter card to the player's deck.",
+        preview = {
+            label = "CREATE",
+            cardId = "HNTINFFM",
+        },
     },
 
     {
@@ -659,6 +741,10 @@ local dice = {
         cardgen = "HNTINFFM",
         facename = "Infiltrate",
         facedesc = "Add a hunter card to the player's deck.",
+        preview = {
+            label = "CREATE",
+            cardId = "HNTINFFM",
+        },
     },
 
     --- Warrant ---
@@ -760,6 +846,10 @@ local dice = {
         target = { "TK0001" },
         func = "Spawn",
         pain = true,
+        preview = {
+            label = "SUMMON",
+            cardId = "TK0001",
+        },
     },
 
     {
@@ -771,6 +861,10 @@ local dice = {
         facedesc = "Summon the shown token.",
         target = { "AEGFZTOK" },
         func = "Spawn",
+        preview = {
+            label = "SUMMON",
+            cardId = "AEGFZTOK",
+        },
     },
 
     {
@@ -782,6 +876,10 @@ local dice = {
         facedesc = "Summon a randomly chosen token from the shown set.",
         target = { "AEGPRIVEDTOK", "AEGMYRARTOK", "AEGNYFETOK" },
         func = "Spawn",
+        preview = {
+            label = "SUMMON",
+            cardIds = { "AEGPRIVEDTOK", "AEGMYRARTOK", "AEGNYFETOK" },
+        },
     },
     
     

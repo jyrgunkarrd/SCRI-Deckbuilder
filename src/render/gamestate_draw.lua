@@ -295,7 +295,14 @@ function gamestatedraw.draw(ctx)
         })
 
         if ctx.jaclDeckPreviewCard then
-            ctx.envdraw.drawJaclDeckPreviewModal(ctx.jaclDeckPreviewCard)
+            local previewCardDefinition = ctx.cardregistry
+                and ctx.cardregistry.getCard(ctx.jaclDeckPreviewCard.setName, ctx.jaclDeckPreviewCard.cardId)
+                or nil
+            local preview = ctx.previewrules
+                and ctx.previewrules.getDefinitionPreview(previewCardDefinition)
+                or nil
+
+            ctx.envdraw.drawJaclDeckPreviewModal(ctx.jaclDeckPreviewCard, preview)
         end
     elseif ctx.isSyntacMethodModalOpen then
         ctx.envdraw.drawSyntacMethodModal()
@@ -312,7 +319,8 @@ function gamestatedraw.draw(ctx)
                 ctx.hoveredDiceFace.cardX,
                 ctx.hoveredDiceFace.cardY,
                 ctx.hoveredDiceFace.cardWidth,
-                ctx.hoveredDiceFace.cardHeight
+                ctx.hoveredDiceFace.cardHeight,
+                ctx.hoveredDiceFace.previewLabel
             )
         elseif ctx.hoveredDiceFace.previewCardDefinition then
             ctx.envdraw.drawTomeSpawnTooltip(

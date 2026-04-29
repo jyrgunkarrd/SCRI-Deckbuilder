@@ -1,6 +1,8 @@
 local phasecontroller = {}
+local keywordrules = require("src.system.keywordrules")
 local CACHE_CARD_TYPE = "cache"
 local MEAT_CACHE_CARD_ID = "MEATTOK"
+local WOUND_KEYWORD_ID = "KWWOUND"
 
 local function getCardIndexFromEntityKey(entityKey)
     local cardIndex = entityKey and entityKey:match("^card:(%d+)$")
@@ -22,6 +24,78 @@ local function applyAreaDamageToAdjacentCards(gameState, deps, retaliation)
         if adjacentCard and not deps.isCardUnavailable(adjacentCard) then
             deps.dealDamageToCard(adjacentCard, retaliation.damageValue or 0)
         end
+    end
+end
+
+local function applyWoundToTarget(targetEntity, targetDefinition, rollState)
+    local woundValue = rollState and rollState.wound == true and math.max(0, tonumber(rollState.damageValue) or 0) or 0
+
+    if woundValue <= 0 or not targetEntity or not targetDefinition then
+        return nil
+    end
+
+    return keywordrules.addCardKeywordValue(targetEntity, targetDefinition, WOUND_KEYWORD_ID, woundValue)
+end
+
+local function resolveCardWoundDamage(gameState, deps, card)
+    local cardDefinition = card and deps.cardregistry.getCard(card.setName, card.cardId) or nil
+    local woundValue = keywordrules.getWoundValue(card, cardDefinition)
+
+    if woundValue <= 0 or not deps.dealDirectDamageToCard then
+        return nil
+    end
+
+    return deps.dealDirectDamageToCard(card, woundValue)
+end
+
+local function resolvePlayerWounds(gameState, deps)
+    for _, card in ipairs(gameState.cards or {}) do
+        if card
+            and card.location
+            and card.location.kind == "grid"
+            and card.location.rowId == "PlayerRow"
+            and not deps.isCardUnavailable(card) then
+            resolveCardWoundDamage(gameState, deps, card)
+        end
+    end
+end
+
+local function resolveEnemyWounds(gameState, deps)
+    local championWoundValue = keywordrules.getWoundValue(gameState.activeChampion, gameState.activeChampion)
+
+    if championWoundValue > 0 then
+        deps.dealDamageToChampion(championWoundValue)
+    end
+
+    for _, card in ipairs(gameState.cards or {}) do
+        if card
+            and card.location
+            and card.location.kind == "grid"
+            and card.location.rowId == "OppRow"
+            and not deps.isCardUnavailable(card) then
+            resolveCardWoundDamage(gameState, deps, card)
+        end
+    end
+end
+
+local function applyRetaliationSideEffects(gameState, deps, retaliation)
+    local sourceCardIndex = getCardIndexFromEntityKey(retaliation.entityKey)
+    local sourceCard = sourceCardIndex and gameState.cards[sourceCardIndex] or nil
+
+    if not sourceCard or deps.isCardUnavailable(sourceCard) then
+        return
+    end
+
+    if retaliation.selfBlock == true then
+        deps.addBlockingToCard(sourceCard, retaliation.damageValue or 0, {
+            carryEnemyGuard = sourceCard.location
+                and sourceCard.location.kind == "grid"
+                and sourceCard.location.rowId == "OppRow",
+        })
+    end
+
+    if retaliation.selfHeal == true and deps.healCard then
+        deps.healCard(sourceCard, retaliation.damageValue or 0)
     end
 end
 
@@ -120,6 +194,20 @@ local function shouldFizzleCardRetaliation(gameState, deps, retaliation)
 end
 
 local function resolveRetaliation(gameState, deps, retaliation)
+    if retaliation.targetType == "Blk" then
+        local sourceCardIndex = getCardIndexFromEntityKey(retaliation.entityKey)
+        local sourceCard = sourceCardIndex and gameState.cards[sourceCardIndex] or nil
+
+        if sourceCard and not deps.isCardUnavailable(sourceCard) then
+            deps.addBlockingToCard(sourceCard, retaliation.damageValue or 0, {
+                carryEnemyGuard = true,
+            })
+        end
+
+        deps.warrules.clearEntityRollState(retaliation.entityKey)
+        return
+    end
+
     if retaliation.pain == true then
         local sourceCardIndex = getCardIndexFromEntityKey(retaliation.entityKey)
         local sourceCard = sourceCardIndex and gameState.cards[sourceCardIndex] or nil
@@ -171,7 +259,12 @@ local function resolveRetaliation(gameState, deps, retaliation)
 
         if shouldApplyAreaDamage then
             deps.dealDamageToCard(targetCard, retaliation.damageValue or 0)
+            if retaliation.sourceCard then
+                local targetDefinition = deps.cardregistry.getCard(targetCard.setName, targetCard.cardId)
+                applyWoundToTarget(targetCard, targetDefinition, retaliation)
+            end
             applyAreaDamageToAdjacentCards(gameState, deps, retaliation)
+            applyRetaliationSideEffects(gameState, deps, retaliation)
         end
 
         if retaliation.targetType == "AtkSab" and gameState.activePrimaryObjective then
@@ -341,7 +434,11 @@ end
 function phasecontroller.beginRetaliateFromEngage(gameState, deps)
     gameState.selectedAttackerCardIndex = nil
     gameState.selectedAttackerTopSlotId = nil
+    if deps.clearEnemyGuardCarryBlocking then
+        deps.clearEnemyGuardCarryBlocking()
+    end
     deps.turnrules.advanceWarSubphase()
+    resolveEnemyWounds(gameState, deps)
     if deps.getRetaliationPhaseObjectiveProgress then
         local hunterProgress = math.max(0, tonumber(deps.getRetaliationPhaseObjectiveProgress()) or 0)
 
@@ -459,6 +556,7 @@ function phasecontroller.update(gameState, deps, dt)
 
         if nextWarSubphase == "Engage" then
             gameState.engageRerollCount = 2 + math.max(0, tonumber(deps.getEngageRerollBonus and deps.getEngageRerollBonus()) or 0)
+            resolvePlayerWounds(gameState, deps)
             deps.sfxrules.playEngage()
             deps.notifications.push("Engage!")
         end

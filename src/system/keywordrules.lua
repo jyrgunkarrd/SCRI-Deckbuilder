@@ -6,6 +6,8 @@ local TIME_LIMIT_KEYWORD_ID = "KWTIME"
 local RELOADING_KEYWORD_ID = "KWRLD"
 local GROWTH_KEYWORD_ID = "KWGRO"
 local TOUGH_KEYWORD_ID = "KWTOUGH"
+local RAGE_KEYWORD_ID = "KWRAGE"
+local WOUND_KEYWORD_ID = "KWWOUND"
 local exhaustedKeywordInstances = {}
 
 local enemyChampionHandlers = {
@@ -295,12 +297,36 @@ function keywordrules.addCardKeywordValue(card, cardDefinition, keywordId, amoun
 
     card.keywordValues[keywordId] = math.max(0, tonumber(currentValue) or 0) + incrementAmount
 
+    if card.keywordValues[keywordId] <= 0 then
+        card.keywordValues[keywordId] = nil
+        return nil
+    end
+
     if keywordId == GROWTH_KEYWORD_ID and card.currentHealth ~= nil then
         card.maxHealth = math.max(0, tonumber(card.maxHealth) or 0) + incrementAmount
         card.currentHealth = math.max(0, tonumber(card.currentHealth) or 0) + incrementAmount
     end
 
     return card.keywordValues[keywordId]
+end
+
+function keywordrules.removeKeywordValueIfEmpty(entity, keywordId)
+    if not entity or not keywordId or not entity.keywordValues then
+        return false
+    end
+
+    if (tonumber(entity.keywordValues[keywordId]) or 0) <= 0 then
+        entity.keywordValues[keywordId] = nil
+        return true
+    end
+
+    return false
+end
+
+function keywordrules.getWoundValue(entity, definition)
+    local woundValue = keywordrules.getCardKeywordValue(entity, definition, WOUND_KEYWORD_ID)
+    keywordrules.removeKeywordValueIfEmpty(entity, WOUND_KEYWORD_ID)
+    return math.max(0, tonumber(woundValue) or 0)
 end
 
 function keywordrules.getCardKeywordValue(card, cardDefinition, keywordId)
@@ -363,6 +389,22 @@ function keywordrules.getCardKeywordValues(card, cardDefinition)
     end
 
     return keywordValues
+end
+
+function keywordrules.isRageActive(card, cardDefinition)
+    if not keywordrules.cardHasKeyword(cardDefinition, RAGE_KEYWORD_ID, card) then
+        return false
+    end
+
+    local currentHealth = tonumber(card and card.currentHealth) or tonumber(cardDefinition and cardDefinition.health)
+    local maxHealth = tonumber(card and card.maxHealth)
+        or tonumber(cardDefinition and (cardDefinition.max or cardDefinition.health))
+
+    if currentHealth == nil or maxHealth == nil or maxHealth <= 0 then
+        return false
+    end
+
+    return currentHealth <= math.ceil(maxHealth / 2)
 end
 
 function keywordrules.decrementEndPhaseKeywords(cards)

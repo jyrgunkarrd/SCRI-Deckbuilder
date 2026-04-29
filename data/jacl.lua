@@ -35,6 +35,10 @@ local jacl = {
                         cardId = "TK0001",
                         rowId = "PlayerRow",
                     },
+                    preview = {
+                        label = "CREATE",
+                        cardId = "TK0001",
+                    },
                 },
             },
         },

@@ -139,35 +139,6 @@ function trooprules.isSpawnTroopDefinition(troopDefinition)
         and funcName == "spawn"
 end
 
-function trooprules.isSpawnPreviewTroopDefinition(troopDefinition)
-    local playFuncName = getFuncNameForTrigger(troopDefinition, "play")
-    local deathFuncName = getFuncNameForTrigger(troopDefinition, "death")
-
-    return isUnitDefinition(troopDefinition)
-        and (playFuncName == "spawn" or deathFuncName == "spawn")
-end
-
-function trooprules.getPreviewCardIds(troopDefinition)
-    if not isUnitDefinition(troopDefinition) then
-        return nil, nil
-    end
-
-    local playFuncName = getFuncNameForTrigger(troopDefinition, "play")
-    local deathFuncName = getFuncNameForTrigger(troopDefinition, "death")
-    local killFuncName = getFuncNameForTrigger(troopDefinition, "kill")
-
-    if playFuncName == "spawn" or deathFuncName == "spawn" then
-        local targetCardId = getFirstTargetCardId(troopDefinition)
-        return targetCardId and { targetCardId } or nil, "SUMMON"
-    end
-
-    if killFuncName == "killmeattok" then
-        return { CACHE_CARD_ID }, "CACHE"
-    end
-
-    return nil, nil
-end
-
 local function executeTroopEffect(troopDefinition, triggerName, state)
     local funcName = getFuncNameForTrigger(troopDefinition, triggerName)
 

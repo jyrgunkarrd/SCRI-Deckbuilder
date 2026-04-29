@@ -31,6 +31,7 @@ local strategyrules = require("src.system.strategyrules")
 local tomerules = require("src.system.tomerules")
 local trooprules = require("src.system.trooprules")
 local previewrules = require("src.system.previewrules")
+local gamestate = require("src.system.gamestate")
 syntacrules = require("src.system.syntacrules")
 spawncontroller = require("src.system.spawncontroller")
 gameactions = require("src.system.gameactions")
@@ -60,89 +61,8 @@ local PILOT_VEHICLE_ANIMATION_DURATION = 0.58
 MULLIGAN_PROMPT_FADE_DURATION = 0.16
 MULLIGAN_REPLACEMENT_ANIMATION_DURATION = 0.28
 MULLIGAN_REPLACEMENT_SLIDE_OFFSET = 96
-local PLAYER_JACL_ID = "JACL001"
-local ACTIVE_CHAMPION_ID = "CH0001"
-local ACTIVE_WARZONE_ID = "WZ0001"
-local RANDOM_WARZONE_SUFFIX = "B"
-local ACTIVE_POI_ID = "POI0001"
-local ACTIVE_PRIMARY_OBJECTIVE_ID = "PRIMOBJ0001"
-SETUP_AGENT_IDS = {
-    "AGT0001",
-    "AGT0002",
-}
-
-local gameState = {
-    playerJacl = nil,
-    activeChampion = nil,
-    activeWarzone = nil,
-    activePoi = nil,
-    activePrimaryObjective = nil,
-    activeIntel = nil,
-    playerDeck = nil,
-    championDeck = nil,
-    cards = {},
-
-    hoveredCardIndex = nil,
-    hoveredTopSlotId = nil,
-    hoveredKeyword = nil,
-    hoveredDiceFace = nil,
-    expandedGridCardIndex = nil,
-    expandedTopSlotId = nil,
-    selectedAttackerCardIndex = nil,
-    selectedAttackerTopSlotId = nil,
-    draggedCardIndex = nil,
-    draggedCardOrigin = nil,
-    dragOffsetX = 0,
-    dragOffsetY = 0,
-    cardEntranceTimer = 0,
-    cardExpansion = {},
-    cardEntranceProgress = {},
-    topSlotExpansion = {},
-    damageJitters = {},
-    waitingForStartGeneration = false,
-    championPlayState = championplayrules.createState(),
-    engageRerollCount = 2,
-    engageRerollBonus = 0,
-    syntacCount = 0,
-    syntacRewardButtons = {},
-    syntacMethodRewardAnimating = false,
-    isSyntacMethodModalOpen = false,
-    syntacPendingMethodChoicePaid = false,
-    primedSyntacAbility = nil,
-    isResourceExchangeModalOpen = false,
-    isJaclDeckModalOpen = false,
-    jaclDeckModalScroll = {
-        deck = 0,
-        discard = 0,
-    },
-    jaclDeckPreviewCard = nil,
-    activeDeckModalDeck = nil,
-    primedActivatedAbility = nil,
-    fullArtImage = nil,
-    hoveredJaclSpecialDefinition = nil,
-    hoveredJaclSpecialPreviewCard = nil,
-    hoveredTomeSpawnPreviewCard = nil,
-    hoveredTomeSpawnPreviewCards = nil,
-    hoveredTomeSpawnPreviewLabel = nil,
-    hoveredTomeSpawnPreviewCardIndex = nil,
-    hoveredCardAbilityPreviewCards = nil,
-    hoveredCardAbilityPreviewLabel = nil,
-    hoveredCardAbilityPreviewDefinition = nil,
-    hoveredCardAbilityPreviewCardIndex = nil,
-    pendingStrategySelection = nil,
-    pendingSacrificeSelection = nil,
-    endPhaseSacrificeHandled = false,
-    mulliganActive = false,
-    mulliganCompleted = false,
-    mulliganSelection = {},
-    mulliganResolving = false,
-    mulliganPromptAlpha = 0,
-    kitReturnAnimations = {},
-    pilotVehicleAnimations = {},
-    hasRenderedFirstFrame = false,
-    pendingPhaseEntry = false,
-    pendingSetupCompletion = false,
-}
+local setupScenario = gamestate.getDefaultScenario()
+local gameState = gamestate.createInitialState()
 local getCardDrawPosition
 local isGridRowColumnOccupied
 local isWarRollSourceActive
@@ -341,7 +261,7 @@ local function getSetupCardCount()
 end
 
 local function addSetupAgents()
-    for slotIndex, cardId in ipairs(SETUP_AGENT_IDS) do
+    for slotIndex, cardId in ipairs(setupScenario.setupAgentIds) do
         local cardDefinition = cardregistry.getCard("troops", cardId)
 
         gameState.cards[#gameState.cards + 1] = cardinstances.create(
@@ -361,7 +281,7 @@ end
 function getSetupAgentDeckIds()
     local deckIds = {}
 
-    for _, cardId in ipairs(SETUP_AGENT_IDS) do
+    for _, cardId in ipairs(setupScenario.setupAgentIds) do
         local cardDefinition = cardregistry.getCard("troops", cardId)
         local deckId = cardDefinition and (cardDefinition.deck or cardDefinition.deckId) or nil
 
@@ -628,25 +548,7 @@ local function discardCardFromPlay(cardIndex)
 end
 
 getGameActionsContext = function()
-    return {
-        state = gameState,
-        envdraw = envdraw,
-        sfxrules = sfxrules,
-        topsloteffects = topsloteffects,
-        damageJitterDuration = DAMAGE_JITTER_DURATION,
-        damageJitterMagnitude = DAMAGE_JITTER_MAGNITUDE,
-        beginObjectiveEscalation = beginObjectiveEscalation,
-        beginObjectiveHunterDeckTransformation = beginObjectiveHunterDeckTransformation,
-        beginWarzoneTransformation = beginWarzoneTransformation,
-        beginPoiEmergenceEffect = beginPoiEmergenceEffect,
-        beginPoiFlipEffect = beginPoiFlipEffect,
-        beginPoiGeneratedCardTransformation = beginPoiGeneratedCardTransformation,
-        getDamageJitterKeyForCard = getDamageJitterKeyForCard,
-        startCardDestruction = startCardDestruction,
-        startChampionDestruction = startChampionDestruction,
-        startIntelDestruction = startIntelDestruction,
-        triggerDamageFeedback = triggerDamageFeedback,
-    }
+    return contextbuilders.getGameActionsContext(getContextBuildersContext())
 end
 
 local function addObjectiveProgress(objectiveDefinition, amount, slotId)
@@ -662,7 +564,7 @@ local function addWarzoneControl(warzoneDefinition, amount, slotId)
 end
 
 local function getChampionPrimaryObjective(championDefinition)
-    local objectiveId = championDefinition and championDefinition.PrimaryObjective or ACTIVE_PRIMARY_OBJECTIVE_ID
+    local objectiveId = championDefinition and championDefinition.PrimaryObjective or setupScenario.activePrimaryObjectiveId
     return objectiverules.getObjective(objectiveId)
 end
 
@@ -671,13 +573,7 @@ preloadWarzoneFamily = function(warzoneDefinition)
 end
 
 getHunterControllerContext = function()
-    return {
-        state = gameState,
-        cardregistry = cardregistry,
-        objectiverules = objectiverules,
-        sfxrules = sfxrules,
-        isCardDestroyed = isCardDestroyed,
-    }
+    return contextbuilders.getHunterControllerContext(getContextBuildersContext())
 end
 
 local function getRandomChampionIntel(championDefinition)
@@ -708,8 +604,12 @@ dealDamageToCard = function(card, amount, suppressFeedback)
     return gameactions.dealDamageToCard(getGameActionsContext(), card, amount, suppressFeedback)
 end
 
-addBlockingToCard = function(card, amount)
-    return gameactions.addBlockingToCard(card, amount)
+dealDirectDamageToCard = function(card, amount, suppressFeedback)
+    return gameactions.dealDirectDamageToCard(getGameActionsContext(), card, amount, suppressFeedback)
+end
+
+addBlockingToCard = function(card, amount, options)
+    return gameactions.addBlockingToCard(card, amount, options)
 end
 
 local function healCard(card, amount)
@@ -718,6 +618,10 @@ end
 
 clearAllBlocking = function()
     return gameactions.clearAllBlocking(getGameActionsContext())
+end
+
+clearEnemyGuardCarryBlocking = function()
+    return gameactions.clearEnemyGuardCarryBlocking(getGameActionsContext())
 end
 
 dealDamageToChampion = function(amount, suppressFeedback)
@@ -752,31 +656,7 @@ local function completeSetupPhaseIfReady()
 end
 
 getCardPlayControllerContext = function()
-    return {
-        state = gameState,
-        carddraw = carddraw,
-        cardregistry = cardregistry,
-        keywordrules = keywordrules,
-        kitrules = kitrules,
-        notifications = notifications,
-        resourcerules = resourcerules,
-        strategyrules = strategyrules,
-        tomerules = tomerules,
-        trooprules = trooprules,
-        turnrules = turnrules,
-        warrules = warrules,
-        createOrStackPlayerCacheNearCard = createOrStackPlayerCacheNearCard,
-        dealDamageToCard = dealDamageToCard,
-        dealDamageToChampion = dealDamageToChampion,
-        discardCardFromPlay = discardCardFromPlay,
-        drawCardFromPlayerDeck = drawCardFromPlayerDeck,
-        enterCurrentPhase = enterCurrentPhase,
-        getCardDrawPosition = getCardDrawPosition,
-        removeCardFromPlay = removeCardFromPlay,
-        spawnTokensNearCard = spawnTokensNearCard,
-        spawnTokensNearPlayerCard = spawnTokensNearPlayerCard,
-        startCardDestruction = startCardDestruction,
-    }
+    return contextbuilders.getCardPlayControllerContext(getContextBuildersContext())
 end
 
 local function canPlayCard(card)
@@ -1005,20 +885,7 @@ local function canOpenPlayerDeckModal()
 end
 
 getSyntacAbilityContext = function()
-    return {
-        state = gameState,
-        envdraw = envdraw,
-        sfxrules = sfxrules,
-        resourcerules = resourcerules,
-        cardregistry = cardregistry,
-        addBlockingToCard = addBlockingToCard,
-        dealDamageToCard = dealDamageToCard,
-        dealDamageToChampion = dealDamageToChampion,
-        addWarzoneControl = addWarzoneControl,
-        addObjectiveProgress = addObjectiveProgress,
-        getCurrentPhase = turnrules.getCurrentPhase,
-        isEngagePhase = isEngagePhase,
-    }
+    return contextbuilders.getSyntacAbilityContext(getContextBuildersContext())
 end
 
 local function tryUseSyntacRewardButton(mouseX, mouseY)
@@ -1152,6 +1019,7 @@ local function getContextBuilderRules()
         kitrules = kitrules,
         modals = modals,
         notifications = notifications,
+        objectiverules = objectiverules,
         phasecontroller = phasecontroller,
         resourcerules = resourcerules,
         sfxrules = sfxrules,
@@ -1162,6 +1030,8 @@ local function getContextBuilderRules()
         trooprules = trooprules,
         turnrules = turnrules,
         warrules = warrules,
+        damageJitterDuration = DAMAGE_JITTER_DURATION,
+        damageJitterMagnitude = DAMAGE_JITTER_MAGNITUDE,
     }
 end
 
@@ -1185,6 +1055,7 @@ local function getContextBuilderCoreActions()
         cancelPendingStrategySelection = cancelPendingStrategySelection,
         chooseSyntacMethodResource = chooseSyntacMethodResource,
         clearAllBlocking = clearAllBlocking,
+        clearEnemyGuardCarryBlocking = clearEnemyGuardCarryBlocking,
         clearResolvedSyntacMethodReward = clearResolvedSyntacMethodReward,
         clearTemporaryRerollBonus = clearTemporaryRerollBonus,
         completeSetupPhaseIfReady = completeSetupPhaseIfReady,
@@ -1192,6 +1063,7 @@ local function getContextBuilderCoreActions()
         createGeneratedGridCard = createGeneratedGridCard,
         createGeneratedSupportCard = createGeneratedSupportCard,
         dealDamageToCard = dealDamageToCard,
+        dealDirectDamageToCard = dealDirectDamageToCard,
         dealDamageToChampion = dealDamageToChampion,
         destructionDuration = DESTRUCTION_DURATION,
         discardCardFromPlay = discardCardFromPlay,
@@ -1293,95 +1165,34 @@ local function getContextBuilderInputActions()
 end
 
 getContextBuildersContext = function()
-    local context = getContextBuilderRules()
-
-    local actionGroups = {
+    return contextbuilders.mergeContextGroups(getContextBuilderRules(), {
         getContextBuilderCoreActions(),
         getContextBuilderGetters(),
         getContextBuilderPredicates(),
         getContextBuilderInputActions(),
-    }
-
-    for _, actions in ipairs(actionGroups) do
-        for key, value in pairs(actions) do
-            context[key] = value
-        end
-    end
-
-    return context
+    })
 end
 
 function love.load()
     love.math.setRandomSeed(os.time())
     love.graphics.setBackgroundColor(0.08, 0.08, 0.1)
     love.graphics.setColor(1, 1, 1)
-    gameState.cards = {}
-    gameState.hoveredCardIndex = nil
-    gameState.hoveredTopSlotId = nil
-    gameState.hoveredKeyword = nil
-    gameState.hoveredDiceFace = nil
-    gameState.expandedGridCardIndex = nil
-    gameState.expandedTopSlotId = nil
-    gameState.selectedAttackerCardIndex = nil
-    gameState.selectedAttackerTopSlotId = nil
-    gameState.draggedCardIndex = nil
-    gameState.draggedCardOrigin = nil
-    gameState.dragOffsetX = 0
-    gameState.dragOffsetY = 0
-    gameState.cardEntranceTimer = 0
-    gameState.cardExpansion = {}
-    gameState.cardEntranceProgress = {}
-    gameState.topSlotExpansion = {}
-    gameState.damageJitters = {}
-    gameState.waitingForStartGeneration = false
-    gameState.hasRenderedFirstFrame = false
-    gameState.pendingPhaseEntry = false
-    gameState.pendingSetupCompletion = false
+    gamestate.resetForNewRun(gameState)
     turnrules.reset()
     resourcerules.reset()
     warrules.reset()
     notifications.reset()
-    championplayrules.resetState(gameState.championPlayState)
-    gameState.engageRerollCount = 2
-    gameState.engageRerollBonus = 0
-    gameState.syntacCount = 0
-    gameState.syntacRewardButtons = {}
-    gameState.syntacMethodRewardAnimating = false
-    gameState.isSyntacMethodModalOpen = false
-    gameState.syntacPendingMethodChoicePaid = false
-    gameState.primedSyntacAbility = nil
-    gameState.isResourceExchangeModalOpen = false
-    gameState.isJaclDeckModalOpen = false
-    gameState.jaclDeckModalScroll.deck = 0
-    gameState.jaclDeckModalScroll.discard = 0
-    gameState.jaclDeckPreviewCard = nil
-    gameState.activeDeckModalDeck = nil
-    gameState.primedActivatedAbility = nil
-    gameState.fullArtImage = nil
-    gameState.hoveredJaclSpecialDefinition = nil
-    gameState.hoveredJaclSpecialPreviewCard = nil
-    clearHoveredSpawnPreview()
-    gameState.pendingStrategySelection = nil
-    gameState.pendingSacrificeSelection = nil
-    gameState.endPhaseSacrificeHandled = false
-    gameState.mulliganActive = false
-    gameState.mulliganCompleted = false
-    gameState.mulliganSelection = {}
-    gameState.mulliganResolving = false
-    gameState.mulliganReturnedCards = nil
-    gameState.mulliganPromptAlpha = 0
-    gameState.kitReturnAnimations = {}
-    gameState.pilotVehicleAnimations = {}
     cardinstances.reset()
     warzonecontrolrules.reset()
     topsloteffects.reset()
     infiltrationrules.reset()
-    gameState.playerJacl = jaclrules.getJacl(PLAYER_JACL_ID)
-    gameState.activeChampion = championrules.getChampion(ACTIVE_CHAMPION_ID)
+    gameState.playerJacl = jaclrules.getJacl(setupScenario.playerJaclId)
+    gameState.activeChampion = championrules.getChampion(setupScenario.activeChampionId)
     if gameState.activeChampion then
         gameState.activeChampion.hidden = false
     end
-    gameState.activeWarzone = warzonerules.getRandomWarzoneByIdSuffix(RANDOM_WARZONE_SUFFIX) or warzonerules.getWarzone(ACTIVE_WARZONE_ID)
+    gameState.activeWarzone = warzonerules.getRandomWarzoneByIdSuffix(setupScenario.randomWarzoneSuffix)
+        or warzonerules.getWarzone(setupScenario.activeWarzoneId)
     gameState.activePoi = nil
     gameState.activePrimaryObjective = getChampionPrimaryObjective(gameState.activeChampion)
     gameState.activeIntel = getRandomChampionIntel(gameState.activeChampion)
@@ -1526,6 +1337,8 @@ function love.draw()
         turnrules = turnrules,
         warrules = warrules,
         resourcerules = resourcerules,
+        cardregistry = cardregistry,
+        previewrules = previewrules,
         envdraw = envdraw,
         carddraw = carddraw,
         topsloteffects = topsloteffects,

@@ -2257,34 +2257,111 @@ function envdraw.getJaclDeckModalCardAt(mouseX, mouseY, playerDeck, scrollState)
     return nil
 end
 
-function envdraw.getJaclDeckPreviewModalLayout()
+function envdraw.getJaclDeckPreviewModalLayout(previewCardDefinitions)
     local windowWidth, windowHeight = love.graphics.getDimensions()
     local cardWidth, cardHeight = carddraw.getExpandedCardSize()
-    local x = (windowWidth - cardWidth) / 2
-    local y = (windowHeight - cardHeight) / 2
+    local previewCount = previewCardDefinitions and #previewCardDefinitions or 0
+    local previewGap = SPECIAL_TOOLTIP_PREVIEW_GAP
+    local previewWidth = cardWidth
+    local previewHeight = cardHeight
+
+    if previewCount > 0 then
+        local availablePreviewWidth = math.max(
+            JACL_DECK_MODAL_CARD_WIDTH,
+            windowWidth - (JACL_DECK_MODAL_MARGIN * 2) - cardWidth - previewGap - ((previewCount - 1) * previewGap)
+        )
+        previewWidth = math.min(cardWidth, availablePreviewWidth / previewCount)
+        previewWidth = math.max(JACL_DECK_MODAL_CARD_WIDTH, previewWidth)
+        _, previewHeight = carddraw.getExpandedCardSize({
+            width = previewWidth,
+        })
+    end
+
+    local previewTotalWidth = previewCount > 0
+        and ((previewCount * previewWidth) + ((previewCount - 1) * previewGap))
+        or 0
+    local labelFont = getFont(JACL_LABEL_FONT_PATH, SPECIAL_TOOLTIP_TITLE_SIZE)
+    local labelHeight = previewCount > 0
+        and ((SPECIAL_TOOLTIP_PADDING * 2) + labelFont:getHeight())
+        or 0
+    local previewTotalHeight = previewCount > 0
+        and (previewHeight + SPECIAL_TOOLTIP_PREVIEW_GAP + labelHeight)
+        or 0
+    local totalWidth = cardWidth + (previewCount > 0 and (previewGap + previewTotalWidth) or 0)
+    local x = (windowWidth - totalWidth) / 2
+    local cardY = (windowHeight - cardHeight) / 2
+    local previewX = x + cardWidth + previewGap
+    local previewY = (windowHeight - previewTotalHeight) / 2
+    local labelY = previewY + previewHeight + SPECIAL_TOOLTIP_PREVIEW_GAP
+    local y = math.min(cardY, previewCount > 0 and previewY or cardY)
+    local bottomY = math.max(cardY + cardHeight, previewCount > 0 and (previewY + previewTotalHeight) or (cardY + cardHeight))
 
     return {
         x = x,
         y = y,
-        width = cardWidth,
-        height = cardHeight,
+        width = totalWidth,
+        height = bottomY - y,
+        cardX = x,
+        cardY = cardY,
+        cardWidth = cardWidth,
+        cardHeight = cardHeight,
+        previewX = previewX,
+        previewY = previewY,
+        previewWidth = previewWidth,
+        previewHeight = previewHeight,
+        previewGap = previewGap,
+        previewTotalWidth = previewTotalWidth,
+        labelY = labelY,
+        labelHeight = labelHeight,
     }
 end
 
-function envdraw.drawJaclDeckPreviewModal(card)
+function envdraw.drawJaclDeckPreviewModal(card, preview)
     if not card then
         return
     end
 
     local windowWidth, windowHeight = love.graphics.getDimensions()
-    local layout = envdraw.getJaclDeckPreviewModalLayout()
+    local previewCardDefinitions = preview and preview.cardDefinitions or nil
+    local layout = envdraw.getJaclDeckPreviewModalLayout(previewCardDefinitions)
 
     love.graphics.setColor(0.01, 0.01, 0.02, 0.36)
     love.graphics.rectangle("fill", 0, 0, windowWidth, windowHeight)
-    carddraw.drawCardState(card.setName, card.cardId, layout.x, layout.y, 1, {
+    carddraw.drawCardState(card.setName, card.cardId, layout.cardX, layout.cardY, 1, {
         displayName = card.displayName,
         portraitPath = card.portraitPath,
+        showBadgesInTextbox = true,
     })
+
+    if previewCardDefinitions and #previewCardDefinitions > 0 then
+        for previewIndex, previewCardDefinition in ipairs(previewCardDefinitions) do
+            local previewX = layout.previewX + ((previewIndex - 1) * (layout.previewWidth + layout.previewGap))
+
+            carddraw.drawCardState(previewCardDefinition.setName, previewCardDefinition.id, previewX, layout.previewY, 1, {
+                width = layout.previewWidth,
+                showBadgesInTextbox = true,
+            })
+        end
+
+        love.graphics.setColor(0.05, 0.05, 0.06, 0.96)
+        love.graphics.rectangle("fill", layout.previewX, layout.labelY, layout.previewTotalWidth, layout.labelHeight, 6, 6)
+        love.graphics.setColor(0.82, 0.85, 0.89, 0.82)
+        love.graphics.rectangle("line", layout.previewX, layout.labelY, layout.previewTotalWidth, layout.labelHeight, 6, 6)
+
+        local previousFont = love.graphics.getFont()
+        local labelFont = getFont(JACL_LABEL_FONT_PATH, SPECIAL_TOOLTIP_TITLE_SIZE)
+        love.graphics.setFont(labelFont)
+        love.graphics.setColor(0.95, 0.96, 0.98, 1)
+        love.graphics.printf(
+            preview.label or "PREVIEW",
+            layout.previewX + SPECIAL_TOOLTIP_PADDING,
+            snap(layout.labelY + ((layout.labelHeight - labelFont:getHeight()) / 2)),
+            layout.previewTotalWidth - (SPECIAL_TOOLTIP_PADDING * 2),
+            "center"
+        )
+        love.graphics.setFont(previousFont)
+    end
+
     love.graphics.setColor(1, 1, 1, 1)
 end
 

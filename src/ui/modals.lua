@@ -43,8 +43,24 @@ function modals.isPointInsideJaclDeckModal(mouseX, mouseY, envdraw, activeDeckMo
     }))
 end
 
-function modals.isPointInsideJaclDeckPreviewModal(mouseX, mouseY, envdraw)
-    return isPointInsideRect(mouseX, mouseY, envdraw.getJaclDeckPreviewModalLayout())
+local function getDeckPreview(card, deps)
+    local cardDefinition = card
+        and deps.cardregistry
+        and deps.cardregistry.getCard(card.setName, card.cardId)
+        or nil
+
+    return deps.previewrules
+        and deps.previewrules.getDefinitionPreview(cardDefinition)
+        or nil
+end
+
+function modals.isPointInsideJaclDeckPreviewModal(mouseX, mouseY, deps, card)
+    local preview = getDeckPreview(card, deps)
+    return isPointInsideRect(
+        mouseX,
+        mouseY,
+        deps.envdraw.getJaclDeckPreviewModalLayout(preview and preview.cardDefinitions or nil)
+    )
 end
 
 function modals.getHoveredJaclDeckModalCard(mouseX, mouseY, envdraw, activeDeckModalDeck, jaclDeckModalScroll)
@@ -148,7 +164,7 @@ function modals.handleDeckModalMousePressed(x, y, button, state, deps)
     end
 
     if state.jaclDeckPreviewCard then
-        if not modals.isPointInsideJaclDeckPreviewModal(x, y, deps.envdraw) then
+        if not modals.isPointInsideJaclDeckPreviewModal(x, y, deps, state.jaclDeckPreviewCard) then
             state.jaclDeckPreviewCard = nil
         end
 

@@ -94,11 +94,28 @@ local keywords = {
             name = "Evasion",
             text = "Whenever this card is damaged, it gains Flying until the End phase.",
         },
+
         {
             id = "KWFAIR",
             name = "Fair Weather",
             text = "If all other enemies are defeated, this card is automatically defeated.",
         },
+
+        {
+            id = "KWRAGE",
+            name = "Rage",
+            text = "If this card is reduced to half of its health or less, its die faces are multiplied by 2.",
+        },
+
+        --- Conditions ---
+
+        {
+            id = "KWWOUND",
+            name = "Wound",
+            text = "Before this card acts each turn it takes damage.",
+            hasvalue = 1,
+        },
+
 }
 
 return keywords

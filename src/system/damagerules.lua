@@ -46,6 +46,13 @@ function damagerules.dealDamageToCard(card, amount)
 
     if blockedDamage > 0 then
         card.blocking = previousBlocking - blockedDamage
+        if card.enemyGuardCarryBlock then
+            card.enemyGuardCarryBlock = math.max(0, (tonumber(card.enemyGuardCarryBlock) or 0) - blockedDamage)
+
+            if card.enemyGuardCarryBlock <= 0 then
+                card.enemyGuardCarryBlock = nil
+            end
+        end
         appliedDamage = appliedDamage - blockedDamage
     end
 
@@ -69,7 +76,37 @@ function damagerules.dealDamageToCard(card, amount)
     }
 end
 
-function damagerules.addBlockingToCard(card, amount)
+function damagerules.dealDirectDamageToCard(card, amount)
+    if not card or amount == nil then
+        return nil
+    end
+
+    cardinstances.initializeHealth(card)
+
+    if card.currentHealth == nil then
+        return nil
+    end
+
+    local previousHealth = card.currentHealth
+    local previousBlocking = math.max(0, tonumber(card.blocking) or 0)
+    local appliedDamage = math.max(0, tonumber(amount) or 0)
+
+    card.currentHealth = math.max(0, card.currentHealth - appliedDamage)
+
+    return {
+        previousHealth = previousHealth,
+        currentHealth = card.currentHealth,
+        previousBlocking = previousBlocking,
+        currentBlocking = previousBlocking,
+        blockedDamage = 0,
+        preventedByKeywordDamage = 0,
+        healthDamage = previousHealth - card.currentHealth,
+        killed = previousHealth > 0 and card.currentHealth <= 0,
+        changed = card.currentHealth < previousHealth,
+    }
+end
+
+function damagerules.addBlockingToCard(card, amount, options)
     if not card or amount == nil then
         return nil
     end
@@ -85,6 +122,10 @@ function damagerules.addBlockingToCard(card, amount)
 
     card.blocking = previousBlocking + addedBlocking
 
+    if options and options.carryEnemyGuard == true and addedBlocking > 0 then
+        card.enemyGuardCarryBlock = math.max(0, tonumber(card.enemyGuardCarryBlock) or 0) + addedBlocking
+    end
+
     return {
         previousBlocking = previousBlocking,
         currentBlocking = card.blocking,
@@ -96,7 +137,33 @@ end
 function damagerules.clearAllBlocking(cards)
     for _, card in ipairs(cards or {}) do
         if card then
-            card.blocking = nil
+            local carriedBlock = math.max(0, tonumber(card.enemyGuardCarryBlock) or 0)
+
+            if carriedBlock > 0
+                and card.location
+                and card.location.kind == "grid"
+                and card.location.rowId == "OppRow" then
+                card.blocking = math.min(math.max(0, tonumber(card.blocking) or 0), carriedBlock)
+                card.enemyGuardCarryBlock = card.blocking > 0 and card.blocking or nil
+            else
+                card.blocking = nil
+                card.enemyGuardCarryBlock = nil
+            end
+        end
+    end
+end
+
+function damagerules.clearEnemyGuardCarryBlocking(cards)
+    for _, card in ipairs(cards or {}) do
+        local carriedBlock = math.max(0, tonumber(card and card.enemyGuardCarryBlock) or 0)
+
+        if carriedBlock > 0 then
+            card.blocking = math.max(0, (tonumber(card.blocking) or 0) - carriedBlock)
+            card.enemyGuardCarryBlock = nil
+
+            if card.blocking <= 0 then
+                card.blocking = nil
+            end
         end
     end
 end

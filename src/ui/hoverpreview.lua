@@ -154,10 +154,18 @@ function hoverpreview.getHoverPreviewState(state, deps)
     return hoverpreview.getHoveredJaclPreview(state, deps, mouseX, mouseY)
 end
 
-function hoverpreview.updateSpawnPreview(state, deps, card, cardIndex, allowGridPreview)
+function hoverpreview.updateSpawnPreview(state, deps, card, cardIndex)
     hoverpreview.clearSpawnPreview(state)
 
     local cardDefinition = card and deps.cardregistry.getCard(card.setName, card.cardId) or nil
+    local isUnexpandedGridCard = card
+        and card.location
+        and card.location.kind == "grid"
+        and cardIndex ~= state.expandedGridCardIndex
+
+    if isUnexpandedGridCard then
+        return
+    end
 
     if deps.previewrules then
         local preview = deps.previewrules.getDefinitionPreview(cardDefinition)
@@ -170,75 +178,15 @@ function hoverpreview.updateSpawnPreview(state, deps, card, cardIndex, allowGrid
             return
         end
     end
-
-    if deps.tomerules.isSpawnTomeDefinition(cardDefinition) then
-        local targetCardId = deps.tomerules.getFirstTargetCardId(cardDefinition)
-        local previewCardDefinition = targetCardId and deps.cardregistry.getCardById(targetCardId) or nil
-
-        if previewCardDefinition then
-            state.hoveredTomeSpawnPreviewCards = { previewCardDefinition }
-            state.hoveredTomeSpawnPreviewCard = previewCardDefinition
-            state.hoveredTomeSpawnPreviewLabel = "SUMMON"
-            state.hoveredTomeSpawnPreviewCardIndex = cardIndex
-        end
-    elseif deps.strategyrules.isSpawnStrategyDefinition(cardDefinition) then
-        local targetCardId = deps.strategyrules.getFirstTargetCardId(cardDefinition)
-        local previewCardDefinition = targetCardId and deps.cardregistry.getCardById(targetCardId) or nil
-
-        if previewCardDefinition then
-            state.hoveredTomeSpawnPreviewCards = { previewCardDefinition }
-            state.hoveredTomeSpawnPreviewCard = previewCardDefinition
-            state.hoveredTomeSpawnPreviewLabel = "SUMMON"
-            state.hoveredTomeSpawnPreviewCardIndex = cardIndex
-        end
-    elseif allowGridPreview or not (card.location and card.location.kind == "grid") then
-        local previewCardIds, previewLabel = deps.trooprules.getPreviewCardIds(cardDefinition)
-
-        if previewCardIds and #previewCardIds > 0 then
-            local previewCardDefinitions = {}
-
-            for _, previewCardId in ipairs(previewCardIds) do
-                local previewCardDefinition = previewCardId and deps.cardregistry.getCardById(previewCardId) or nil
-
-                if previewCardDefinition then
-                    previewCardDefinitions[#previewCardDefinitions + 1] = previewCardDefinition
-                end
-            end
-
-            if #previewCardDefinitions > 0 then
-                state.hoveredTomeSpawnPreviewCards = previewCardDefinitions
-                state.hoveredTomeSpawnPreviewCard = previewCardDefinitions[1]
-                state.hoveredTomeSpawnPreviewLabel = previewLabel
-                state.hoveredTomeSpawnPreviewCardIndex = cardIndex
-            end
-        end
-    end
 end
 
-function hoverpreview.attachDiceFaceSummonPreview(deps, tooltip)
+function hoverpreview.attachDefinitionPreview(deps, tooltip, fallbackLabel)
     if not tooltip then
         return nil
     end
 
     if deps.previewrules then
-        deps.previewrules.applyDefinitionPreviewToTooltip(tooltip.definition or tooltip, tooltip, "SUMMON")
-    end
-
-    -- Legacy fallback: keep old dice previews working while definitions migrate.
-    if not tooltip.previewCardDefinition and tooltip.summonCardId then
-        tooltip.previewCardDefinition = deps.cardregistry.getCardById(tooltip.summonCardId)
-    end
-
-    if not tooltip.previewCardDefinitions and tooltip.summonCardIds then
-        tooltip.previewCardDefinitions = {}
-
-        for _, summonCardId in ipairs(tooltip.summonCardIds) do
-            local previewCardDefinition = deps.cardregistry.getCardById(summonCardId)
-
-            if previewCardDefinition then
-                tooltip.previewCardDefinitions[#tooltip.previewCardDefinitions + 1] = previewCardDefinition
-            end
-        end
+        deps.previewrules.applyDefinitionPreviewToTooltip(tooltip.definition or tooltip, tooltip, fallbackLabel)
     end
 
     if tooltip.previewCardDefinition and not tooltip.previewCardDefinitions then
@@ -274,25 +222,9 @@ function hoverpreview.updateCardAbilityPreview(state, deps, mouseX, mouseY)
         and deps.previewrules.getDefinitionPreview(abilityDefinition, abilityDefinition.previewLabel or "CREATE")
         or nil
     
-    local previewCardDefinition = nil
-    
     if preview then
         state.hoveredCardAbilityPreviewCards = preview.cardDefinitions
         state.hoveredCardAbilityPreviewLabel = preview.label
-    else
-        -- Legacy fallback: keep existing pilot/transform previews working.
-        local effectArgs = abilityDefinition.effectArgs or nil
-        local previewCardId = nil
-    
-        if abilityDefinition.effect == "pilot_vehicle_card" then
-            previewCardId = effectArgs and effectArgs.vehicleCardId or nil
-        elseif abilityDefinition.effect == "transform_card" then
-            previewCardId = effectArgs and effectArgs.targetCardId or nil
-        end
-    
-        previewCardDefinition = previewCardId and deps.cardregistry.getCardById(previewCardId) or nil
-        state.hoveredCardAbilityPreviewCards = previewCardDefinition and { previewCardDefinition } or nil
-        state.hoveredCardAbilityPreviewLabel = abilityDefinition.previewLabel or "CREATE"
     end
     
     state.hoveredCardAbilityPreviewDefinition = abilityDefinition
@@ -300,13 +232,14 @@ function hoverpreview.updateCardAbilityPreview(state, deps, mouseX, mouseY)
 end
 
 local function updateHoveredCardDetails(state, deps, card, cardIndex, drawX, drawY, expansionProgress, renderOptions, mouseX, mouseY)
-    state.hoveredDiceFace = hoverpreview.attachDiceFaceSummonPreview(
+    state.hoveredDiceFace = hoverpreview.attachDefinitionPreview(
         deps,
-        deps.carddraw.getHoveredDiceFace(card.setName, card.cardId, drawX, drawY, expansionProgress, renderOptions, mouseX, mouseY, deps.warrules.getCardRollState(cardIndex))
+        deps.carddraw.getHoveredDiceFace(card.setName, card.cardId, drawX, drawY, expansionProgress, renderOptions, mouseX, mouseY, deps.warrules.getCardRollState(cardIndex)),
+        "SUMMON"
     ) or state.hoveredDiceFace
     state.hoveredKeyword = deps.carddraw.getHoveredKeyword(card.setName, card.cardId, drawX, drawY, renderOptions, mouseX, mouseY)
     hoverpreview.updateCardAbilityPreview(state, deps, mouseX, mouseY)
-    hoverpreview.updateSpawnPreview(state, deps, card, cardIndex, cardIndex == state.expandedGridCardIndex)
+    hoverpreview.updateSpawnPreview(state, deps, card, cardIndex)
 end
 
 function hoverpreview.updateHoveredCard(state, deps)
@@ -333,7 +266,7 @@ function hoverpreview.updateHoveredCard(state, deps)
     hoverpreview.clearCardAbilityPreview(state)
     state.hoveredDiceFace = nil
 
-    state.hoveredDiceFace = hoverpreview.attachDiceFaceSummonPreview(deps, deps.envdraw.getHoveredTopSlotDiceFace(
+    state.hoveredDiceFace = hoverpreview.attachDefinitionPreview(deps, deps.envdraw.getHoveredTopSlotDiceFace(
         mouseX,
         mouseY,
         deps.turnrules.getCurrentPhase(),
@@ -345,7 +278,7 @@ function hoverpreview.updateHoveredCard(state, deps)
         deps.warrules.getDisplayStates(),
         state.expandedTopSlotId,
         state.topSlotExpansion[state.expandedTopSlotId] or 0
-    ))
+    ), "SUMMON")
 
     if state.hoveredCardIndex then
         local activeCard = state.cards[state.hoveredCardIndex]
@@ -379,8 +312,7 @@ function hoverpreview.updateHoveredCard(state, deps)
             state,
             deps,
             state.cards[state.expandedGridCardIndex],
-            state.expandedGridCardIndex,
-            true
+            state.expandedGridCardIndex
         )
     end
 
@@ -407,15 +339,6 @@ function hoverpreview.updateHoveredCard(state, deps)
     
             if preview then
                 state.hoveredJaclSpecialPreviewCard = preview.cardDefinition
-            else
-                -- Legacy fallback: keep old JACL previews working.
-                local effectArgs = state.hoveredJaclSpecialDefinition
-                    and state.hoveredJaclSpecialDefinition.effectArgs
-                    or nil
-    
-                if effectArgs and effectArgs.cardId then
-                    state.hoveredJaclSpecialPreviewCard = deps.cardregistry.getCardById(effectArgs.cardId)
-                end
             end
         end
     end

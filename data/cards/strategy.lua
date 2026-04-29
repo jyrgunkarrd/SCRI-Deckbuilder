@@ -17,7 +17,11 @@ local strategy = {
             textbox = "Summon 2 Psycho Commando tokens.",
             flavor = "Even those without augs get a little bent around here.", 
             value = 2,
-            target = { "AEGPSYCOMM" }
+            target = { "AEGPSYCOMM" },
+            preview = {
+                label = "SUMMON",
+                cardId = "AEGPSYCOMM",
+            },
         },
 
         {

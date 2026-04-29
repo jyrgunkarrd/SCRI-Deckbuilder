@@ -277,7 +277,8 @@ local function rollStateHasResolvableRetaliation(rollState)
         and rollState.faceIndex
         and (rollState.damageValue or 0) > 0
         and (
-            (canTargetEnemyCard(rollState) and rollState.targetCardIndex)
+            hasTargetType(rollState, "Blk")
+            or (canTargetEnemyCard(rollState) and rollState.targetCardIndex)
             or (hasTargetType(rollState, "Inf") and rollState.targetCard and rollState.targetCard.kind == "deck")
             or (hasTargetType(rollState, "Obj") and rollState.targetCard and rollState.targetCard.kind == "objective")
             or hasTargetType(rollState, "WZOpp")
@@ -466,6 +467,7 @@ local function getNormalizedFaceBehavior(faceDefinition)
     local selfBlock = faceDefinition.selfBlock == true or hasTargetType(faceDefinition.targ, "closeatk")
     local selfHeal = faceDefinition.selfHeal == true or hasTargetType(faceDefinition.targ, "maulatk")
     local sabotageObjective = faceDefinition.sabotageObjective == true or hasTargetType(faceDefinition.targ, "AtkSab")
+    local wound = faceDefinition.wound == true
     local drawCards = faceDefinition.drawcard == true
     local generatedResource = faceDefinition.genres
 
@@ -488,6 +490,7 @@ local function getNormalizedFaceBehavior(faceDefinition)
         selfBlock = selfBlock,
         selfHeal = selfHeal,
         sabotageObjective = sabotageObjective,
+        wound = wound,
     }
 end
 
@@ -636,6 +639,7 @@ local function buildRollState(entityKey, definition, faceIndices, isEnemy, prese
         selfBlock = normalizedBehavior.selfBlock,
         selfHeal = normalizedBehavior.selfHeal,
         sabotageObjective = normalizedBehavior.sabotageObjective,
+        wound = normalizedBehavior.wound,
         autoReload = autoReload,
         exhausted = (preserveState and preserveState.exhausted) or (sourceCard and sourceCard.preludeStrategyExhausted == true) or false,
         locked = preserveState and preserveState.locked or false,
@@ -1464,7 +1468,8 @@ function warrules.beginRetaliatePhase(topSlotTargets, cards)
             and rollState.faceIndex
             and (rollState.damageValue or 0) > 0
             and (
-                (canTargetEnemyCard(rollState) and rollState.targetCardIndex)
+                hasTargetType(rollState, "Blk")
+                or (canTargetEnemyCard(rollState) and rollState.targetCardIndex)
                 or (hasTargetType(rollState, "Inf") and rollState.targetCard and rollState.targetCard.kind == "deck")
                 or (hasTargetType(rollState, "Obj") and rollState.targetCard and rollState.targetCard.kind == "objective")
                 or hasTargetType(rollState, "WZOpp")
@@ -1475,7 +1480,7 @@ function warrules.beginRetaliatePhase(topSlotTargets, cards)
                     sourceDefinition = rollState.sourceDefinition,
                     sourceCard = rollState.sourceCard,
                     targetType = firstEnemyCardTargetType(rollState)
-                        or firstTargetTypeMatching(rollState, { "Inf", "Obj", "WZOpp", "IntCD" }),
+                        or firstTargetTypeMatching(rollState, { "Blk", "Inf", "Obj", "WZOpp", "IntCD" }),
                     targetCardIndex = rollState.targetCardIndex,
                     targetCard = rollState.targetCard,
                     damageValue = rollState.damageValue,
@@ -1484,6 +1489,9 @@ function warrules.beginRetaliatePhase(topSlotTargets, cards)
                     pain = rollState.pain,
                     lrange = rollState.lrange,
                     heavy = rollState.heavy,
+                    selfBlock = rollState.selfBlock,
+                    selfHeal = rollState.selfHeal,
+                    wound = rollState.wound,
                     isTopSlot = true,
                 }
         end
@@ -1514,7 +1522,8 @@ function warrules.beginRetaliatePhase(topSlotTargets, cards)
             and rollState.faceIndex
             and (rollState.damageValue or 0) > 0
             and (
-                (canTargetEnemyCard(rollState) and rollState.targetCardIndex)
+                hasTargetType(rollState, "Blk")
+                or (canTargetEnemyCard(rollState) and rollState.targetCardIndex)
                 or (hasTargetType(rollState, "Inf") and rollState.targetCard and rollState.targetCard.kind == "deck")
                 or (hasTargetType(rollState, "Obj") and rollState.targetCard and rollState.targetCard.kind == "objective")
                 or hasTargetType(rollState, "WZOpp")
@@ -1525,7 +1534,7 @@ function warrules.beginRetaliatePhase(topSlotTargets, cards)
                     sourceDefinition = rollState.sourceDefinition,
                     sourceCard = rollState.sourceCard,
                     targetType = firstEnemyCardTargetType(rollState)
-                        or firstTargetTypeMatching(rollState, { "Inf", "Obj", "WZOpp", "IntCD" }),
+                        or firstTargetTypeMatching(rollState, { "Blk", "Inf", "Obj", "WZOpp", "IntCD" }),
                     targetCardIndex = rollState.targetCardIndex,
                     targetCard = rollState.targetCard,
                     damageValue = rollState.damageValue,
@@ -1534,6 +1543,9 @@ function warrules.beginRetaliatePhase(topSlotTargets, cards)
                     pain = rollState.pain,
                     lrange = rollState.lrange,
                     heavy = rollState.heavy,
+                    selfBlock = rollState.selfBlock,
+                    selfHeal = rollState.selfHeal,
+                    wound = rollState.wound,
                     isTopSlot = false,
                 }
         end
