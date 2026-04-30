@@ -2257,20 +2257,36 @@ function envdraw.getJaclDeckModalCardAt(mouseX, mouseY, playerDeck, scrollState)
     return nil
 end
 
-function envdraw.getJaclDeckPreviewModalLayout(previewCardDefinitions)
+local normalizeSummonPreviewEntries
+local getSummonPreviewEntryWidth
+local getSummonPreviewEntriesWidth
+local drawSummonPreviewStack
+local drawSummonPreviewEntries
+
+function envdraw.getJaclDeckPreviewModalLayout(previewCards)
     local windowWidth, windowHeight = love.graphics.getDimensions()
     local cardWidth, cardHeight = carddraw.getExpandedCardSize()
-    local previewCount = previewCardDefinitions and #previewCardDefinitions or 0
+    local previewEntries = normalizeSummonPreviewEntries and normalizeSummonPreviewEntries(previewCards) or {}
+    local previewCount = #previewEntries
     local previewGap = SPECIAL_TOOLTIP_PREVIEW_GAP
     local previewWidth = cardWidth
     local previewHeight = cardHeight
 
     if previewCount > 0 then
+        local previewGapWidth = (previewCount - 1) * previewGap
         local availablePreviewWidth = math.max(
             JACL_DECK_MODAL_CARD_WIDTH,
-            windowWidth - (JACL_DECK_MODAL_MARGIN * 2) - cardWidth - previewGap - ((previewCount - 1) * previewGap)
+            windowWidth - (JACL_DECK_MODAL_MARGIN * 2) - cardWidth - previewGap - previewGapWidth
         )
-        previewWidth = math.min(cardWidth, availablePreviewWidth / previewCount)
+
+        local stackWidthFactor = 0
+
+        for _, previewEntry in ipairs(previewEntries) do
+            local count = math.max(1, tonumber(previewEntry and previewEntry.count) or 1)
+            stackWidthFactor = stackWidthFactor + 1 + ((math.min(count, 5) - 1) * 0.24)
+        end
+
+        previewWidth = math.min(cardWidth, (availablePreviewWidth - previewGapWidth) / math.max(1, stackWidthFactor))
         previewWidth = math.max(JACL_DECK_MODAL_CARD_WIDTH, previewWidth)
         _, previewHeight = carddraw.getExpandedCardSize({
             width = previewWidth,
@@ -2278,7 +2294,7 @@ function envdraw.getJaclDeckPreviewModalLayout(previewCardDefinitions)
     end
 
     local previewTotalWidth = previewCount > 0
-        and ((previewCount * previewWidth) + ((previewCount - 1) * previewGap))
+        and getSummonPreviewEntriesWidth(previewEntries, previewWidth, previewGap)
         or 0
     local labelFont = getFont(JACL_LABEL_FONT_PATH, SPECIAL_TOOLTIP_TITLE_SIZE)
     local labelHeight = previewCount > 0
@@ -2322,8 +2338,9 @@ function envdraw.drawJaclDeckPreviewModal(card, preview)
     end
 
     local windowWidth, windowHeight = love.graphics.getDimensions()
-    local previewCardDefinitions = preview and preview.cardDefinitions or nil
-    local layout = envdraw.getJaclDeckPreviewModalLayout(previewCardDefinitions)
+    local previewCards = preview and (preview.cardDefinitionEntries or preview.cardDefinitions) or nil
+    local previewEntries = normalizeSummonPreviewEntries(previewCards)
+    local layout = envdraw.getJaclDeckPreviewModalLayout(previewCards)
 
     love.graphics.setColor(0.01, 0.01, 0.02, 0.36)
     love.graphics.rectangle("fill", 0, 0, windowWidth, windowHeight)
@@ -2333,23 +2350,23 @@ function envdraw.drawJaclDeckPreviewModal(card, preview)
         showBadgesInTextbox = true,
     })
 
-    if previewCardDefinitions and #previewCardDefinitions > 0 then
-        for previewIndex, previewCardDefinition in ipairs(previewCardDefinitions) do
-            local previewX = layout.previewX + ((previewIndex - 1) * (layout.previewWidth + layout.previewGap))
-
-            carddraw.drawCardState(previewCardDefinition.setName, previewCardDefinition.id, previewX, layout.previewY, 1, {
-                width = layout.previewWidth,
-                showBadgesInTextbox = true,
-            })
-        end
-
+    if previewEntries and #previewEntries > 0 then
+        local previousFont = love.graphics.getFont()
+        local labelFont = getFont(JACL_LABEL_FONT_PATH, SPECIAL_TOOLTIP_TITLE_SIZE)
+        drawSummonPreviewEntries(
+            previewEntries,
+            layout.previewX,
+            layout.previewY,
+            layout.previewWidth,
+            layout.previewHeight,
+            layout.previewGap,
+            labelFont
+        )
         love.graphics.setColor(0.05, 0.05, 0.06, 0.96)
         love.graphics.rectangle("fill", layout.previewX, layout.labelY, layout.previewTotalWidth, layout.labelHeight, 6, 6)
         love.graphics.setColor(0.82, 0.85, 0.89, 0.82)
         love.graphics.rectangle("line", layout.previewX, layout.labelY, layout.previewTotalWidth, layout.labelHeight, 6, 6)
 
-        local previousFont = love.graphics.getFont()
-        local labelFont = getFont(JACL_LABEL_FONT_PATH, SPECIAL_TOOLTIP_TITLE_SIZE)
         love.graphics.setFont(labelFont)
         love.graphics.setColor(0.95, 0.96, 0.98, 1)
         love.graphics.printf(
@@ -3343,7 +3360,112 @@ function envdraw.drawFloatingMethodBadge(resourceName, centerX, centerY)
     love.graphics.setColor(1, 1, 1, 1)
 end
 
-function envdraw.drawJaclSpecialTooltip(specialDefinition, previewCardDefinition, anchorX, anchorY, anchorWidth, anchorHeight)
+normalizeSummonPreviewEntries = function(previewCards)
+    local previewEntries = {}
+
+    for _, previewCard in ipairs(previewCards or {}) do
+        if previewCard.definition then
+            previewEntries[#previewEntries + 1] = {
+                definition = previewCard.definition,
+                count = math.max(1, math.floor(tonumber(previewCard.count or previewCard.quantity) or 1)),
+            }
+        elseif previewCard.cardDefinition then
+            previewEntries[#previewEntries + 1] = {
+                definition = previewCard.cardDefinition,
+                count = math.max(1, math.floor(tonumber(previewCard.count or previewCard.quantity) or 1)),
+            }
+        else
+            previewEntries[#previewEntries + 1] = {
+                definition = previewCard,
+                count = math.max(1, math.floor(tonumber(previewCard.count or previewCard.quantity) or 1)),
+            }
+        end
+    end
+
+    return previewEntries
+end
+
+getSummonPreviewEntryWidth = function(previewWidth, previewEntry)
+    local count = math.max(1, tonumber(previewEntry and previewEntry.count) or 1)
+    local visibleStackCount = math.min(count, 5)
+    local stackOffset = previewWidth * 0.24
+
+    return previewWidth + ((visibleStackCount - 1) * stackOffset)
+end
+
+getSummonPreviewEntriesWidth = function(previewEntries, previewWidth, previewGap)
+    local totalWidth = 0
+
+    for previewIndex, previewEntry in ipairs(previewEntries or {}) do
+        if previewIndex > 1 then
+            totalWidth = totalWidth + previewGap
+        end
+
+        totalWidth = totalWidth + getSummonPreviewEntryWidth(previewWidth, previewEntry)
+    end
+
+    return totalWidth
+end
+
+drawSummonPreviewStack = function(previewEntry, previewX, previewY, previewWidth, previewHeight, labelFont)
+    local previewCardDefinition = previewEntry.definition
+
+    if not previewCardDefinition then
+        return
+    end
+
+    local count = math.max(1, math.floor(tonumber(previewEntry.count) or 1))
+    local visibleStackCount = math.min(count, 5)
+    local stackOffset = previewWidth * 0.24
+
+    for stackIndex = visibleStackCount, 1, -1 do
+        local offset = (stackIndex - 1) * stackOffset
+        local cardX = previewX + offset
+
+        if stackIndex > 1 then
+            love.graphics.setColor(0.02, 0.025, 0.03, 0.72)
+            love.graphics.rectangle("fill", cardX - 4, previewY + 4, previewWidth, previewHeight, 8, 8)
+            love.graphics.setColor(0.86, 0.88, 0.93, 0.64)
+            love.graphics.rectangle("line", cardX, previewY, previewWidth, previewHeight, 8, 8)
+        end
+
+        carddraw.drawCardState(previewCardDefinition.setName, previewCardDefinition.id, cardX, previewY, 1, {
+            showBadgesInTextbox = true,
+        })
+    end
+
+    if count > 1 then
+        local badgeText = "x" .. tostring(count)
+        local badgePaddingX = SPECIAL_TOOLTIP_PADDING * 0.7
+        local badgeHeight = labelFont:getHeight() + 8
+        local badgeWidth = math.max(labelFont:getWidth(badgeText) + (badgePaddingX * 2), badgeHeight)
+        local badgeX = previewX + getSummonPreviewEntryWidth(previewWidth, previewEntry) - badgeWidth - 8
+        local badgeY = previewY + previewHeight - badgeHeight - 8
+
+        love.graphics.setColor(0.04, 0.045, 0.055, 0.94)
+        love.graphics.rectangle("fill", badgeX, badgeY, badgeWidth, badgeHeight, 5, 5)
+        love.graphics.setColor(0.92, 0.94, 0.98, 0.92)
+        love.graphics.rectangle("line", badgeX, badgeY, badgeWidth, badgeHeight, 5, 5)
+        love.graphics.setFont(labelFont)
+        love.graphics.setColor(0.96, 0.97, 1, 1)
+        love.graphics.printf(
+            badgeText,
+            badgeX,
+            badgeY + ((badgeHeight - labelFont:getHeight()) / 2),
+            badgeWidth,
+            "center"
+        )
+    end
+end
+
+drawSummonPreviewEntries = function(previewEntries, previewX, previewY, previewWidth, previewHeight, previewGap, labelFont)
+    for _, previewEntry in ipairs(previewEntries or {}) do
+        drawSummonPreviewStack(previewEntry, previewX, previewY, previewWidth, previewHeight, labelFont)
+        previewX = previewX + getSummonPreviewEntryWidth(previewWidth, previewEntry) + previewGap
+    end
+end
+
+function envdraw.drawJaclSpecialTooltip(specialDefinition, previewCards, anchorX, anchorY, anchorWidth, anchorHeight)
     if not specialDefinition then
         return
     end
@@ -3351,31 +3473,43 @@ function envdraw.drawJaclSpecialTooltip(specialDefinition, previewCardDefinition
     local previousFont = love.graphics.getFont()
     local titleFont = getFont(JACL_LABEL_FONT_PATH, SPECIAL_TOOLTIP_TITLE_SIZE)
     local bodyFont = getFont(JACL_LABEL_FONT_PATH, SPECIAL_TOOLTIP_BODY_SIZE)
+    local previewEntries = nil
     local previewWidth, previewHeight = 0, 0
+    local previewTotalWidth = 0
+    local previewGap = SPECIAL_TOOLTIP_PREVIEW_GAP
 
-    if previewCardDefinition then
-        previewWidth, previewHeight = carddraw.getExpandedCardSize()
+    if previewCards then
+        if previewCards.definition or previewCards.cardDefinition or previewCards.setName then
+            previewEntries = normalizeSummonPreviewEntries({ previewCards })
+        else
+            previewEntries = normalizeSummonPreviewEntries(previewCards)
+        end
     end
 
-    local tooltipWidth = previewWidth > 0 and previewWidth or SPECIAL_TOOLTIP_WIDTH
+    if previewEntries and #previewEntries > 0 then
+        previewWidth, previewHeight = carddraw.getExpandedCardSize()
+        previewTotalWidth = getSummonPreviewEntriesWidth(previewEntries, previewWidth, previewGap)
+    end
+
+    local tooltipWidth = previewTotalWidth > 0 and previewTotalWidth or SPECIAL_TOOLTIP_WIDTH
     local textWidth = tooltipWidth - (SPECIAL_TOOLTIP_PADDING * 2)
     local _, wrappedBodyLines = bodyFont:getWrap(specialDefinition.text or "", textWidth)
     local titleHeight = titleFont:getHeight()
     local bodyHeight = math.max(bodyFont:getHeight(), #wrappedBodyLines * bodyFont:getHeight())
     local tooltipHeight = (SPECIAL_TOOLTIP_PADDING * 2) + titleHeight + 6 + bodyHeight
     local totalWidth = tooltipWidth
-    local totalHeight = tooltipHeight + (previewCardDefinition and (SPECIAL_TOOLTIP_PREVIEW_GAP + previewHeight) or 0)
+    local totalHeight = tooltipHeight + (previewEntries and (SPECIAL_TOOLTIP_PREVIEW_GAP + previewHeight) or 0)
     local windowWidth, windowHeight = love.graphics.getDimensions()
     local gap = SPECIAL_TOOLTIP_OFFSET_X
     local rightX = (anchorX or 0) + (anchorWidth or 0) + gap
     local leftX = (anchorX or 0) - gap - totalWidth
     local boxX = rightX + totalWidth <= windowWidth - 8 and rightX or leftX
     local boxY = anchorY or 0
-    local tooltipY = boxY + (previewCardDefinition and (previewHeight + SPECIAL_TOOLTIP_PREVIEW_GAP) or 0)
+    local tooltipY = boxY + (previewEntries and (previewHeight + SPECIAL_TOOLTIP_PREVIEW_GAP) or 0)
 
     boxX = snap(math.max(8, math.min(boxX, windowWidth - totalWidth - 8)))
     boxY = snap(math.max(8, math.min(boxY, windowHeight - totalHeight - 8)))
-    tooltipY = boxY + (previewCardDefinition and (previewHeight + SPECIAL_TOOLTIP_PREVIEW_GAP) or 0)
+    tooltipY = boxY + (previewEntries and (previewHeight + SPECIAL_TOOLTIP_PREVIEW_GAP) or 0)
 
     love.graphics.setColor(0.02, 0.025, 0.03, 0.42)
     love.graphics.rectangle(
@@ -3407,20 +3541,18 @@ function envdraw.drawJaclSpecialTooltip(specialDefinition, previewCardDefinition
         "left"
     )
 
-    if previewCardDefinition then
-        local previewX = boxX
-        local previewY = boxY
-        carddraw.drawCardState(previewCardDefinition.setName, previewCardDefinition.id, previewX, previewY, 1, {
-            showBadgesInTextbox = true,
-        })
+    if previewEntries then
+        drawSummonPreviewEntries(previewEntries, boxX, boxY, previewWidth, previewHeight, previewGap, titleFont)
     end
 
     love.graphics.setFont(previousFont)
     love.graphics.setColor(1, 1, 1, 1)
 end
 
-function envdraw.drawSummonPreviewTooltip(previewCardDefinitions, anchorX, anchorY, anchorWidth, anchorHeight, labelText)
-    if not previewCardDefinitions or #previewCardDefinitions <= 0 then
+function envdraw.drawSummonPreviewTooltip(previewCards, anchorX, anchorY, anchorWidth, anchorHeight, labelText)
+    local previewEntries = normalizeSummonPreviewEntries(previewCards)
+
+    if #previewEntries <= 0 then
         return
     end
 
@@ -3429,7 +3561,8 @@ function envdraw.drawSummonPreviewTooltip(previewCardDefinitions, anchorX, ancho
     local previewWidth, previewHeight = carddraw.getExpandedCardSize()
     local bubbleHeight = (SPECIAL_TOOLTIP_PADDING * 2) + labelFont:getHeight()
     local previewGap = SPECIAL_TOOLTIP_PREVIEW_GAP
-    local totalWidth = (#previewCardDefinitions * previewWidth) + ((#previewCardDefinitions - 1) * previewGap)
+    local totalWidth = getSummonPreviewEntriesWidth(previewEntries, previewWidth, previewGap)
+
     local totalHeight = previewHeight + SPECIAL_TOOLTIP_PREVIEW_GAP + bubbleHeight
     local windowWidth, windowHeight = love.graphics.getDimensions()
     local gap = SPECIAL_TOOLTIP_OFFSET_X
@@ -3454,13 +3587,7 @@ function envdraw.drawSummonPreviewTooltip(previewCardDefinitions, anchorX, ancho
         8
     )
 
-    for previewIndex, previewCardDefinition in ipairs(previewCardDefinitions) do
-        local previewX = boxX + ((previewIndex - 1) * (previewWidth + previewGap))
-
-        carddraw.drawCardState(previewCardDefinition.setName, previewCardDefinition.id, previewX, boxY, 1, {
-            showBadgesInTextbox = true,
-        })
-    end
+    drawSummonPreviewEntries(previewEntries, boxX, boxY, previewWidth, previewHeight, previewGap, labelFont)
 
     love.graphics.setColor(0.05, 0.05, 0.06, 0.96)
     love.graphics.rectangle("fill", boxX, bubbleY, totalWidth, bubbleHeight, 6, 6)

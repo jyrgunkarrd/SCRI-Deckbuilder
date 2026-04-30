@@ -59,7 +59,7 @@ function modals.isPointInsideJaclDeckPreviewModal(mouseX, mouseY, deps, card)
     return isPointInsideRect(
         mouseX,
         mouseY,
-        deps.envdraw.getJaclDeckPreviewModalLayout(preview and preview.cardDefinitions or nil)
+        deps.envdraw.getJaclDeckPreviewModalLayout(preview and (preview.cardDefinitionEntries or preview.cardDefinitions) or nil)
     )
 end
 

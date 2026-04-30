@@ -91,6 +91,13 @@ local dice = {
     facedesc = "Does nothing.",
 },
 
+{
+    id = "MNGL",
+    type = "BlMang",
+    facename = "Mangled",
+    facedesc = "Does nothing.",
+},
+
  --- Basic Damage ---
 
  {
@@ -328,6 +335,26 @@ local dice = {
             area = true,
         },
 
+        {
+            id = "MNGDMG1",
+            type = "MngDmg",
+            value = 1,
+            targ = "Atk",
+            mangle = true,
+            facename = "Mangling Attack",
+            facedesc = "Deal damage to a target troop or Champion. Mangle their dice.",
+        },
+
+        {
+            id = "MNGDMG2",
+            type = "MngDmg",
+            value = 2,
+            targ = "Atk",
+            mangle = true,
+            facename = "Mangling Attack",
+            facedesc = "Deal damage to a target troop or Champion. Mangle their dice.",
+        },
+
 
     -- Pain Damage ---
 
@@ -343,9 +370,29 @@ local dice = {
     },
 
     {
+        id = "PDMG7",
+        type = "PainDmg",
+        value = 7,
+        targ = "Atk",
+        pain = true,
+        facename = "Suicide Attack",
+        facedesc = "Deal damage to a target troop or Champion. Deal damage to this card.",
+    },
+
+    {
         id = "PDMG6",
         type = "PainDmg",
         value = 6,
+        targ = "Atk",
+        pain = true,
+        facename = "Suicide Attack",
+        facedesc = "Deal damage to a target troop or Champion. Deal damage to this card.",
+    },
+
+    {
+        id = "PDMG5",
+        type = "PainDmg",
+        value = 5,
         targ = "Atk",
         pain = true,
         facename = "Suicide Attack",
@@ -415,6 +462,57 @@ local dice = {
         area = true,
         facename = "Area Suicide Attack",
         facedesc = "Deal damage to a target troop and adjacent troops or Champion. Deal damage to this card.",
+
+    },
+
+    {
+        id = "ARPDMG3",
+        type = "AreaPainDmg",
+        value = 3,
+        targ = "Atk",
+        pain = true,
+        area = true,
+        facename = "Area Suicide Attack",
+        facedesc = "Deal damage to a target troop and adjacent troops or Champion. Deal damage to this card.",
+
+    },
+
+    {
+        id = "EXOARPDMG1",
+        type = "ExoAreaPainDmg",
+        value = 1,
+        targ = "Atk",
+        pain = true,
+        area = true,
+        autoReload = true,
+        facename = "Exotic Weapon Area Suicide Attack",
+        facedesc = "Deal damage to a target troop and adjacent troops or Champion. Deal damage to this card. This card gains Reloading.",
+
+    },
+
+    {
+        id = "EXOARPDMG2",
+        type = "ExoAreaPainDmg",
+        value = 2,
+        targ = "Atk",
+        pain = true,
+        area = true,
+        autoReload = true,
+        facename = "Exotic Weapon Area Suicide Attack",
+        facedesc = "Deal damage to a target troop and adjacent troops or Champion. Deal damage to this card. This card gains Reloading.",
+
+    },
+
+    {
+        id = "EXOARPDMG3",
+        type = "ExoAreaPainDmg",
+        value = 3,
+        targ = "Atk",
+        pain = true,
+        area = true,
+        autoReload = true,
+        facename = "Exotic Weapon Area Suicide Attack",
+        facedesc = "Deal damage to a target troop and adjacent troops or Champion. Deal damage to this card. This card gains Reloading.",
 
     },
 
@@ -879,6 +977,37 @@ local dice = {
         preview = {
             label = "SUMMON",
             cardIds = { "AEGPRIVEDTOK", "AEGMYRARTOK", "AEGNYFETOK" },
+        },
+    },
+
+    {
+        id = "ANGELSMN",
+        type = "Summon",
+        value = 1,
+        targ = "smn",
+        facename = "Summon",
+        facedesc = "Summon the shown enemy.",
+        target = { "ENNUN" },
+        func = "Spawn",
+        preview = {
+            label = "SUMMON",
+            cardId = "ENNUN",
+        },
+    },
+
+    {
+        id = "ORBSMN",
+        type = "PainSummon",
+        value = 1,
+        targ = "smn",
+        facename = "Suicide Summon",
+        facedesc = "Summon the shown enemy. Deal damage to this card.",
+        target = { "ENORB" },
+        func = "Spawn",
+        pain = true,
+        preview = {
+            label = "SUMMON",
+            cardId = "ENORB",
         },
     },
     

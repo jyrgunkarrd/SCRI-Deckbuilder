@@ -85,12 +85,51 @@ local decks = {
     --- Champion decks ---
 
         {
-            id = "DCK002",
-            name = "DemoChamp",
+            id = "BSCDCK",
+            name = "Sermon City Basic",
             cards = {
                 {
+                    cardId = "ENBISH",
+                    quantity = 1,
+                },
+                {
+                    cardId = "ENSEEN",
+                    quantity = 1,
+                },
+                {
                     cardId = "ENFEN",
-                    quantity = 5,
+                    quantity = 1,
+                },
+                {
+                    cardId = "EN0002",
+                    quantity = 1,
+                },
+                {
+                    cardId = "ENNUNC",
+                    quantity = 1,
+                },
+                {
+                    cardId = "ENSEENDRON",
+                    quantity = 1,
+                },
+                {
+                    cardId = "ENBISHDEC",
+                    quantity = 1,
+                },
+                {
+                    cardId = "ENSTRD",
+                    quantity = 1,
+                },
+            },
+        },
+
+        {
+            id = "Demo",
+            name = "Enemy Testbed",
+            cards = {
+                {
+                    cardId = "ENSTRD",
+                    quantity = 10,
                 },
             },
         },

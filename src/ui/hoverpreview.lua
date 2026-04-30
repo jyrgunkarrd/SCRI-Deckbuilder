@@ -12,12 +12,14 @@ end
 
 function hoverpreview.clearSpawnPreview(state)
     state.hoveredTomeSpawnPreviewCard = nil
+    state.hoveredTomeSpawnPreviewCardEntries = nil
     state.hoveredTomeSpawnPreviewCards = nil
     state.hoveredTomeSpawnPreviewLabel = nil
     state.hoveredTomeSpawnPreviewCardIndex = nil
 end
 
 function hoverpreview.clearCardAbilityPreview(state)
+    state.hoveredCardAbilityPreviewCardEntries = nil
     state.hoveredCardAbilityPreviewCards = nil
     state.hoveredCardAbilityPreviewLabel = nil
     state.hoveredCardAbilityPreviewDefinition = nil
@@ -171,6 +173,7 @@ function hoverpreview.updateSpawnPreview(state, deps, card, cardIndex)
         local preview = deps.previewrules.getDefinitionPreview(cardDefinition)
     
         if preview then
+            state.hoveredTomeSpawnPreviewCardEntries = preview.cardDefinitionEntries
             state.hoveredTomeSpawnPreviewCards = preview.cardDefinitions
             state.hoveredTomeSpawnPreviewCard = preview.cardDefinition
             state.hoveredTomeSpawnPreviewLabel = preview.label
@@ -191,6 +194,14 @@ function hoverpreview.attachDefinitionPreview(deps, tooltip, fallbackLabel)
 
     if tooltip.previewCardDefinition and not tooltip.previewCardDefinitions then
         tooltip.previewCardDefinitions = { tooltip.previewCardDefinition }
+    end
+
+    if tooltip.previewCardDefinitionEntries and not tooltip.previewCardDefinitions then
+        tooltip.previewCardDefinitions = {}
+
+        for _, previewEntry in ipairs(tooltip.previewCardDefinitionEntries) do
+            tooltip.previewCardDefinitions[#tooltip.previewCardDefinitions + 1] = previewEntry.definition
+        end
     end
 
     if tooltip.previewCardDefinitions and not tooltip.previewCardDefinition then
@@ -223,6 +234,7 @@ function hoverpreview.updateCardAbilityPreview(state, deps, mouseX, mouseY)
         or nil
     
     if preview then
+        state.hoveredCardAbilityPreviewCardEntries = preview.cardDefinitionEntries
         state.hoveredCardAbilityPreviewCards = preview.cardDefinitions
         state.hoveredCardAbilityPreviewLabel = preview.label
     end

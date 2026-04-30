@@ -23,6 +23,7 @@ local SAVIOR_KEYWORD_ID = "KWSAV"
 local RELOADING_KEYWORD_ID = "KWRLD"
 local TOME_CARD_TYPE = "tome"
 local CACHE_CARD_TYPE = "cache"
+local MANGLED_DIE_FACE_ID = "MNGL"
 local ENEMY_CARD_TARGET_TYPES = { "Atk", "AtkSab", "TAtk", "closeatk", "maulatk" }
 local PLAYER_WARZONE_TARGET_TYPES = { "WZPlayer", "InfTac" }
 
@@ -32,6 +33,37 @@ end
 
 local function hasReloadingKeyword(definition, card)
     return keywordrules.cardHasKeyword(definition, RELOADING_KEYWORD_ID, card)
+end
+
+local function isMangledFace(definition, card, faceIndex)
+    local faceOverride = card and card.dieFaceOverrides and card.dieFaceOverrides[faceIndex] or nil
+    return faceOverride == MANGLED_DIE_FACE_ID
+        or (not faceOverride and definition and definition["D" .. tostring(faceIndex)] == MANGLED_DIE_FACE_ID)
+end
+
+local function mangleCardFaces(card, definition, amount)
+    local mangleCount = math.max(0, math.floor(tonumber(amount) or 0))
+
+    if not card or not definition or mangleCount <= 0 then
+        return 0
+    end
+
+    local mangledCount = 0
+    card.dieFaceOverrides = card.dieFaceOverrides or {}
+
+    -- D1 upward matches the current mangle rule example: existing D1/D2 -> mangle D3/D4 next.
+    for faceIndex = 1, 6 do
+        if mangledCount >= mangleCount then
+            break
+        end
+
+        if definition["D" .. tostring(faceIndex)] and not isMangledFace(definition, card, faceIndex) then
+            card.dieFaceOverrides[faceIndex] = MANGLED_DIE_FACE_ID
+            mangledCount = mangledCount + 1
+        end
+    end
+
+    return mangledCount
 end
 
 local function isSourceAtFullHealth(definition, sourceCard)
@@ -468,6 +500,7 @@ local function getNormalizedFaceBehavior(faceDefinition)
     local selfHeal = faceDefinition.selfHeal == true or hasTargetType(faceDefinition.targ, "maulatk")
     local sabotageObjective = faceDefinition.sabotageObjective == true or hasTargetType(faceDefinition.targ, "AtkSab")
     local wound = faceDefinition.wound == true
+    local mangle = faceDefinition.mangle == true
     local drawCards = faceDefinition.drawcard == true
     local generatedResource = faceDefinition.genres
 
@@ -491,6 +524,7 @@ local function getNormalizedFaceBehavior(faceDefinition)
         selfHeal = selfHeal,
         sabotageObjective = sabotageObjective,
         wound = wound,
+        mangle = mangle,
     }
 end
 
@@ -640,6 +674,7 @@ local function buildRollState(entityKey, definition, faceIndices, isEnemy, prese
         selfHeal = normalizedBehavior.selfHeal,
         sabotageObjective = normalizedBehavior.sabotageObjective,
         wound = normalizedBehavior.wound,
+        mangle = normalizedBehavior.mangle,
         autoReload = autoReload,
         exhausted = (preserveState and preserveState.exhausted) or (sourceCard and sourceCard.preludeStrategyExhausted == true) or false,
         locked = preserveState and preserveState.locked or false,
@@ -1456,6 +1491,22 @@ function warrules.isRollSequenceComplete()
     return #pendingWarRolls == 0
 end
 
+local function rollStateCanRetaliate(rollState)
+    return rollState
+        and rollState.faceIndex
+        and (rollState.damageValue or 0) > 0
+        and (
+            hasTargetType(rollState, "Blk")
+            or hasTargetType(rollState, "smn")
+            or hasTargetType(rollState, "rsmn")
+            or (canTargetEnemyCard(rollState) and rollState.targetCardIndex)
+            or (hasTargetType(rollState, "Inf") and rollState.targetCard and rollState.targetCard.kind == "deck")
+            or (hasTargetType(rollState, "Obj") and rollState.targetCard and rollState.targetCard.kind == "objective")
+            or hasTargetType(rollState, "WZOpp")
+            or (hasTargetType(rollState, "IntCD") and rollState.targetCard and rollState.targetCard.kind == "intel")
+        )
+end
+
 function warrules.beginRetaliatePhase(topSlotTargets, cards)
     pendingRetaliations = {}
     retaliateTimer = 0
@@ -1465,26 +1516,18 @@ function warrules.beginRetaliatePhase(topSlotTargets, cards)
 
         if rollState
             and target.isEnemy ~= false
-            and rollState.faceIndex
-            and (rollState.damageValue or 0) > 0
-            and (
-                hasTargetType(rollState, "Blk")
-                or (canTargetEnemyCard(rollState) and rollState.targetCardIndex)
-                or (hasTargetType(rollState, "Inf") and rollState.targetCard and rollState.targetCard.kind == "deck")
-                or (hasTargetType(rollState, "Obj") and rollState.targetCard and rollState.targetCard.kind == "objective")
-                or hasTargetType(rollState, "WZOpp")
-                or (hasTargetType(rollState, "IntCD") and rollState.targetCard and rollState.targetCard.kind == "intel")
-            ) then
+            and rollStateCanRetaliate(rollState) then
                 pendingRetaliations[#pendingRetaliations + 1] = {
                     entityKey = target.id,
                     sourceDefinition = rollState.sourceDefinition,
                     sourceCard = rollState.sourceCard,
                     targetType = firstEnemyCardTargetType(rollState)
-                        or firstTargetTypeMatching(rollState, { "Blk", "Inf", "Obj", "WZOpp", "IntCD" }),
+                        or firstTargetTypeMatching(rollState, { "Blk", "smn", "rsmn", "Inf", "Obj", "WZOpp", "IntCD" }),
                     targetCardIndex = rollState.targetCardIndex,
                     targetCard = rollState.targetCard,
                     damageValue = rollState.damageValue,
                     cardgen = rollState.cardgen,
+                    cardgenPool = rollState.cardgenPool,
                     area = rollState.area,
                     pain = rollState.pain,
                     lrange = rollState.lrange,
@@ -1492,6 +1535,7 @@ function warrules.beginRetaliatePhase(topSlotTargets, cards)
                     selfBlock = rollState.selfBlock,
                     selfHeal = rollState.selfHeal,
                     wound = rollState.wound,
+                    mangle = rollState.mangle,
                     isTopSlot = true,
                 }
         end
@@ -1519,26 +1563,19 @@ function warrules.beginRetaliatePhase(topSlotTargets, cards)
         local rollState = warRollDisplayStates[entityKey]
 
         if rollState
-            and rollState.faceIndex
-            and (rollState.damageValue or 0) > 0
-            and (
-                hasTargetType(rollState, "Blk")
-                or (canTargetEnemyCard(rollState) and rollState.targetCardIndex)
-                or (hasTargetType(rollState, "Inf") and rollState.targetCard and rollState.targetCard.kind == "deck")
-                or (hasTargetType(rollState, "Obj") and rollState.targetCard and rollState.targetCard.kind == "objective")
-                or hasTargetType(rollState, "WZOpp")
-                or (hasTargetType(rollState, "IntCD") and rollState.targetCard and rollState.targetCard.kind == "intel")
-            ) then
+            and rollStateCanRetaliate(rollState) then
                 pendingRetaliations[#pendingRetaliations + 1] = {
                     entityKey = entityKey,
                     sourceDefinition = rollState.sourceDefinition,
                     sourceCard = rollState.sourceCard,
+                    sourceCardIndex = rowCard.cardIndex,
                     targetType = firstEnemyCardTargetType(rollState)
-                        or firstTargetTypeMatching(rollState, { "Blk", "Inf", "Obj", "WZOpp", "IntCD" }),
+                        or firstTargetTypeMatching(rollState, { "Blk", "smn", "rsmn", "Inf", "Obj", "WZOpp", "IntCD" }),
                     targetCardIndex = rollState.targetCardIndex,
                     targetCard = rollState.targetCard,
                     damageValue = rollState.damageValue,
                     cardgen = rollState.cardgen,
+                    cardgenPool = rollState.cardgenPool,
                     area = rollState.area,
                     pain = rollState.pain,
                     lrange = rollState.lrange,
@@ -1546,6 +1583,7 @@ function warrules.beginRetaliatePhase(topSlotTargets, cards)
                     selfBlock = rollState.selfBlock,
                     selfHeal = rollState.selfHeal,
                     wound = rollState.wound,
+                    mangle = rollState.mangle,
                     isTopSlot = false,
                 }
         end
@@ -1717,6 +1755,10 @@ end
 
 function warrules.canTargetCardByHeavyRestriction(targetDefinition, targetCard, attackContext, cards)
     return not isHeavyRestrictedTarget(targetDefinition, targetCard, attackContext, cards)
+end
+
+function warrules.mangleCardFaces(card, definition, amount)
+    return mangleCardFaces(card, definition, amount)
 end
 
 return warrules

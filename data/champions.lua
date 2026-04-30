@@ -7,7 +7,7 @@ local champions = {
         name = "PAM",
         health = 20,
         max= 20,
-        deckId = "DCK002",
+        deckId = "BSCDCK",
         intelDeck = {
             {
                 cardId = "INT0001",

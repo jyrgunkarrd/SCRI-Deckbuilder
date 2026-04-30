@@ -313,9 +313,11 @@ function gamestatedraw.draw(ctx)
     elseif ctx.hoveredDiceFace then
         ctx.carddraw.drawDiceFaceTooltip(ctx.hoveredDiceFace)
 
-        if ctx.hoveredDiceFace.previewCardDefinitions and #ctx.hoveredDiceFace.previewCardDefinitions > 0 then
+        local previewCards = ctx.hoveredDiceFace.previewCardDefinitionEntries or ctx.hoveredDiceFace.previewCardDefinitions
+
+        if previewCards and #previewCards > 0 then
             ctx.envdraw.drawSummonPreviewTooltip(
-                ctx.hoveredDiceFace.previewCardDefinitions,
+                previewCards,
                 ctx.hoveredDiceFace.cardX,
                 ctx.hoveredDiceFace.cardY,
                 ctx.hoveredDiceFace.cardWidth,
@@ -331,7 +333,8 @@ function gamestatedraw.draw(ctx)
                 ctx.hoveredDiceFace.cardHeight
             )
         end
-    elseif ctx.hoveredTomeSpawnPreviewCards and #ctx.hoveredTomeSpawnPreviewCards > 0 then
+    elseif (ctx.hoveredTomeSpawnPreviewCardEntries and #ctx.hoveredTomeSpawnPreviewCardEntries > 0)
+        or (ctx.hoveredTomeSpawnPreviewCards and #ctx.hoveredTomeSpawnPreviewCards > 0) then
         local sourceCardIndex = ctx.hoveredTomeSpawnPreviewCardIndex or ctx.hoveredCardIndex
         local hoveredCard = sourceCardIndex and ctx.cards[sourceCardIndex] or nil
 
@@ -342,7 +345,7 @@ function gamestatedraw.draw(ctx)
             local cardHeight = collapsedHeight + ((expandedHeight - collapsedHeight) * (expansionProgress or 0))
 
             ctx.envdraw.drawSummonPreviewTooltip(
-                ctx.hoveredTomeSpawnPreviewCards,
+                ctx.hoveredTomeSpawnPreviewCardEntries or ctx.hoveredTomeSpawnPreviewCards,
                 drawX,
                 drawY,
                 cardWidth,
@@ -362,7 +365,7 @@ function gamestatedraw.draw(ctx)
 
             ctx.envdraw.drawJaclSpecialTooltip(
                 ctx.hoveredCardAbilityPreviewDefinition,
-                ctx.hoveredCardAbilityPreviewCards and ctx.hoveredCardAbilityPreviewCards[1] or nil,
+                ctx.hoveredCardAbilityPreviewCardEntries or ctx.hoveredCardAbilityPreviewCards,
                 drawX,
                 drawY,
                 cardWidth,

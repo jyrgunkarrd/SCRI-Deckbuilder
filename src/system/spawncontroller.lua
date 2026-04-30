@@ -16,6 +16,7 @@ function spawncontroller.getSpawnContext(ctx)
         cardExpansion = ctx.state.cardExpansion,
         cardEntranceProgress = ctx.state.cardEntranceProgress,
         playerDeck = ctx.state.playerDeck,
+        cardregistry = ctx.cardregistry,
         envdraw = ctx.envdraw,
         turnrules = ctx.turnrules,
         warrules = ctx.warrules,

@@ -4,6 +4,31 @@ local keywordrules = require("src.system.keywordrules")
 
 local cardlifecycle = {}
 
+local function getEnemyReinforcementValue(ctx, card)
+    if not ctx or not card or not card.location or card.location.kind ~= "grid" or card.location.rowId ~= "OppRow" then
+        return 0
+    end
+
+    local cardDefinition = ctx.cardregistry.getCard(card.setName, card.cardId)
+    return math.max(0, tonumber(cardDefinition and cardDefinition.rfc) or 0)
+end
+
+local function applyEnemyDefeatChampionDamage(ctx, card)
+    if not ctx or not card or card.rfcChampionDamageApplied then
+        return false
+    end
+
+    local reinforcementDamage = getEnemyReinforcementValue(ctx, card)
+
+    if reinforcementDamage <= 0 or not ctx.dealDamageToChampion then
+        return false
+    end
+
+    card.rfcChampionDamageApplied = true
+    ctx.dealDamageToChampion(reinforcementDamage)
+    return true
+end
+
 local function resolveDefeatedCard(ctx, cardIndex, card)
     local state = ctx and ctx.state or nil
 
@@ -15,6 +40,7 @@ local function resolveDefeatedCard(ctx, cardIndex, card)
 
     cardlifecycle.releaseAttachedKits(ctx, card)
     ctx.resolveDestroyedTroopCard(cardIndex, attachedKitCards)
+
     ctx.trooprules.notifyPlayerRowUnitDefeated(cardIndex, {
         cards = state.cards,
         cardregistry = ctx.cardregistry,
@@ -46,6 +72,7 @@ function cardlifecycle.startCardDestruction(ctx, cardIndex)
     card.destroyElapsed = 0
     card.destroySeed = love.math.random() * 1000
     ctx.warrules.clearCardRollState(cardIndex)
+    applyEnemyDefeatChampionDamage(ctx, card)
     ctx.sfxrules.playDestroy()
 
     if state.selectedAttackerCardIndex == cardIndex then
@@ -135,6 +162,7 @@ function cardlifecycle.restoreAttachedPilotToSlot(ctx, cardIndex, vehicleCard)
         currentHealth = attachedPilot.currentHealth,
         maxHealth = attachedPilot.maxHealth,
         keywordValues = attachedPilot.keywordValues,
+        dieFaceOverrides = attachedPilot.dieFaceOverrides,
         attachedKitCards = attachedPilot.attachedKitCards,
         location = ctx.copyLocation(vehicleCard.location),
     }
@@ -234,6 +262,7 @@ function cardlifecycle.expireCardFromPlay(ctx, cardIndex)
         return false
     end
 
+    applyEnemyDefeatChampionDamage(ctx, card)
     resolveDefeatedCard(ctx, cardIndex, card)
     return cardlifecycle.removeCardFromPlay(ctx, cardIndex)
 end

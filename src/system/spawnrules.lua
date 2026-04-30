@@ -1,15 +1,130 @@
 local cardinstances = require("src.system.cardinstances")
 local cardzones = require("src.system.cardzones")
+local keywordrules = require("src.system.keywordrules")
 
 local spawnrules = {}
+local GROWTH_KEYWORD_ID = "KWGRO"
 
 local function getCards(ctx)
     return ctx and ctx.cards or nil
 end
 
+local function getCardDefinition(ctx, card)
+    if not ctx or not ctx.cardregistry or not card then
+        return nil
+    end
+
+    return ctx.cardregistry.getCard(card.setName, card.cardId)
+end
+
+local function getEnemyRfc(cardDefinition)
+    return math.max(0, tonumber(cardDefinition and cardDefinition.rfc) or 0)
+end
+
+local function getCardCurrentHealth(card)
+    return math.max(0, tonumber(card and card.currentHealth) or 0)
+end
+
+local function findLowestRfcEnemyInRow(ctx, rowId)
+    local lowestCardIndex = nil
+    local lowestCard = nil
+    local lowestDefinition = nil
+    local lowestRfc = nil
+
+    for cardIndex, card in ipairs(getCards(ctx) or {}) do
+        if card
+            and card.location
+            and card.location.kind == "grid"
+            and card.location.rowId == rowId
+            and not card.destroyed
+            and not card.destroying then
+            local cardDefinition = getCardDefinition(ctx, card)
+            local rfc = getEnemyRfc(cardDefinition)
+
+            if lowestRfc == nil
+                or rfc < lowestRfc
+                or (rfc == lowestRfc and getCardCurrentHealth(card) < getCardCurrentHealth(lowestCard)) then
+                lowestCardIndex = cardIndex
+                lowestCard = card
+                lowestDefinition = cardDefinition
+                lowestRfc = rfc
+            end
+        end
+    end
+
+    return lowestCardIndex, lowestCard, lowestDefinition
+end
+
+local function isGridRowFull(ctx, rowId)
+    local row = ctx and ctx.envdraw and rowId and ctx.envdraw.getGridRow(rowId) or nil
+
+    if not row then
+        return false
+    end
+
+    for _, cell in ipairs(row.cells or {}) do
+        if cell.column and not cardzones.isGridRowColumnOccupied(getCards(ctx), rowId, cell.column) then
+            return false
+        end
+    end
+
+    return true
+end
+
+local function createReinforcedReplacementCard(ctx, cardDefinition, rowId)
+    if not ctx or rowId ~= "OppRow" or not cardDefinition then
+        return nil
+    end
+
+    local replacedCardIndex, replacedCard, replacedDefinition = findLowestRfcEnemyInRow(ctx, rowId)
+
+    if not replacedCardIndex or not replacedCard or not replacedCard.location then
+        return nil
+    end
+
+    local reinforcementValue = getEnemyRfc(replacedDefinition) * getCardCurrentHealth(replacedCard)
+    local generatedCard = cardinstances.createGenerated(cardDefinition, {
+        kind = "grid",
+        rowId = rowId,
+        column = replacedCard.location.column,
+    })
+
+    if not generatedCard then
+        return nil
+    end
+
+    cardinstances.initializeHealth(generatedCard)
+
+    if reinforcementValue > 0 then
+        keywordrules.addCardKeywordValue(generatedCard, cardDefinition, GROWTH_KEYWORD_ID, reinforcementValue)
+    end
+
+    ctx.cards[replacedCardIndex] = generatedCard
+
+    if ctx.cardExpansion then
+        ctx.cardExpansion[replacedCardIndex] = 0
+    end
+
+    if ctx.cardEntranceProgress then
+        ctx.cardEntranceProgress[replacedCardIndex] = 1
+    end
+
+    if ctx.warrules and ctx.warrules.clearCardRollState then
+        ctx.warrules.clearCardRollState(replacedCardIndex)
+    end
+
+    return generatedCard, replacedCardIndex, reinforcementValue
+end
+
 local function createGeneratedGridCard(ctx, cardDefinition, rowId, column)
     if not ctx then
         return nil
+    end
+
+    if rowId == "OppRow"
+        and cardDefinition
+        and isGridRowFull(ctx, rowId) then
+        return createReinforcedReplacementCard(ctx, cardDefinition, rowId)
     end
 
     local generatedCard = cardinstances.createGeneratedGridCard(
@@ -74,6 +189,10 @@ end
 
 function spawnrules.createGeneratedGridCard(ctx, cardDefinition, rowId, column)
     return createGeneratedGridCard(ctx, cardDefinition, rowId, column)
+end
+
+function spawnrules.createReinforcedReplacementCard(ctx, cardDefinition, rowId)
+    return createReinforcedReplacementCard(ctx, cardDefinition, rowId)
 end
 
 function spawnrules.getClosestOpenGridColumns(ctx, rowId, anchorColumn, ignoredCardIndex, preferredColumn)
@@ -142,6 +261,14 @@ function spawnrules.spawnTokensNearCard(ctx, sourceCardIndex, tokenDefinition, c
         end
     end
 
+    while rowId == "OppRow" and spawnedCount < count and isGridRowFull(ctx, rowId) do
+        if createReinforcedReplacementCard(ctx, tokenDefinition, rowId) then
+            spawnedCount = spawnedCount + 1
+        else
+            break
+        end
+    end
+
     return spawnedCount
 end
 
@@ -172,6 +299,16 @@ function spawnrules.spawnRandomTokensNearCard(ctx, sourceCardIndex, tokenDefinit
 
         if createGeneratedGridCard(ctx, tokenDefinition, rowId, column) then
             spawnedCount = spawnedCount + 1
+        end
+    end
+
+    while rowId == "OppRow" and spawnedCount < count and isGridRowFull(ctx, rowId) do
+        local tokenDefinition = tokenDefinitions[love.math.random(1, #tokenDefinitions)]
+
+        if createReinforcedReplacementCard(ctx, tokenDefinition, rowId) then
+            spawnedCount = spawnedCount + 1
+        else
+            break
         end
     end
 

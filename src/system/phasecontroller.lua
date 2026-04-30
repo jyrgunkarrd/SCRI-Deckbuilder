@@ -9,6 +9,20 @@ local function getCardIndexFromEntityKey(entityKey)
     return cardIndex and tonumber(cardIndex) or nil
 end
 
+local function findCardIndex(cards, card)
+    if not card then
+        return nil
+    end
+
+    for cardIndex, candidateCard in ipairs(cards or {}) do
+        if candidateCard == card then
+            return cardIndex
+        end
+    end
+
+    return nil
+end
+
 local function applyAreaDamageToAdjacentCards(gameState, deps, retaliation)
     if not retaliation
         or retaliation.area ~= true
@@ -35,6 +49,104 @@ local function applyWoundToTarget(targetEntity, targetDefinition, rollState)
     end
 
     return keywordrules.addCardKeywordValue(targetEntity, targetDefinition, WOUND_KEYWORD_ID, woundValue)
+end
+
+local function applyMangleToTarget(deps, targetCard, targetDefinition, rollState)
+    if rollState
+        and rollState.mangle == true
+        and deps.warrules
+        and deps.warrules.mangleCardFaces then
+        return deps.warrules.mangleCardFaces(targetCard, targetDefinition, rollState.damageValue or 0)
+    end
+
+    return 0
+end
+
+local function getRetaliationSourceCardIndex(gameState, retaliation)
+    local sourceCardIndex = retaliation.sourceCardIndex or getCardIndexFromEntityKey(retaliation.entityKey)
+
+    if sourceCardIndex
+        and gameState.cards
+        and gameState.cards[sourceCardIndex] == retaliation.sourceCard then
+        return sourceCardIndex
+    end
+
+    return findCardIndex(gameState.cards, retaliation.sourceCard) or sourceCardIndex
+end
+
+local function resolveSummonRetaliation(gameState, deps, retaliation)
+    local sourceCardIndex = getRetaliationSourceCardIndex(gameState, retaliation)
+    local spawnCount = math.max(0, math.floor(tonumber(retaliation.damageValue) or 0))
+
+    if not sourceCardIndex or spawnCount <= 0 then
+        if deps.notifications then
+            deps.notifications.push("Summon failed: no source")
+        end
+
+        return false
+    end
+
+    if retaliation.targetType == "smn" and deps.spawnTokensNearCard then
+        local generatedCardDefinition = deps.cardregistry.getCardById(retaliation.cardgen)
+
+        if generatedCardDefinition then
+            local spawnedCount = deps.spawnTokensNearCard(sourceCardIndex, generatedCardDefinition, spawnCount)
+
+            if spawnedCount > 0 then
+                if deps.notifications then
+                    deps.notifications.push("Summoned " .. generatedCardDefinition.name)
+                end
+
+                return true
+            end
+
+            if deps.notifications then
+                deps.notifications.push("Summon failed: no open OppRow cell")
+            end
+
+            return false
+        end
+
+        if deps.notifications then
+            deps.notifications.push("Summon failed: missing " .. tostring(retaliation.cardgen))
+        end
+    elseif retaliation.targetType == "rsmn" and deps.spawnRandomTokensNearCard then
+        local generatedCardDefinitions = {}
+
+        for _, cardId in ipairs(retaliation.cardgenPool or {}) do
+            local generatedCardDefinition = deps.cardregistry.getCardById(cardId)
+
+            if generatedCardDefinition then
+                generatedCardDefinitions[#generatedCardDefinitions + 1] = generatedCardDefinition
+            end
+        end
+
+        if #generatedCardDefinitions > 0 then
+            local spawnedCount = deps.spawnRandomTokensNearCard(sourceCardIndex, generatedCardDefinitions, spawnCount)
+
+            if spawnedCount > 0 then
+                if deps.notifications then
+                    deps.notifications.push("Summoned enemy")
+                end
+
+                return true
+            end
+
+            if deps.notifications then
+                deps.notifications.push("Summon failed: no open OppRow cell")
+            end
+
+            return false
+        end
+
+        if deps.notifications then
+            deps.notifications.push("Summon failed: no valid pool")
+        end
+    elseif deps.notifications then
+        deps.notifications.push("Summon failed: missing spawn helper")
+    end
+
+    return false
 end
 
 local function resolveCardWoundDamage(gameState, deps, card)
@@ -253,6 +365,13 @@ local function resolveRetaliation(gameState, deps, retaliation)
             deps.beginInfiltrationEffect(retaliation.entityKey, generatedCardDefinition, retaliation.damageValue or 0)
         end
 
+    elseif retaliation.targetType == "smn" or retaliation.targetType == "rsmn" then
+        local resolved = resolveSummonRetaliation(gameState, deps, retaliation)
+
+        if resolved and deps.sfxrules and deps.sfxrules.playUnitPlay then
+            deps.sfxrules.playUnitPlay()
+        end
+
     else
         local targetCard = gameState.cards[retaliation.targetCardIndex]
         local shouldApplyAreaDamage = targetCard and not deps.isCardUnavailable(targetCard)
@@ -262,6 +381,12 @@ local function resolveRetaliation(gameState, deps, retaliation)
             if retaliation.sourceCard then
                 local targetDefinition = deps.cardregistry.getCard(targetCard.setName, targetCard.cardId)
                 applyWoundToTarget(targetCard, targetDefinition, retaliation)
+
+                if applyMangleToTarget(deps, targetCard, targetDefinition, retaliation) > 0
+                    and deps.warrules
+                    and deps.warrules.refreshCardRollValue then
+                    deps.warrules.refreshCardRollValue(retaliation.targetCardIndex, gameState.cards)
+                end
             end
             applyAreaDamageToAdjacentCards(gameState, deps, retaliation)
             applyRetaliationSideEffects(gameState, deps, retaliation)

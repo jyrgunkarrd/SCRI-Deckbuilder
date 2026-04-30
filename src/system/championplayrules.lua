@@ -7,6 +7,7 @@ local championplayrules = {}
 
 local DEFAULT_PLAY_DELAY = 0.2
 local DEFAULT_ENCOUNTER_SPAWN_DELAY = 0.16
+local GROWTH_KEYWORD_ID = "KWGRO"
 
 function championplayrules.createState()
     return {
@@ -51,6 +52,44 @@ function championplayrules.getCenterBiasedOppRowColumn(ctx)
     return bestColumn
 end
 
+local function getEnemyRfc(cardDefinition)
+    return math.max(0, tonumber(cardDefinition and cardDefinition.rfc) or 0)
+end
+
+local function getCardCurrentHealth(card)
+    return math.max(0, tonumber(card and card.currentHealth) or 0)
+end
+
+local function findLowestRfcOppRowEnemy(ctx)
+    local lowestCardIndex = nil
+    local lowestCard = nil
+    local lowestDefinition = nil
+    local lowestRfc = nil
+
+    for cardIndex, card in ipairs(ctx.cards or {}) do
+        if card
+            and card.location
+            and card.location.kind == "grid"
+            and card.location.rowId == "OppRow"
+            and not card.destroyed
+            and not card.destroying then
+            local cardDefinition = cardregistry.getCard(card.setName, card.cardId)
+            local rfc = getEnemyRfc(cardDefinition)
+
+            if lowestRfc == nil
+                or rfc < lowestRfc
+                or (rfc == lowestRfc and getCardCurrentHealth(card) < getCardCurrentHealth(lowestCard)) then
+                lowestCardIndex = cardIndex
+                lowestCard = card
+                lowestDefinition = cardDefinition
+                lowestRfc = rfc
+            end
+        end
+    end
+
+    return lowestCardIndex, lowestCard, lowestDefinition
+end
+
 function championplayrules.playHouseCard(ctx)
     local championDeck = ctx.championDeck
 
@@ -67,14 +106,24 @@ function championplayrules.playHouseCard(ctx)
     end
 
     local targetColumn = championplayrules.getCenterBiasedOppRowColumn(ctx)
+    local replacedCardIndex = nil
+    local replacedCard = nil
+    local replacedDefinition = nil
 
     if not targetColumn then
-        return nil
+        replacedCardIndex, replacedCard, replacedDefinition = findLowestRfcOppRowEnemy(ctx)
+
+        if not replacedCard or not replacedCard.location then
+            return nil
+        end
+
+        targetColumn = replacedCard.location.column
     end
 
     local randomIndex = love.math.random(1, #championDeck.cards)
     local card = table.remove(championDeck.cards, randomIndex)
-    local playedCardIndex = #ctx.cards + 1
+    local playedCardIndex = replacedCardIndex or (#ctx.cards + 1)
+    local reinforcementValue = replacedDefinition and (getEnemyRfc(replacedDefinition) * getCardCurrentHealth(replacedCard)) or 0
 
     ctx.cards[playedCardIndex] = {
         instanceId = card.instanceId,
@@ -90,11 +139,21 @@ function championplayrules.playHouseCard(ctx)
         },
     }
     ctx.initializeCardHealthState(ctx.cards[playedCardIndex])
-    ctx.cardExpansion[playedCardIndex] = 0
-    ctx.cardEntranceProgress[playedCardIndex] = 1
-    sfxrules.playUnitPlay()
 
     local playedCardDefinition = cardregistry.getCard(card.setName, card.cardId)
+
+    if reinforcementValue > 0 then
+        keywordrules.addCardKeywordValue(ctx.cards[playedCardIndex], playedCardDefinition, GROWTH_KEYWORD_ID, reinforcementValue)
+    end
+
+    ctx.cardExpansion[playedCardIndex] = 0
+    ctx.cardEntranceProgress[playedCardIndex] = 1
+
+    if replacedCardIndex and ctx.warrules and ctx.warrules.clearCardRollState then
+        ctx.warrules.clearCardRollState(replacedCardIndex)
+    end
+
+    sfxrules.playUnitPlay()
 
     return playedCardDefinition, playedCardIndex
 end

@@ -424,7 +424,8 @@ local function getEffectiveFaceDefinition(cardDefinition, faceIndex, card)
         return nil
     end
 
-    local baseFaceDefinition = getDiceDefinition(cardDefinition["D" .. tostring(faceIndex)])
+    local faceOverride = card and card.dieFaceOverrides and card.dieFaceOverrides[faceIndex] or nil
+    local baseFaceDefinition = getDiceDefinition(faceOverride or cardDefinition["D" .. tostring(faceIndex)])
 
     if not baseFaceDefinition then
         return nil
@@ -684,6 +685,7 @@ local function expandMethodEntries(methodEntries)
 end
 
 local function getPortraitDirectory(cardDefinition, setName)
+    local portraitId = cardDefinition.artId or cardDefinition.id
     local candidates = {
         setName,
         cardDefinition.type,
@@ -692,7 +694,7 @@ local function getPortraitDirectory(cardDefinition, setName)
 
     for _, candidate in ipairs(candidates) do
         if candidate then
-            local path = CARD_IMAGE_DIRECTORY .. candidate .. "/" .. cardDefinition.id .. ".png"
+            local path = CARD_IMAGE_DIRECTORY .. candidate .. "/" .. portraitId .. ".png"
 
             if love.filesystem.getInfo(path) then
                 return candidate
@@ -704,7 +706,8 @@ local function getPortraitDirectory(cardDefinition, setName)
 end
 
 local function getPortrait(cardDefinition, setName)
-    local portraitKey = setName .. ":" .. cardDefinition.id
+    local portraitId = cardDefinition.artId or cardDefinition.id
+    local portraitKey = setName .. ":" .. portraitId
 
     if portraitCache[portraitKey] ~= nil then
         return portraitCache[portraitKey]
@@ -717,7 +720,7 @@ local function getPortrait(cardDefinition, setName)
         return nil
     end
 
-    local portraitPath = CARD_IMAGE_DIRECTORY .. portraitDirectory .. "/" .. cardDefinition.id .. ".png"
+    local portraitPath = CARD_IMAGE_DIRECTORY .. portraitDirectory .. "/" .. portraitId .. ".png"
     portraitCache[portraitKey] = love.graphics.newImage(portraitPath, {
         mipmaps = true,
     })
@@ -758,11 +761,46 @@ local function getMethodBadgeLayout(width, footerHeight, padding, methodEntries)
     return expandedResources, badgeInset, badgeSize, badgeGap, totalWidth
 end
 
-local function drawHealthFooter(x, y, width, height, padding, footerHeight, footerFont, healthValue, maxHealthValue, damagePreviewCount, blockedDamagePreviewCount, blockingValue, alpha, methodEntries, pipColor, pipShape, card)
+local function getRfcBadgeLabel(rfcValue)
+    return tostring(math.max(0, math.floor(tonumber(rfcValue) or 0)))
+end
+
+local function getRfcBadgeWidth(size, rfcValue, font)
+    local label = getRfcBadgeLabel(rfcValue)
+    local horizontalPadding = math.max(4, snap(size * 0.22))
+
+    return math.max(size, snap(font:getWidth(label) + (horizontalPadding * 2)))
+end
+
+local function drawRfcBadge(x, y, width, height, rfcValue, font, alpha)
+    local label = getRfcBadgeLabel(rfcValue)
+    local previousFont = love.graphics.getFont()
+
+    love.graphics.setColor(0.14, 0.035, 0.035, alpha)
+    love.graphics.rectangle("fill", x, y, width, height, 3, 3)
+    love.graphics.setColor(0.92, 0.58, 0.42, alpha)
+    love.graphics.rectangle("line", x, y, width, height, 3, 3)
+    love.graphics.setColor(1, 0.78, 0.54, alpha)
+    love.graphics.setFont(font)
+    love.graphics.printf(
+        label,
+        x,
+        y + ((height - font:getHeight()) / 2),
+        width,
+        "center"
+    )
+    love.graphics.setFont(previousFont)
+end
+
+local function drawHealthFooter(x, y, width, height, padding, footerHeight, footerFont, healthValue, maxHealthValue, damagePreviewCount, blockedDamagePreviewCount, blockingValue, alpha, methodEntries, pipColor, pipShape, card, rfcValue)
     local footerY = y + height - footerHeight
     local expandedResources, badgeInset, badgeSize, badgeGap, totalBadgeWidth = getMethodBadgeLayout(width, footerHeight, padding, methodEntries)
     local badgesStartX = x + width - padding - totalBadgeWidth
-    local textWidth = width - (padding * 2)
+    local hasRfcBadge = rfcValue ~= nil
+    local rfcBadgeWidth = hasRfcBadge and getRfcBadgeWidth(badgeSize, rfcValue, footerFont) or 0
+    local rfcReservedWidth = hasRfcBadge and (rfcBadgeWidth + (badgeInset * 2)) or 0
+    local contentStartX = x + padding + rfcReservedWidth
+    local textWidth = width - (padding * 2) - rfcReservedWidth
     local footerPipColor = pipColor or TROOP_HEALTH_PIP_COLOR
 
     love.graphics.setColor(0, 0, 0, alpha)
@@ -770,8 +808,12 @@ local function drawHealthFooter(x, y, width, height, padding, footerHeight, foot
     love.graphics.setColor(0.87, 0.87, 0.9, alpha)
     love.graphics.rectangle("line", x, footerY, width, footerHeight)
 
+    if hasRfcBadge then
+        drawRfcBadge(x + padding, footerY + badgeInset, rfcBadgeWidth, badgeSize, rfcValue, footerFont, alpha)
+    end
+
     if #expandedResources > 0 then
-        textWidth = width - (padding * 2) - totalBadgeWidth - badgeInset
+        textWidth = width - (padding * 2) - rfcReservedWidth - totalBadgeWidth - badgeInset
 
         for resourceIndex, resourceName in ipairs(expandedResources) do
             local methodImage = getMethodImage(resourceName)
@@ -817,9 +859,15 @@ local function drawHealthFooter(x, y, width, height, padding, footerHeight, foot
         return
     end
 
-    local columnCount = math.min(HEALTH_PIP_COLUMNS, maxTrackPipCount)
-    local healthRowCount = math.max(1, math.ceil(maxPipCount / HEALTH_PIP_COLUMNS))
-    local blockRowCount = blockPipCount > 0 and math.max(1, math.ceil(blockPipCount / HEALTH_PIP_COLUMNS)) or 0
+    local maxColumnCount = HEALTH_PIP_COLUMNS
+
+    if hasRfcBadge then
+        maxColumnCount = math.min(maxColumnCount, math.max(1, math.ceil(maxTrackPipCount / 2)))
+    end
+
+    local columnCount = math.min(maxColumnCount, maxTrackPipCount)
+    local healthRowCount = math.max(1, math.ceil(maxPipCount / maxColumnCount))
+    local blockRowCount = blockPipCount > 0 and math.max(1, math.ceil(blockPipCount / maxColumnCount)) or 0
     local rowCount = healthRowCount + blockRowCount
     local pipGap = math.max(1, snap(footerHeight * 0.08))
     local availableWidth = math.max(1, textWidth)
@@ -831,12 +879,12 @@ local function drawHealthFooter(x, y, width, height, padding, footerHeight, foot
     local pipSize = math.max(2, snap(math.min(pipSizeByWidth, pipSizeByHeight, maxDefaultPipSize)))
     local totalGridWidth = (columnCount * pipSize) + ((columnCount - 1) * pipGap)
     local totalGridHeight = (rowCount * pipSize) + ((rowCount - 1) * pipGap)
-    local startX = snap(x + padding + ((availableWidth - totalGridWidth) / 2))
+    local startX = snap(contentStartX + ((availableWidth - totalGridWidth) / 2))
     local startY = snap(footerY + ((footerHeight - totalGridHeight) / 2))
 
     local function getPipPosition(pipIndex, rowOffset)
-        local row = math.floor(pipIndex / HEALTH_PIP_COLUMNS) + (rowOffset or 0)
-        local column = pipIndex % HEALTH_PIP_COLUMNS
+        local row = math.floor(pipIndex / maxColumnCount) + (rowOffset or 0)
+        local column = pipIndex % maxColumnCount
         local pipX = startX + (column * (pipSize + pipGap))
         local pipY = startY + (row * (pipSize + pipGap))
 
@@ -2134,7 +2182,7 @@ function carddraw.drawCardState(setName, cardId, x, y, expansionProgress, option
             drawPortraitBadges(cardDefinition, metrics.card, drawX, portraitY, renderWidth, portraitHeight, snap(metrics.footerHeight))
         end
 
-        drawHealthFooter(drawX, portraitY, renderWidth, portraitHeight, snap(metrics.padding), snap(metrics.footerHeight), footerFont, displayedHealth, displayedMaxHealth, metrics.damagePreviewCount, metrics.blockedDamagePreviewCount, metrics.blocking, 1, cardDefinition.method, footerPipColor, footerPipShape, metrics.card)
+        drawHealthFooter(drawX, portraitY, renderWidth, portraitHeight, snap(metrics.padding), snap(metrics.footerHeight), footerFont, displayedHealth, displayedMaxHealth, metrics.damagePreviewCount, metrics.blockedDamagePreviewCount, metrics.blocking, 1, cardDefinition.method, footerPipColor, footerPipShape, metrics.card, cardDefinition.rfc)
     elseif cardDefinition.mcost and not metrics.showHealthOnPortrait then
         drawCostBadges(cardDefinition, drawX, portraitY, renderWidth, portraitHeight)
     end
@@ -2233,7 +2281,7 @@ function carddraw.drawCardState(setName, cardId, x, y, expansionProgress, option
             end
 
             if displayedHealth ~= nil and textboxHeight > snap(metrics.footerHeight) and not metrics.showHealthOnPortrait then
-                drawHealthFooter(drawX, textY, renderWidth, textboxHeight, snap(metrics.padding), snap(metrics.footerHeight), footerFont, displayedHealth, displayedMaxHealth, metrics.damagePreviewCount, metrics.blockedDamagePreviewCount, metrics.blocking, expansionProgress, cardDefinition.method, footerPipColor, footerPipShape, metrics.card)
+                drawHealthFooter(drawX, textY, renderWidth, textboxHeight, snap(metrics.padding), snap(metrics.footerHeight), footerFont, displayedHealth, displayedMaxHealth, metrics.damagePreviewCount, metrics.blockedDamagePreviewCount, metrics.blocking, expansionProgress, cardDefinition.method, footerPipColor, footerPipShape, metrics.card, cardDefinition.rfc)
             elseif cardDefinition.type == "strategy" and textboxHeight > snap(metrics.footerHeight) then
                 drawStrategyFooter(drawX, textY, renderWidth, textboxHeight, snap(metrics.footerHeight), footerFont, expansionProgress)
             end

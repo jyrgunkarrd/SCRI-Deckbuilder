@@ -4,19 +4,54 @@ local cardregistry = require("src.system.cardregistry")
 
 local DEFAULT_PREVIEW_LABEL = "PREVIEW"
 
+local function normalizePreviewCount(count)
+    return math.max(1, math.floor(tonumber(count) or 1))
+end
+
 local function addCardId(cardIds, cardId)
     if cardId and cardId ~= "" then
         cardIds[#cardIds + 1] = cardId
     end
 end
 
+local function addCardEntry(cardEntries, cardId, count)
+    if cardId and cardId ~= "" then
+        cardEntries[#cardEntries + 1] = {
+            cardId = cardId,
+            count = normalizePreviewCount(count),
+        }
+    end
+end
+
+local function getCardEntryId(cardEntry)
+    if type(cardEntry) ~= "table" then
+        return cardEntry
+    end
+
+    return cardEntry.cardId or cardEntry.id or cardEntry[1]
+end
+
 local function addCardIds(cardIds, sourceCardIds)
     if type(sourceCardIds) == "table" then
-        for _, cardId in ipairs(sourceCardIds) do
-            addCardId(cardIds, cardId)
+        for _, cardEntry in ipairs(sourceCardIds) do
+            addCardId(cardIds, getCardEntryId(cardEntry))
         end
     else
         addCardId(cardIds, sourceCardIds)
+    end
+end
+
+local function addCardEntries(cardEntries, sourceCardIds)
+    if type(sourceCardIds) == "table" then
+        for _, cardEntry in ipairs(sourceCardIds) do
+            if type(cardEntry) == "table" then
+                addCardEntry(cardEntries, getCardEntryId(cardEntry), cardEntry.quantity or cardEntry.count)
+            else
+                addCardEntry(cardEntries, cardEntry, 1)
+            end
+        end
+    else
+        addCardEntry(cardEntries, sourceCardIds, 1)
     end
 end
 
@@ -55,15 +90,35 @@ function previewrules.getPreviewCardIds(definition)
     -- preview = { label = "KIT", cards = { { cardId = "X" }, { cardId = "Y" } } }
     if type(preview.cards) == "table" then
         for _, cardEntry in ipairs(preview.cards) do
-            if type(cardEntry) == "table" then
-                addCardId(cardIds, cardEntry.cardId or cardEntry.id)
-            else
-                addCardId(cardIds, cardEntry)
-            end
+            addCardId(cardIds, getCardEntryId(cardEntry))
         end
     end
 
     return cardIds
+end
+
+function previewrules.getPreviewCardEntries(definition)
+    local preview = getPreviewSpec(definition)
+    local cardEntries = {}
+
+    if not preview then
+        return cardEntries
+    end
+
+    addCardEntry(cardEntries, preview.cardId, preview.quantity or preview.count)
+    addCardEntries(cardEntries, preview.cardIds)
+
+    if type(preview.cards) == "table" then
+        for _, cardEntry in ipairs(preview.cards) do
+            if type(cardEntry) == "table" then
+                addCardEntry(cardEntries, getCardEntryId(cardEntry), cardEntry.quantity or cardEntry.count)
+            else
+                addCardEntry(cardEntries, cardEntry, 1)
+            end
+        end
+    end
+
+    return cardEntries
 end
 
 function previewrules.getPreviewLabel(definition, fallbackLabel)
@@ -90,15 +145,38 @@ function previewrules.getPreviewCardDefinitions(definition)
     return previewCardDefinitions
 end
 
-function previewrules.getDefinitionPreview(definition, fallbackLabel)
-    local previewCardDefinitions = previewrules.getPreviewCardDefinitions(definition)
+function previewrules.getPreviewCardDefinitionEntries(definition)
+    local previewCardDefinitionEntries = {}
 
-    if #previewCardDefinitions == 0 then
+    for _, cardEntry in ipairs(previewrules.getPreviewCardEntries(definition)) do
+        local previewCardDefinition = cardregistry.getCardById(cardEntry.cardId)
+
+        if previewCardDefinition then
+            previewCardDefinitionEntries[#previewCardDefinitionEntries + 1] = {
+                definition = previewCardDefinition,
+                count = cardEntry.count,
+            }
+        end
+    end
+
+    return previewCardDefinitionEntries
+end
+
+function previewrules.getDefinitionPreview(definition, fallbackLabel)
+    local previewCardDefinitionEntries = previewrules.getPreviewCardDefinitionEntries(definition)
+    local previewCardDefinitions = {}
+
+    if #previewCardDefinitionEntries == 0 then
         return nil
+    end
+
+    for _, previewEntry in ipairs(previewCardDefinitionEntries) do
+        previewCardDefinitions[#previewCardDefinitions + 1] = previewEntry.definition
     end
 
     return {
         label = previewrules.getPreviewLabel(definition, fallbackLabel),
+        cardDefinitionEntries = previewCardDefinitionEntries,
         cardDefinitions = previewCardDefinitions,
         cardDefinition = previewCardDefinitions[1],
     }
@@ -117,6 +195,7 @@ function previewrules.applyDefinitionPreviewToTooltip(definition, tooltip, fallb
 
     tooltip.previewLabel = preview.label
     tooltip.previewCardDefinition = preview.cardDefinition
+    tooltip.previewCardDefinitionEntries = preview.cardDefinitionEntries
     tooltip.previewCardDefinitions = preview.cardDefinitions
 
     return tooltip

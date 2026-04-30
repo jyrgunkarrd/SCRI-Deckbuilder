@@ -232,6 +232,17 @@ local function applyWoundToTarget(targetEntity, targetDefinition, rollState)
     return keywordrules.addCardKeywordValue(targetEntity, targetDefinition, WOUND_KEYWORD_ID, woundValue)
 end
 
+local function applyMangleToTarget(ctx, targetCard, targetDefinition, rollState)
+    if rollState
+        and rollState.mangle == true
+        and ctx.warrules
+        and ctx.warrules.mangleCardFaces then
+        return ctx.warrules.mangleCardFaces(targetCard, targetDefinition, rollState.damageValue or 0)
+    end
+
+    return 0
+end
+
 local function applyPlayerWarzoneSideEffects(ctx, rollState)
     applyRollUtilitySideEffects(ctx, rollState)
 end
@@ -467,6 +478,12 @@ function engagerules.tryResolveClick(hoveredTopSlotId, ctx)
 
                         if attackerCard then
                             applyWoundToTarget(targetCard, targetDefinition, attackerRollState)
+                        end
+
+                        if applyMangleToTarget(ctx, targetCard, targetDefinition, attackerRollState) > 0
+                            and ctx.warrules
+                            and ctx.warrules.refreshCardRollValue then
+                            ctx.warrules.refreshCardRollValue(ctx.hoveredCardIndex, ctx.cards)
                         end
 
                         if damageResult and damageResult.killed and ctx.resolveKilledEnemyByPlayerCard and ctx.selectedAttackerCardIndex then
