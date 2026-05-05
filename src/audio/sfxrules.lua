@@ -19,6 +19,9 @@ local FLIP_SFX_PATH = "assets/audio/sfx/flip.wav"
 local HUNT_SFX_PATH = "assets/audio/sfx/hunt.wav"
 local EAT_SFX_PATH = "assets/audio/sfx/eat.wav"
 local PILOT_SFX_PATH = "assets/audio/sfx/pilot.wav"
+local FILE_SELECT_SFX_PATH = "assets/audio/sfx/file_select.wav"
+local CLICK_SFX_PATH = "assets/audio/sfx/click.wav"
+local GO_SFX_PATH = "assets/audio/sfx/go.wav"
 
 local hoverSource = nil
 local resourceMoveSource = nil
@@ -39,6 +42,9 @@ local flipSource = nil
 local huntSource = nil
 local eatSource = nil
 local pilotSource = nil
+local fileSelectSource = nil
+local clickSource = nil
+local goSource = nil
 
 local function getHoverSource()
     if hoverSource ~= nil then
@@ -211,6 +217,33 @@ local function getPilotSource()
     return pilotSource
 end
 
+local function getFileSelectSource()
+    if fileSelectSource ~= nil then
+        return fileSelectSource
+    end
+
+    fileSelectSource = love.audio.newSource(FILE_SELECT_SFX_PATH, "static")
+    return fileSelectSource
+end
+
+local function getClickSource()
+    if clickSource ~= nil then
+        return clickSource
+    end
+
+    clickSource = love.audio.newSource(CLICK_SFX_PATH, "static")
+    return clickSource
+end
+
+local function getGoSource()
+    if goSource ~= nil then
+        return goSource
+    end
+
+    goSource = love.audio.newSource(GO_SFX_PATH, "static")
+    return goSource
+end
+
 function sfxrules.playHover()
     local source = getHoverSource():clone()
     source:play()
@@ -303,6 +336,21 @@ end
 
 function sfxrules.playPilot()
     local source = getPilotSource():clone()
+    source:play()
+end
+
+function sfxrules.playFileSelect()
+    local source = getFileSelectSource():clone()
+    source:play()
+end
+
+function sfxrules.playClick()
+    local source = getClickSource():clone()
+    source:play()
+end
+
+function sfxrules.playGo()
+    local source = getGoSource():clone()
     source:play()
 end
 

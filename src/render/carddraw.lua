@@ -79,6 +79,11 @@ local KIA_BADGE_PULSE_MIN = 0.92
 local KIA_BADGE_PULSE_MAX = 1.06
 local PROGRESS_OVERLAY_PULSE_MIN = 0.92
 local PROGRESS_OVERLAY_PULSE_MAX = 1.08
+local DICE_OVERLAY_PULSE_SPEED = 3.8
+local DICE_OVERLAY_PULSE_MIN_ALPHA = 0.42
+local DICE_OVERLAY_PULSE_MAX_ALPHA = 0.95
+local DICE_OVERLAY_PULSE_MIN_SCALE = 0.94
+local DICE_OVERLAY_PULSE_MAX_SCALE = 1.08
 
 local portraitCache = {}
 local keywordImageCache = {}
@@ -523,6 +528,32 @@ local function getDiceImage(diceDefinition)
             diceImageCache[cacheKey]:setFilter("linear", "linear")
             return diceImageCache[cacheKey]
         end
+    end
+
+    diceImageCache[cacheKey] = false
+    return nil
+end
+
+local function getDiceOverlayImage(overlayName)
+    if not overlayName or overlayName == "" then
+        return nil
+    end
+
+    local imageKey = tostring(overlayName):gsub("%.png$", "")
+    local cacheKey = "over:" .. imageKey
+
+    if diceImageCache[cacheKey] ~= nil then
+        return diceImageCache[cacheKey]
+    end
+
+    local imagePath = DICE_IMAGE_DIRECTORY .. imageKey .. ".png"
+
+    if love.filesystem.getInfo(imagePath) then
+        diceImageCache[cacheKey] = love.graphics.newImage(imagePath, {
+            mipmaps = true,
+        })
+        diceImageCache[cacheKey]:setFilter("linear", "linear")
+        return diceImageCache[cacheKey]
     end
 
     diceImageCache[cacheKey] = false
@@ -1277,6 +1308,7 @@ end
 local function drawBadge(x, y, width, height, headerHeight, badgeDefinition, bottomPipMaxScale)
     local hasBadgeValue = badgeDefinition and badgeDefinition.value ~= nil
     local badgeImage = getDiceImage(badgeDefinition)
+    local overlayImage = badgeDefinition and getDiceOverlayImage(badgeDefinition.over) or nil
     local onePipCount = 0
     local twentyFivePipCount = 0
     local fivePipCount = 0
@@ -1402,6 +1434,20 @@ local function drawBadge(x, y, width, height, headerHeight, badgeDefinition, bot
     else
         love.graphics.setColor(0.28, 0.28, 0.32, 1)
         love.graphics.rectangle("fill", artX, artY, artWidth, artHeight, 3, 3)
+    end
+
+    if overlayImage then
+        local pulse = (math.sin(love.timer.getTime() * DICE_OVERLAY_PULSE_SPEED) + 1) / 2
+        local overlayAlpha = lerp(DICE_OVERLAY_PULSE_MIN_ALPHA, DICE_OVERLAY_PULSE_MAX_ALPHA, pulse)
+        local overlayScalePulse = lerp(DICE_OVERLAY_PULSE_MIN_SCALE, DICE_OVERLAY_PULSE_MAX_SCALE, pulse)
+        local overlayScale = math.min(artWidth / overlayImage:getWidth(), artHeight / overlayImage:getHeight()) * overlayScalePulse
+        local overlayWidth = overlayImage:getWidth() * overlayScale
+        local overlayHeight = overlayImage:getHeight() * overlayScale
+        local overlayX = artX + ((artWidth - overlayWidth) / 2)
+        local overlayY = artY + ((artHeight - overlayHeight) / 2)
+
+        love.graphics.setColor(1, 1, 1, overlayAlpha)
+        love.graphics.draw(overlayImage, overlayX, overlayY, 0, overlayScale, overlayScale)
     end
 end
 

@@ -92,7 +92,7 @@ local enemies = {
         D3 = "CQDMG3",
         D4 = "ARPDMG2",
         D5 = "ARPDMG2",
-        D6 = "AWDMG2",
+        D6 = "AWDMG1",
     },
 
     {
@@ -140,7 +140,7 @@ local enemies = {
         max = 2,
         keyword = { "KWCNTR" },
         kwval = {
-            KWCNTR = 2,
+            KWCNTR = 1,
         },
         rfc = 1,
         D1 = "MNGDMG2",

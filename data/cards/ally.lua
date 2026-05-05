@@ -9,6 +9,7 @@ local ally = {
         name = "Rachel",
         health = 2,
         max = 2,
+        keyword = "KWBULLETPROOF",
         flavor = "\"Welcome to Rachel's! How can I help?\"",
         D1 = "DRAWSAB2",
         D2 = "CASHSAB2",

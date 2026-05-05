@@ -48,6 +48,8 @@ function gamestate.createInitialState()
         playerDeck = nil,
         championDeck = nil,
         cards = {},
+        saveSlotId = nil,
+        saveTimestamp = nil,
 
         hoveredCardIndex = nil,
         hoveredTopSlotId = nil,

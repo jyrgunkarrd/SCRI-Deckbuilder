@@ -32,6 +32,7 @@ local tomerules = require("src.system.tomerules")
 local trooprules = require("src.system.trooprules")
 local previewrules = require("src.system.previewrules")
 local gamestate = require("src.system.gamestate")
+local gamestates = require("src.system.gamestates")
 syntacrules = require("src.system.syntacrules")
 spawncontroller = require("src.system.spawncontroller")
 gameactions = require("src.system.gameactions")
@@ -63,6 +64,7 @@ MULLIGAN_REPLACEMENT_ANIMATION_DURATION = 0.28
 MULLIGAN_REPLACEMENT_SLIDE_OFFSET = 96
 local setupScenario = gamestate.getDefaultScenario()
 local gameState = gamestate.createInitialState()
+local appState = gamestates.create()
 local getCardDrawPosition
 local isGridRowColumnOccupied
 local isWarRollSourceActive
@@ -88,6 +90,7 @@ local isHunterCard
 local getCardPresentationContext
 local releaseAttachedKits
 local getCardLifecycleContext
+local startNewRun
 local function getDamageJitterKeyForCard(cardIndex)
     return "card:" .. tostring(cardIndex)
 end
@@ -1185,11 +1188,10 @@ getContextBuildersContext = function()
     })
 end
 
-function love.load()
-    love.math.setRandomSeed(os.time())
-    love.graphics.setBackgroundColor(0.08, 0.08, 0.1)
-    love.graphics.setColor(1, 1, 1)
+startNewRun = function(saveSlotId, saveTimestamp)
     gamestate.resetForNewRun(gameState)
+    gameState.saveSlotId = saveSlotId
+    gameState.saveTimestamp = saveTimestamp
     turnrules.reset()
     resourcerules.reset()
     warrules.reset()
@@ -1243,6 +1245,12 @@ function love.load()
     end
 end
 
+function love.load()
+    love.math.setRandomSeed(os.time())
+    love.graphics.setBackgroundColor(0.08, 0.08, 0.1)
+    love.graphics.setColor(1, 1, 1)
+end
+
 updateInfiltrationEffect = function(dt)
     infiltrationrules.update(dt, function(generatedCardDefinition)
         if createGeneratedDeckCardShuffled(generatedCardDefinition) then
@@ -1252,6 +1260,20 @@ updateInfiltrationEffect = function(dt)
 end
 
 function love.update(dt)
+    if gamestates.isFileSelect(appState) then
+        gamestates.updateFileSelect(appState, dt, {
+            sfxrules = sfxrules,
+        })
+        return
+    end
+
+    if gamestates.isWorldStage(appState) then
+        gamestates.updateWorldStage(appState, dt, {
+            sfxrules = sfxrules,
+        })
+        return
+    end
+
     local entranceDt = math.min(dt, CARD_ENTRANCE_MAX_DT)
 
     gameState.cardEntranceTimer = gameState.cardEntranceTimer + entranceDt
@@ -1328,22 +1350,69 @@ function love.update(dt)
 end
 
 function love.mousepressed(x, y, button)
+    if gamestates.isFileSelect(appState) then
+        gamestates.mousepressedFileSelect(appState, x, y, button, {
+            sfxrules = sfxrules,
+        })
+        return
+    end
+
+    if gamestates.isWorldStage(appState) then
+        gamestates.mousepressedWorldStage(appState, x, y, button, {
+            sfxrules = sfxrules,
+        })
+        return
+    end
+
     inputcontroller.mousepressed(gameState, getInputControllerDeps(), x, y, button)
 end
 
 function love.wheelmoved(_, y)
+    if gamestates.isFileSelect(appState) then
+        return
+    end
+
+    if gamestates.isWorldStage(appState) then
+        gamestates.wheelmovedWorldStage(appState, _, y)
+        return
+    end
+
     inputcontroller.wheelmoved(gameState, getInputControllerDeps(), _, y)
 end
 
 function love.mousereleased(x, y, button)
+    if gamestates.isFileSelect(appState) or gamestates.isWorldStage(appState) then
+        return
+    end
+
     inputcontroller.mousereleased(gameState, getInputControllerDeps(), x, y, button)
 end
 
 function love.keypressed(key)
+    if gamestates.isFileSelect(appState) then
+        gamestates.keypressedFileSelect(appState, key)
+        return
+    end
+
+    if gamestates.isWorldStage(appState) then
+        gamestates.keypressedWorldStage(appState, key)
+        return
+    end
+
     inputcontroller.keypressed(gameState, getInputControllerDeps(), key)
 end
 
 function love.draw()
+    if gamestates.isFileSelect(appState) then
+        gamestates.drawFileSelect(appState)
+        return
+    end
+
+    if gamestates.isWorldStage(appState) then
+        gamestates.drawWorldStage(appState)
+        return
+    end
+
     gameState.hasRenderedFirstFrame = true
     gamestatedraw.draw({
         turnrules = turnrules,

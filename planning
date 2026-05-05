@@ -463,6 +463,7 @@ At the halfway point of a run, the player can choose to put some items into a ca
 
 3 floor, 10 fights per floor + 3 non-fight nodes. 2 milestone encounters per floor with the booster packs. 
 
+ff?fM ff?fM ff?fM
 
 2 Goblins + Archer ? 
 
@@ -478,6 +479,38 @@ Bee + Wolf x2
 
 Thorns x2
 
+
+Runs should have Fuel. Players starts with 8 Fuel; going to the next node costs at least 1 Fuel. Running out of fuel triggers an event with one of 3 outcomes : 
+
+ - Fuel + Elite Hunter + Hunters
+ - Fuel + Hunter
+ - Just fuel
+
+Fuel is inconsistently available as a node reward, and always available in large quantities as a boss reward.
+
+
+Run should also have Munitions and Reagents. Munitions fuel weapon systems that provide a consistent but small source of damage each mission, Reagents fuel a utility system of some sort that has a cantrip-like effect of some kind. 
+
+Runs might also have security teams, who can purge Hunters, and System Integirty, that if broken will start filling the deck with haywire cards. System Integrity can be traded for resource conversion instead of adding pressure to objectives.
+
+Runs need currency. Probably just gold coins. 
+
+
+Stuff we need: 
+
+ - Agents need an Incap state. Unfun to have them go to the discard and be down resources; they need to go down but remain in play contributing their resources.
+
+ - Hunters should immediately play themselves, deducting resources and immediately ratcheting the objective, and draw another card - so having abunch of hunters is dangerous but doesn't stop you from playing the game.
+
+ - Hand limit of 9, to stop players intentionally clogging the hand to stop Hunter plays.
+
+ - Signature cards for PAM.
+
+ - Mac the Lion, new basic fight
+
+ - Team Polychrome, new elite fight, inspired by Sky Strikers 
+
+ - Modular set cards: Crosshair Gang, Airship Ezekial
 
 
 

@@ -7,76 +7,76 @@ local dice = {
     
         {
             id = "D001",
-            type = "BasicDmg",
+            type = "Black",
             value = 3,
             targ = "Atk",
         },
 
         {
             id = "D002",
-            type = "Blank",
+            type = "Black",
             facename = "Blank",
             facedesc = "Does nothing.",
         },
 
         {
             id = "D003",
-            type = "BasicDmg",
+            type = "Black",
             value = 72,
         },
 
         {
             id = "D004",
-            type = "RedButton",
+            type = "Black",
             value = 1,
             targ = "Obj",
         },
 
         {
             id = "D005",
-            type = "RedButton",
+            type = "Black",
             value = 2,
             targ = "Obj",
         },
 
         {
             id = "D006",
-            type = "Detonator",
+            type = "Black",
             value = 6,
             targ = "Sab",
         },
 
         {
             id = "D007",
-            type = "Warrant",
+            type = "Black",
             value = 1,
             targ = "IntCD",
         },
 
         {
             id = "D008",
-            type = "Warrant",
+            type = "Black",
             value = 2,
             targ = "IntCD",
         },
 
         {
             id = "D009",
-            type = "Warrant",
+            type = "Black",
             value = 6,
             targ = "IntCD",
         },
 
         {
             id = "D010",
-            type = "Threat",
+            type = "Black",
             value = 2,
             targ = "WZOpp",
         },
 
         {
             id = "D011",
-            type = "BlackTap",
+            type = "Black",
             value = 8,
             targ = "WZPlayer",
         },
@@ -85,7 +85,7 @@ local dice = {
 
 {
     id = "NUL",
-    type = "Nul",
+    type = "Black",
     image = "Nul",
     facename = "Blank",
     facedesc = "Does nothing.",
@@ -93,7 +93,7 @@ local dice = {
 
 {
     id = "MNGL",
-    type = "BlMang",
+    type = "Black",
     facename = "Mangled",
     facedesc = "Does nothing.",
 },
@@ -102,7 +102,8 @@ local dice = {
 
  {
     id = "BDMG4",
-    type = "BasicDmg",
+    type = "Black",
+    over = "BscAtk",
     value = 4,
     targ = "Atk",
     facename = "Basic Attack",
@@ -111,7 +112,8 @@ local dice = {
  
         {
             id = "BDMG3",
-            type = "BasicDmg",
+            type = "Black",
+            over = "BscAtk",
             value = 3,
             targ = "Atk",
             facename = "Basic Attack",
@@ -120,7 +122,8 @@ local dice = {
 
         {
             id = "BDMG2",
-            type = "BasicDmg",
+            type = "Black",
+            over = "BscAtk",
             value = 2,
             targ = "Atk",
             facename = "Basic Attack",
@@ -129,7 +132,8 @@ local dice = {
 
         {
             id = "BDMG1",
-            type = "BasicDmg",
+            type = "Black",
+            over = "BscAtk",
             value = 1,
             targ = "Atk",
             facename = "Basic Attack",
@@ -140,7 +144,8 @@ local dice = {
 
         {
             id = "TACDMG1",
-            type = "TacAndDmg",
+            type = "SynTac",
+            over = "BscAtk", 
             value = 1,
             action = "attack",
             target = "enemy_card",
@@ -151,7 +156,8 @@ local dice = {
 
         {
             id = "TACDMG2",
-            type = "TacAndDmg",
+            type = "SynTac",
+            over = "BscAtk", 
             value = 2,
             action = "attack",
             target = "enemy_card",
@@ -162,7 +168,8 @@ local dice = {
 
         {
             id = "EXODMG5",
-            type = "ExWeap",
+            type = "Black",
+            over = "ExoAtk",
             value = 5,
             action = "attack",
             target = "enemy_card",
@@ -172,8 +179,21 @@ local dice = {
         },
 
         {
+            id = "EXODMG10",
+            type = "Black",
+            over = "ExoAtk",
+            value = 10,
+            action = "attack",
+            target = "enemy_card",
+            autoReload = true,
+            facename = "Exotic Weapon Attack",
+            facedesc = "Deal damage to a target troop or Champion. This card gains Reloading.",
+        },
+
+        {
             id = "EXORNGDMG5",
-            type = "ExRngWeap",
+            type = "Rng",
+            over = "ExoAtk",
             value = 5,
             action = "attack",
             target = "enemy_card",
@@ -184,19 +204,9 @@ local dice = {
         },
 
         {
-            id = "EXODMG10",
-            type = "ExWeap",
-            value = 10,
-            action = "attack",
-            target = "enemy_card",
-            autoReload = true,
-            facename = "Exotic Weapon Attack",
-            facedesc = "Deal damage to a target troop or Champion. This card gains Reloading.",
-        },
-
-        {
             id = "EXOARDMG10",
-            type = "ExoBeam",
+            type = "Black",
+            over = "ExoAreaAtk",
             value = 10,
             action = "attack",
             target = "enemy_card",
@@ -208,7 +218,8 @@ local dice = {
 
         {
             id = "CQDMG2",
-            type = "MeleeWeap",
+            type = "Black",
+            over = "CQAtk",
             value = 2,
             action = "attack",
             target = "enemy_card",
@@ -219,7 +230,8 @@ local dice = {
 
         {
             id = "CQDMG3",
-            type = "MeleeWeap",
+            type = "Black",
+            over = "CQAtk",
             value = 3,
             action = "attack",
             target = "enemy_card",
@@ -230,7 +242,8 @@ local dice = {
 
         {
             id = "CQDMG1",
-            type = "MeleeWeap",
+            type = "Black",
+            over = "CQAtk",
             value = 1,
             action = "attack",
             target = "enemy_card",
@@ -241,7 +254,8 @@ local dice = {
 
         {
             id = "HCQDMG4",
-            type = "HvyMeleeWeap",
+            type = "Black",
+            over = "CQHvAtk",
             value = 4,
             action = "attack",
             target = "enemy_card",
@@ -253,7 +267,8 @@ local dice = {
 
         {
             id = "MLDMG3",
-            type = "Maul",
+            type = "Black",
+            over = "MlAtk",
             value = 3,
             action = "attack",
             target = "enemy_card",
@@ -264,7 +279,8 @@ local dice = {
 
         {
             id = "ARDMG1",
-            type = "AreaDmg",
+            type = "Black",
+            over = "AreaAtk",
             value = 1,
             targ = "Atk",
             facename = "High Explosive Attack",
@@ -274,7 +290,8 @@ local dice = {
 
         {
             id = "RNGDMG1",
-            type = "LRngDmg",
+            type = "Black",
+            over = "BscRngAtk",
             value = 1,
             targ = "Atk",
             facename = "Long Range Attack",
@@ -284,7 +301,8 @@ local dice = {
 
         {
             id = "IMMACRNGDMG3",
-            type = "ImmacLRngDmg",
+            type = "Rng",
+            over = "ImmRngAtk",
             value = 3,
             targ = "Atk",
             facename = "Immaculate Long Range Attack",
@@ -295,7 +313,8 @@ local dice = {
 
         {
             id = "WDMG1",
-            type = "WoundDmg",
+            type = "Wnd",
+            over = "BscAtk",
             value = 1,
             targ = "Atk",
             facename = "Wound Attack",
@@ -305,7 +324,8 @@ local dice = {
 
         {
             id = "WDMG2",
-            type = "WoundDmg",
+            type = "Wnd",
+            over = "BscAtk",
             value = 2,
             targ = "Atk",
             facename = "Wound Attack",
@@ -315,7 +335,8 @@ local dice = {
 
         {
             id = "AWDMG1",
-            type = "AreaWoundDmg",
+            type = "Wnd",
+            over = "AreaAtk",
             value = 1,
             targ = "Atk",
             facename = "Area Wound Attack",
@@ -326,7 +347,8 @@ local dice = {
 
         {
             id = "AWDMG2",
-            type = "AreaWoundDmg",
+            type = "Wnd",
+            over = "AreaAtk",
             value = 2,
             targ = "Atk",
             facename = "Area Wound Attack",
@@ -337,7 +359,8 @@ local dice = {
 
         {
             id = "MNGDMG1",
-            type = "MngDmg",
+            type = "Mng",
+            over = "BscAtk",
             value = 1,
             targ = "Atk",
             mangle = true,
@@ -347,7 +370,8 @@ local dice = {
 
         {
             id = "MNGDMG2",
-            type = "MngDmg",
+            type = "Mng",
+            over = "BscAtk",
             value = 2,
             targ = "Atk",
             mangle = true,
@@ -361,7 +385,8 @@ local dice = {
 
     {
         id = "PDMG8",
-        type = "PainDmg",
+        type = "Sui",
+        over = "BscAtk",
         value = 8,
         targ = "Atk",
         pain = true,
@@ -371,7 +396,8 @@ local dice = {
 
     {
         id = "PDMG7",
-        type = "PainDmg",
+        type = "Sui",
+        over = "BscAtk",
         value = 7,
         targ = "Atk",
         pain = true,
@@ -381,7 +407,8 @@ local dice = {
 
     {
         id = "PDMG6",
-        type = "PainDmg",
+        type = "Sui",
+        over = "BscAtk",
         value = 6,
         targ = "Atk",
         pain = true,
@@ -391,7 +418,8 @@ local dice = {
 
     {
         id = "PDMG5",
-        type = "PainDmg",
+        type = "Sui",
+        over = "BscAtk",
         value = 5,
         targ = "Atk",
         pain = true,
@@ -401,7 +429,8 @@ local dice = {
 
     {
         id = "PDMG4",
-        type = "PainDmg",
+        type = "Sui",
+        over = "BscAtk",
         value = 4,
         targ = "Atk",
         pain = true,
@@ -411,7 +440,8 @@ local dice = {
 
     {
         id = "PDMG3",
-        type = "PainDmg",
+        type = "Sui",
+        over = "BscAtk",
         value = 1,
         targ = "Atk",
         pain = true,
@@ -421,7 +451,8 @@ local dice = {
 
     {
         id = "PDMG2",
-        type = "PainDmg",
+        type = "Sui",
+        over = "BscAtk",
         value = 2,
         targ = "Atk",
         pain = true,
@@ -432,7 +463,8 @@ local dice = {
 
     {
         id = "PDMG1",
-        type = "PainDmg",
+        type = "Sui",
+        over = "BscAtk",
         value = 1,
         targ = "Atk",
         pain = true,
@@ -443,7 +475,8 @@ local dice = {
 
     {
         id = "ARPDMG1",
-        type = "AreaPainDmg",
+        type = "Sui",
+        over = "AreaAtk",
         value = 1,
         targ = "Atk",
         pain = true,
@@ -455,7 +488,8 @@ local dice = {
 
     {
         id = "ARPDMG2",
-        type = "AreaPainDmg",
+        type = "Sui",
+        over = "AreaAtk",
         value = 2,
         targ = "Atk",
         pain = true,
@@ -467,7 +501,8 @@ local dice = {
 
     {
         id = "ARPDMG3",
-        type = "AreaPainDmg",
+        type = "Sui",
+        over = "AreaAtk",
         value = 3,
         targ = "Atk",
         pain = true,
@@ -479,7 +514,8 @@ local dice = {
 
     {
         id = "EXOARPDMG1",
-        type = "ExoAreaPainDmg",
+        type = "Black",
+        over = "ExoAreaPAtk",
         value = 1,
         targ = "Atk",
         pain = true,
@@ -492,7 +528,8 @@ local dice = {
 
     {
         id = "EXOARPDMG2",
-        type = "ExoAreaPainDmg",
+        type = "Black",
+        over = "ExoAreaPAtk",
         value = 2,
         targ = "Atk",
         pain = true,
@@ -505,7 +542,8 @@ local dice = {
 
     {
         id = "EXOARPDMG3",
-        type = "ExoAreaPainDmg",
+        type = "Black",
+        over = "ExoAreaPAtk",
         value = 3,
         targ = "Atk",
         pain = true,
@@ -520,37 +558,50 @@ local dice = {
 
     {
         id = "BBLK1",
-        type = "BasicBlk",
+        type = "Black",
+        over = "BscBlk",
         value = 1,
         targ = "Blk",
+        facename = "Basic Block",
+        facedesc = "Add block to an allied troop or Agent.",
     },
 
     {
         id = "BBLK2",
-        type = "BasicBlk",
+        type = "Black",
+        over = "BscBlk",
         value = 2,
         targ = "Blk",
+        facename = "Basic Block",
+        facedesc = "Add block to an allied troop or Agent.",
     },
 
     {
         id = "BBLK3",
-        type = "BasicBlk",
+        type = "Black",
+        over = "BscBlk",
         value = 3,
         targ = "Blk",
+        facename = "Basic Block",
+        facedesc = "Add block to an allied troop or Agent.",
     },
 
     {
         id = "BBLK4",
-        type = "BasicBlk",
+        type = "Black",
+        over = "BscBlk",
         value = 4,
         targ = "Blk",
+        facename = "Basic Block",
+        facedesc = "Add block to an allied troop or Agent.",
     },
 
     --- Advanced Block ---
 
     {
         id = "DIV1",
-        type = "Divert",
+        type = "Black",
+        over = "Div",
         value = 1,
         targ = "Div",
         facename = "Divert Attack",
@@ -559,7 +610,8 @@ local dice = {
 
     {
         id = "DIV2",
-        type = "Divert",
+        type = "Black",
+        over = "Div",
         value = 2,
         targ = "Div",
         facename = "Divert Attack",
@@ -568,7 +620,8 @@ local dice = {
   
     {
         id = "DIV3",
-        type = "Divert",
+        type = "Black",
+        over = "Div",
         value = 3,
         targ = "Div",
         facename = "Divert Attack",
@@ -580,13 +633,17 @@ local dice = {
     {
         id = "TAC1",
         type = "SynTac",
+        over = "BscTac",
         value = 1,
         targ = "Tac",
+        facename = "Basic SynTac",
+        facedesc = "Gain SynTac.",
     },
 
     {
         id = "TAC2",
         type = "SynTac",
+        over = "BscTac",
         value = 2,
         targ = "Tac",
         facename = "Basic SynTac",
@@ -596,6 +653,7 @@ local dice = {
     {
         id = "TAC3",
         type = "SynTac",
+        over = "BscTac",
         value = 3,
         targ = "Tac",
         facename = "Basic SynTac",
@@ -605,6 +663,7 @@ local dice = {
     {
         id = "TAC4",
         type = "SynTac",
+        over = "BscTac",
         value = 4,
         targ = "Tac",
         facename = "Basic SynTac",
@@ -616,7 +675,8 @@ local dice = {
 
     {
         id = "SAB4",
-        type = "Detonator",
+        type = "Sab",
+        over = "BscSab",
         value = 4,
         targ = "Sab",
         facename = "Basic Sabotage",
@@ -625,7 +685,8 @@ local dice = {
 
     {
         id = "SAB3",
-        type = "Detonator",
+        type = "Sab",
+        over = "BscSab",
         value = 3,
         targ = "Sab",
         facename = "Basic Sabotage",
@@ -634,7 +695,8 @@ local dice = {
 
     {
         id = "SAB2",
-        type = "Detonator",
+        type = "Sab",
+        over = "BscSab",
         value = 2,
         targ = "Sab",
         facename = "Basic Sabotage",
@@ -643,7 +705,8 @@ local dice = {
 
     {
         id = "SAB1",
-        type = "Detonator",
+        type = "Sab",
+        over = "BscSab",
         value = 1,
         targ = "Sab",
         facename = "Basic Sabotage",
@@ -654,7 +717,8 @@ local dice = {
 
         {
             id = "TACSAB1",
-            type = "SabAndTac",
+            type = "Sab",
+            over = "BscTac",
             value = 1,
             action = "sabotage",
             target = "objective_or_intel",
@@ -665,7 +729,8 @@ local dice = {
 
         {
             id = "TACSAB2",
-            type = "SabAndTac",
+            type = "Sab",
+            over = "BscTac",
             value = 2,
             action = "sabotage",
             target = "objective_or_intel",
@@ -676,7 +741,8 @@ local dice = {
 
         {
             id = "CASHSAB1",
-            type = "CashDetonator",
+            type = "Sab",
+            over = "BscCsh",
             value = 1,
             targ = "Sab",
             genres = "The Scratch",
@@ -686,7 +752,8 @@ local dice = {
 
         {
             id = "CASHSAB2",
-            type = "CashDetonator",
+            type = "Sab",
+            over = "BscCsh",
             value = 2,
             targ = "Sab",
             genres = "The Scratch",
@@ -696,7 +763,8 @@ local dice = {
 
         {
             id = "DRAWSAB1",
-            type = "DrawDetonator",
+            type = "Draw",
+            over = "BscSab",
             value = 1,
             targ = "Sab",
             drawcard = true,
@@ -706,7 +774,8 @@ local dice = {
 
         {
             id = "DRAWSAB2",
-            type = "DrawDetonator",
+            type = "Draw",
+            over = "BscSab",
             value = 2,
             targ = "Sab",
             drawcard = true,
@@ -718,7 +787,8 @@ local dice = {
 
         {
             id = "PSAB1",
-            type = "PainDetonator",
+            type = "Sui",
+            over = "BscSab",
             value = 1,
             targ = "Sab",
             facename = "Suicide Sabotage",
@@ -730,7 +800,8 @@ local dice = {
 
         {
             id = "ATKORSAB1",
-            type = "AttackOrSabotage",
+            type = "Black",
+            over = "SabAtk",
             value = 1,
             targ = { "Atk", "Sab" },
             facename = "Basic Attack or Sabotage",
@@ -739,7 +810,8 @@ local dice = {
     
         {
             id = "ATKANDSAB1",
-            type = "AttackAndSabotage",
+            type = "Black",
+            over = "SabAtk",
             value = 1,
             action = "attack",
             target = "enemy_card",
@@ -750,7 +822,8 @@ local dice = {
 
         {
             id = "ATKANDSAB2",
-            type = "AttackAndSabotage",
+            type = "Black",
+            over = "SabAtk",
             value = 2,
             action = "attack",
             target = "enemy_card",
@@ -761,7 +834,8 @@ local dice = {
 
         {
             id = "PATKANDSAB1",
-            type = "PainAttackAndSabotage",
+            type = "Sui",
+            over = "SabAtk",
             value = 1,
             action = "attack",
             target = "enemy_card",
@@ -775,7 +849,8 @@ local dice = {
 
     {
         id = "BINF1",
-        type = "BlackTap",
+        type = "Ifl",
+        over = "BscIfl",
         value = 1,
         targ = "WZPlayer",
         facename = "Basic Influence",
@@ -784,7 +859,8 @@ local dice = {
 
     {
         id = "BINF2",
-        type = "BlackTap",
+        type = "Ifl",
+        over = "BscIfl",
         value = 2,
         targ = "WZPlayer",
         facename = "Basic Influence",
@@ -795,7 +871,8 @@ local dice = {
 
     {
         id = "INFTAC1",
-        type = "TacAndInf",
+        type = "Ifl",
+        over = "BscTac",
         value = 1,
         action = "influence",
         target = "player_warzone",
@@ -806,7 +883,8 @@ local dice = {
 
     {
         id = "INFTAC2",
-        type = "TacAndInf",
+        type = "Ifl",
+        over = "BscTac",
         value = 2,
         action = "influence",
         target = "player_warzone",
@@ -819,7 +897,8 @@ local dice = {
 
     {
         id = "INF1",
-        type = "BasicInf",
+        type = "Inf",
+        over = "BscInf",
         value = 1,
         targ = "Inf",
         cardgen = "HNTINFFM",
@@ -833,7 +912,8 @@ local dice = {
 
     {
         id = "INF2",
-        type = "BasicInf",
+        type = "Inf",
+        over = "BscInf",
         value = 2,
         targ = "Inf",
         cardgen = "HNTINFFM",
@@ -849,7 +929,8 @@ local dice = {
 
     {
         id = "WARR1",
-        type = "Warrant",
+        type = "Black",
+        over = "BscWarr",
         value = 1,
         targ = "IntCD",
         facename = "Warrant",
@@ -858,7 +939,8 @@ local dice = {
 
     {
         id = "WARR2",
-        type = "Warrant",
+        type = "Black",
+        over = "BscWarr",
         value = 2,
         targ = "IntCD",
         facename = "Warrant",
@@ -867,7 +949,8 @@ local dice = {
 
     {
         id = "WARR3",
-        type = "Warrant",
+        type = "Black",
+        over = "BscWarr",
         value = 3,
         targ = "IntCD",
         facename = "Warrant",
@@ -878,7 +961,8 @@ local dice = {
 
     {
         id = "THR1",
-        type = "Threat",
+        type = "Ifl",
+        over = "BscThr",
         value = 1,
         targ = "WZOpp",
         facename = "Threaten",
@@ -887,7 +971,8 @@ local dice = {
 
     {
         id = "THR2",
-        type = "Threat",
+        type = "Ifl",
+        over = "BscThr",
         value = 2,
         targ = "WZOpp",
         facename = "Threaten",
@@ -896,7 +981,8 @@ local dice = {
 
     {
         id = "THR3",
-        type = "Threat",
+        type = "Ifl",
+        over = "BscThr",
         value = 3,
         targ = "WZOpp",
         facename = "Threaten",
@@ -907,7 +993,8 @@ local dice = {
 
     {
         id = "OBJ1",
-        type = "RedButton",
+        type = "Cvt",
+        over = "BscBtn",
         value = 1,
         targ = "Obj",
         facename = "Red Switch",
@@ -916,7 +1003,8 @@ local dice = {
 
     {
         id = "OBJ2",
-        type = "RedButton",
+        type = "Cvt",
+        over = "BscBtn",
         value = 2,
         targ = "Obj",
         facename = "Red Switch",
@@ -925,7 +1013,8 @@ local dice = {
 
     {
         id = "OBJ3",
-        type = "RedButton",
+        type = "Cvt",
+        over = "BscBtn",
         value = 3,
         targ = "Obj",
         facename = "Red Switch",
@@ -936,7 +1025,8 @@ local dice = {
 
     {
         id = "FREYSMN",
-        type = "PainSummon",
+        type = "Black",
+        over = "SuiSmn",
         value = 2,
         targ = "smn",
         facename = "Suicide Summon",
@@ -952,7 +1042,8 @@ local dice = {
 
     {
         id = "FZSMN",
-        type = "Summon",
+        type = "Black",
+        over = "BscSmn",
         value = 1,
         targ = "smn",
         facename = "Summon",
@@ -967,7 +1058,8 @@ local dice = {
 
     {
         id = "TMINGOSMN",
-        type = "Summon",
+        type = "Black",
+        over = "BscSmn",
         value = 1,
         targ = "rsmn",
         facename = "Random Summon",
@@ -982,7 +1074,8 @@ local dice = {
 
     {
         id = "ANGELSMN",
-        type = "Summon",
+        type = "Black",
+        over = "BscSmn",
         value = 1,
         targ = "smn",
         facename = "Summon",
@@ -997,7 +1090,8 @@ local dice = {
 
     {
         id = "ORBSMN",
-        type = "PainSummon",
+        type = "Black",
+        over = "SuiSmn",
         value = 1,
         targ = "smn",
         facename = "Suicide Summon",
