@@ -596,6 +596,28 @@ local troops = {
         D6 = "NUL",
     },
 
+    --- Utility ---
+
+    {
+        id = "INCAP",
+        type = "marker",
+        classname = "Downed",
+        subclass = "Agent",
+        name = "Incapacitated",
+        flavor = "\"Stay with us!\".",
+        health = 0,
+        max = 4,
+        keyword = { "KWREGEN" },
+        kwval = {
+            KWREGEN = 1,
+        },
+        preview = {
+            label = "AGENT",
+            associatedCardField = "associatedAgentCardId",
+        },
+    },
+
+
 }
 
 return troops

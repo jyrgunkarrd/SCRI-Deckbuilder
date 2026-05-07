@@ -123,6 +123,19 @@ function resourcerules.payCosts(costEntries)
     return true
 end
 
+function resourcerules.deductCosts(costEntries)
+    for _, costEntry in ipairs(costEntries or {}) do
+        local resourceName = costEntry.resource
+        local amount = math.max(0, math.floor(tonumber(costEntry.amount) or 0))
+
+        if resourceName and amount > 0 then
+            resourceCounts[resourceName] = math.max(0, (resourceCounts[resourceName] or 0) - amount)
+        end
+    end
+
+    return true
+end
+
 function resourcerules.exchangeScratchForResource(targetResource)
     if not targetResource or targetResource == SCRATCH_RESOURCE then
         return false

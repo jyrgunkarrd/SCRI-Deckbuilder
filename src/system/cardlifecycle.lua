@@ -3,6 +3,22 @@ local deckrules = require("src.system.deckrules")
 local keywordrules = require("src.system.keywordrules")
 
 local cardlifecycle = {}
+local INCAP_SET_NAME = "troops"
+local INCAP_CARD_ID = "INCAP"
+local INCAP_RECOVERY_ANIMATION_DURATION = 0.58
+
+local function copyMethodEntries(methodEntries)
+    local copiedEntries = {}
+
+    for _, methodEntry in ipairs(methodEntries or {}) do
+        copiedEntries[#copiedEntries + 1] = {
+            resource = methodEntry.resource,
+            amount = methodEntry.amount,
+        }
+    end
+
+    return #copiedEntries > 0 and copiedEntries or nil
+end
 
 local function getEnemyReinforcementValue(ctx, card)
     if not ctx or not card or not card.location or card.location.kind ~= "grid" or card.location.rowId ~= "OppRow" then
@@ -14,7 +30,7 @@ local function getEnemyReinforcementValue(ctx, card)
 end
 
 local function applyEnemyDefeatChampionDamage(ctx, card)
-    if not ctx or not card or card.rfcChampionDamageApplied then
+    if not ctx or not card or card.rfcChampionDamageApplied or card.replacedByReinforcement then
         return false
     end
 
@@ -52,12 +68,142 @@ local function resolveDefeatedCard(ctx, cardIndex, card)
     return true
 end
 
+local function shouldTransformDefeatedAgent(ctx, card)
+    local cardDefinition = ctx and card and ctx.cardregistry.getCard(card.setName, card.cardId) or nil
+
+    return cardDefinition
+        and cardDefinition.type == "agent"
+        and card.location
+        and card.location.kind == "grid"
+        and card.location.rowId == "PlayerRow"
+        or false
+end
+
+local function transformDefeatedAgentToIncap(ctx, card, cardIndex)
+    local state = ctx and ctx.state or nil
+    local incapDefinition = ctx and ctx.cardregistry.getCard(INCAP_SET_NAME, INCAP_CARD_ID) or nil
+    local agentSetName = card and card.setName or nil
+    local agentCardId = card and card.cardId or nil
+    local agentDefinition = ctx and ctx.cardregistry.getCard(agentSetName, agentCardId) or nil
+
+    if not state or not card or not incapDefinition then
+        return false
+    end
+
+    card.associatedAgent = {
+        setName = agentSetName,
+        cardId = agentCardId,
+        displayName = card.displayName,
+        portraitPath = card.portraitPath,
+    }
+    card.associatedAgentCardId = agentCardId
+    card.method = copyMethodEntries(agentDefinition and agentDefinition.method or nil)
+    card.setName = INCAP_SET_NAME
+    card.cardId = INCAP_CARD_ID
+    card.displayName = nil
+    card.portraitPath = nil
+    card.currentHealth = nil
+    card.maxHealth = nil
+    card.blocking = nil
+    card.keywordValues = nil
+    card.dieFaceOverrides = nil
+    card.attachedKitCards = nil
+    card.attachedPilotCard = nil
+    card.destroying = false
+    card.destroyed = false
+    card.sentToDiscard = nil
+    card.destroyElapsed = nil
+    card.destroySeed = nil
+    card.incapRecoveryAnimation = nil
+    card.rfcChampionDamageApplied = nil
+
+    cardinstances.initializeHealth(card)
+    ctx.warrules.clearCardRollState(cardIndex)
+
+    state.cardExpansion[cardIndex] = 0
+    state.cardEntranceProgress[cardIndex] = 1
+
+    if state.selectedAttackerCardIndex == cardIndex then
+        state.selectedAttackerCardIndex = nil
+    end
+
+    return true
+end
+
+function cardlifecycle.restoreIncapAgentIfRecovered(ctx, card)
+    local state = ctx and ctx.state or nil
+    local associatedAgent = card and card.associatedAgent or nil
+    local agentSetName = associatedAgent and associatedAgent.setName or nil
+    local agentCardId = associatedAgent and associatedAgent.cardId or card and card.associatedAgentCardId or nil
+    local agentDefinition = ctx and ctx.cardregistry and ctx.cardregistry.getCard(agentSetName or "troops", agentCardId) or nil
+
+    if not state
+        or not card
+        or not agentDefinition
+        or card.setName ~= INCAP_SET_NAME
+        or card.cardId ~= INCAP_CARD_ID
+        or (tonumber(card.currentHealth) or 0) < (tonumber(card.maxHealth) or 0) then
+        return false
+    end
+
+    local cardIndex = nil
+
+    for candidateIndex, candidateCard in ipairs(state.cards or {}) do
+        if candidateCard == card then
+            cardIndex = candidateIndex
+            break
+        end
+    end
+
+    card.setName = agentDefinition.setName or agentSetName or "troops"
+    card.cardId = agentDefinition.id
+    card.displayName = associatedAgent and associatedAgent.displayName or nil
+    card.portraitPath = associatedAgent and associatedAgent.portraitPath or nil
+    card.currentHealth = nil
+    card.maxHealth = nil
+    card.blocking = nil
+    card.keywordValues = nil
+    card.dieFaceOverrides = nil
+    card.method = nil
+    card.associatedAgent = nil
+    card.associatedAgentCardId = nil
+    card.destroying = false
+    card.destroyed = false
+    card.sentToDiscard = nil
+    card.incapRecoveryAnimation = {
+        elapsed = 0,
+        duration = INCAP_RECOVERY_ANIMATION_DURATION,
+        seed = love.math.random() * 1000,
+    }
+
+    cardinstances.initializeHealth(card)
+
+    if ctx.warrules and cardIndex then
+        ctx.warrules.clearCardRollState(cardIndex)
+    end
+
+    if cardIndex then
+        state.cardExpansion[cardIndex] = 0
+        state.cardEntranceProgress[cardIndex] = 1
+    end
+
+    if ctx.sfxrules and ctx.sfxrules.playRestored then
+        ctx.sfxrules.playRestored()
+    end
+
+    return true
+end
+
 function cardlifecycle.isCardDestroyed(card)
     return card and card.destroyed == true
 end
 
 function cardlifecycle.isCardUnavailable(card)
-    return card == nil or card.destroyed == true or card.destroying == true or card.pilotVehicleAnimation == true
+    return card == nil
+        or card.destroyed == true
+        or card.destroying == true
+        or card.pilotVehicleAnimation == true
+        or card.hunterAutoPlayAnimation == true
 end
 
 function cardlifecycle.startCardDestruction(ctx, cardIndex)
@@ -299,9 +445,35 @@ function cardlifecycle.updateDestroyedCards(ctx, dt)
 
             if card.destroyElapsed >= ctx.destructionDuration then
                 resolveDefeatedCard(ctx, cardIndex, card)
-                card.destroying = false
-                card.destroyed = true
-                cardlifecycle.discardDestroyedCard(ctx, card, cardIndex)
+
+                local transformedToIncap = shouldTransformDefeatedAgent(ctx, card)
+                    and transformDefeatedAgentToIncap(ctx, card, cardIndex)
+
+                if not transformedToIncap then
+                    card.destroying = false
+                    card.destroyed = true
+                    cardlifecycle.discardDestroyedCard(ctx, card, cardIndex)
+                end
+            end
+        end
+    end
+end
+
+function cardlifecycle.updateIncapRecoveryAnimations(ctx, dt)
+    local state = ctx and ctx.state or nil
+
+    if not state then
+        return
+    end
+
+    for _, card in ipairs(state.cards or {}) do
+        local animation = card and card.incapRecoveryAnimation or nil
+
+        if animation then
+            animation.elapsed = (animation.elapsed or 0) + (dt or 0)
+
+            if animation.elapsed >= (animation.duration or INCAP_RECOVERY_ANIMATION_DURATION) then
+                card.incapRecoveryAnimation = nil
             end
         end
     end

@@ -8,6 +8,7 @@ local champions = {
         health = 20,
         max= 20,
         deckId = "BSCDCK",
+        encounter = "A1C1",
         intelDeck = {
             {
                 cardId = "INT0001",

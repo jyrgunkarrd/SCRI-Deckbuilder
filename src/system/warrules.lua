@@ -23,6 +23,7 @@ local SAVIOR_KEYWORD_ID = "KWSAV"
 local RELOADING_KEYWORD_ID = "KWRLD"
 local TOME_CARD_TYPE = "tome"
 local CACHE_CARD_TYPE = "cache"
+local MARKER_CARD_TYPE = "marker"
 local MANGLED_DIE_FACE_ID = "MNGL"
 local ENEMY_CARD_TARGET_TYPES = { "Atk", "AtkSab", "TAtk", "closeatk", "maulatk" }
 local PLAYER_WARZONE_TARGET_TYPES = { "WZPlayer", "InfTac" }
@@ -163,7 +164,12 @@ local function isHeavyRestrictedTarget(targetDefinition, targetCard, attackConte
 end
 
 local function canAttackTarget(attackerDefinition, targetDefinition, attackerCard, targetCard, attackContext, cards)
-    if targetDefinition and (targetDefinition.type == TOME_CARD_TYPE or targetDefinition.type == CACHE_CARD_TYPE) then
+    if targetDefinition
+        and (
+            targetDefinition.type == TOME_CARD_TYPE
+            or targetDefinition.type == CACHE_CARD_TYPE
+            or targetDefinition.type == MARKER_CARD_TYPE
+        ) then
         return false
     end
 

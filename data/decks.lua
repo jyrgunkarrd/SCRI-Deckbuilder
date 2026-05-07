@@ -134,6 +134,33 @@ local decks = {
             },
         },
 
+        --- Modular Packages ---
+
+        {
+            id = "DEMOPKG",
+            name = "Demo package",
+            cards = {
+                {
+                    cardId = "ENSTRD",
+                    quantity = 10,
+                },
+            },
+        },
+
+        --- Standard Packages ---
+
+
+        {
+            id = "STDPKG",
+            name = "Standard Demo package",
+            cards = {
+                {
+                    cardId = "ENSTRD",
+                    quantity = 10,
+                },
+            },
+        },
+
 }
     
     return decks

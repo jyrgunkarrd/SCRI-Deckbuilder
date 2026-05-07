@@ -65,6 +65,7 @@ function gamestatedraw.draw(ctx)
     local poiEmergenceRenderState = topSlotEffectRenderStates.poiEmergence
     local poiFlipRenderState = topSlotEffectRenderStates.poiFlip
     local poiHunterTransformationRenderState = topSlotEffectRenderStates.poiHunterTransformation
+    local poiHunterTransformationRenderStates = topSlotEffectRenderStates.poiHunterTransformations
 
     ctx.envdraw.drawPhaseTracker(currentPhase)
     ctx.envdraw.drawResourceTracker(ctx.resourcerules.getResourceCounts())
@@ -115,6 +116,7 @@ function gamestatedraw.draw(ctx)
             and not card.mulliganInAnimation
             and not card.mulliganOutAnimation
             and not card.pilotVehicleAnimation
+            and not card.hunterAutoPlayAnimation
             and cardIndex ~= ctx.hoveredCardIndex
             and cardIndex ~= ctx.draggedCardIndex
             and cardIndex ~= ctx.expandedGridCardIndex then
@@ -128,6 +130,7 @@ function gamestatedraw.draw(ctx)
         and ctx.hoveredCardIndex ~= ctx.expandedGridCardIndex
         and not ctx.cards[ctx.hoveredCardIndex].returningToHandAnimation
         and not ctx.cards[ctx.hoveredCardIndex].pilotVehicleAnimation
+        and not ctx.cards[ctx.hoveredCardIndex].hunterAutoPlayAnimation
         and not ctx.isCardDestroyed(ctx.cards[ctx.hoveredCardIndex]) then
         local hoveredCard = ctx.cards[ctx.hoveredCardIndex]
         local drawX, drawY, expansionProgress, renderOptions = ctx.getCardDrawPosition(hoveredCard, ctx.hoveredCardIndex)
@@ -139,6 +142,7 @@ function gamestatedraw.draw(ctx)
         and ctx.expandedGridCardIndex ~= ctx.draggedCardIndex
         and not ctx.cards[ctx.expandedGridCardIndex].returningToHandAnimation
         and not ctx.cards[ctx.expandedGridCardIndex].pilotVehicleAnimation
+        and not ctx.cards[ctx.expandedGridCardIndex].hunterAutoPlayAnimation
         and not ctx.isCardDestroyed(ctx.cards[ctx.expandedGridCardIndex]) then
         local expandedCard = ctx.cards[ctx.expandedGridCardIndex]
 
@@ -175,6 +179,10 @@ function gamestatedraw.draw(ctx)
         ctx.drawKitReturnAnimations()
     end
 
+    if ctx.drawHunterAutoPlayAnimations then
+        ctx.drawHunterAutoPlayAnimations()
+    end
+
     if ctx.drawPilotVehicleAnimations then
         ctx.drawPilotVehicleAnimations()
     end
@@ -209,19 +217,33 @@ function gamestatedraw.draw(ctx)
     ctx.drawTopSlotHoverTargetBrackets(currentPhase, warzonePreviewState, objectivePreviewPips, intelPreviewPips)
     ctx.drawInfiltrationEffect()
 
-    if poiHunterTransformationRenderState
-        and poiHunterTransformationRenderState.targetLocation
-        and poiHunterTransformationRenderState.targetLocation.kind == "hand" then
-        ctx.envdraw.drawPoiHunterTransformationOverlay(
-            currentPhase,
-            ctx.activeChampion,
-            ctx.activeWarzone,
-            ctx.activePoi,
-            ctx.activePrimaryObjective,
-            ctx.activeIntel,
-            poiHunterTransformationRenderState,
-            topSlotJitterOffsets
-        )
+    if poiHunterTransformationRenderStates then
+        for _, renderState in ipairs(poiHunterTransformationRenderStates) do
+            if renderState and renderState.targetLocation then
+                ctx.envdraw.drawPoiHunterTransformationOverlay(
+                    currentPhase,
+                    ctx.activeChampion,
+                    ctx.activeWarzone,
+                    ctx.activePoi,
+                    ctx.activePrimaryObjective,
+                    ctx.activeIntel,
+                    renderState,
+                    topSlotJitterOffsets
+                )
+            end
+        end
+    elseif poiHunterTransformationRenderState
+        and poiHunterTransformationRenderState.targetLocation then
+            ctx.envdraw.drawPoiHunterTransformationOverlay(
+                currentPhase,
+                ctx.activeChampion,
+                ctx.activeWarzone,
+                ctx.activePoi,
+                ctx.activePrimaryObjective,
+                ctx.activeIntel,
+                poiHunterTransformationRenderState,
+                topSlotJitterOffsets
+            )
     end
 
     ctx.envdraw.drawResourceTransfers(ctx.resourcerules.getActiveTransfers())
@@ -299,10 +321,61 @@ function gamestatedraw.draw(ctx)
                 and ctx.cardregistry.getCard(ctx.jaclDeckPreviewCard.setName, ctx.jaclDeckPreviewCard.cardId)
                 or nil
             local preview = ctx.previewrules
-                and ctx.previewrules.getDefinitionPreview(previewCardDefinition)
+                and ctx.previewrules.getDefinitionPreview(previewCardDefinition, nil, ctx.jaclDeckPreviewCard)
                 or nil
+            local previewCards = preview and (preview.cardDefinitionEntries or preview.cardDefinitions) or nil
+            local previewLayout = ctx.envdraw.getJaclDeckPreviewModalLayout(previewCards)
+            local diceTooltip = ctx.carddraw.getHoveredDiceFace(
+                ctx.jaclDeckPreviewCard.setName,
+                ctx.jaclDeckPreviewCard.cardId,
+                previewLayout.cardX,
+                previewLayout.cardY,
+                1,
+                {
+                    displayName = ctx.jaclDeckPreviewCard.displayName,
+                    portraitPath = ctx.jaclDeckPreviewCard.portraitPath,
+                    showBadgesInTextbox = true,
+                },
+                mouseX,
+                mouseY,
+                nil
+            )
 
             ctx.envdraw.drawJaclDeckPreviewModal(ctx.jaclDeckPreviewCard, preview)
+
+            if diceTooltip then
+                ctx.previewrules.applyDefinitionPreviewToTooltip(
+                    diceTooltip.definition or diceTooltip,
+                    diceTooltip,
+                    diceTooltip.previewLabel or "SUMMON"
+                )
+
+                local dicePreviewCards = diceTooltip.previewCardDefinitionEntries or diceTooltip.previewCardDefinitions
+
+                if dicePreviewCards and #dicePreviewCards > 0 then
+                    ctx.envdraw.drawSummonPreviewTooltip(
+                        dicePreviewCards,
+                        previewLayout.cardX - previewLayout.previewGap,
+                        previewLayout.cardY,
+                        1,
+                        previewLayout.cardHeight,
+                        diceTooltip.previewLabel,
+                        "left"
+                    )
+                elseif diceTooltip.previewCardDefinition then
+                    ctx.envdraw.drawSummonPreviewTooltip(
+                        { diceTooltip.previewCardDefinition },
+                        previewLayout.cardX - previewLayout.previewGap,
+                        previewLayout.cardY,
+                        1,
+                        previewLayout.cardHeight,
+                        diceTooltip.previewLabel,
+                        "left"
+                    )
+                end
+
+                ctx.carddraw.drawDiceFaceTooltip(diceTooltip)
+            end
         end
     elseif ctx.isSyntacMethodModalOpen then
         ctx.envdraw.drawSyntacMethodModal()
@@ -311,8 +384,6 @@ function gamestatedraw.draw(ctx)
     elseif syntacHovered then
         ctx.envdraw.drawSyntacTooltip(ctx.playerJacl)
     elseif ctx.hoveredDiceFace then
-        ctx.carddraw.drawDiceFaceTooltip(ctx.hoveredDiceFace)
-
         local previewCards = ctx.hoveredDiceFace.previewCardDefinitionEntries or ctx.hoveredDiceFace.previewCardDefinitions
 
         if previewCards and #previewCards > 0 then
@@ -333,6 +404,8 @@ function gamestatedraw.draw(ctx)
                 ctx.hoveredDiceFace.cardHeight
             )
         end
+
+        ctx.carddraw.drawDiceFaceTooltip(ctx.hoveredDiceFace)
     elseif (ctx.hoveredTomeSpawnPreviewCardEntries and #ctx.hoveredTomeSpawnPreviewCardEntries > 0)
         or (ctx.hoveredTomeSpawnPreviewCards and #ctx.hoveredTomeSpawnPreviewCards > 0) then
         local sourceCardIndex = ctx.hoveredTomeSpawnPreviewCardIndex or ctx.hoveredCardIndex

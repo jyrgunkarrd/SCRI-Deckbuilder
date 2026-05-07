@@ -58,6 +58,7 @@ local BADGE_PIP_COLOR_ONE = { 1, 1, 1, 1 }
 local BADGE_PIP_COLOR_FIVE = { 1, 0.847, 0.219, 1 }
 local BADGE_PIP_COLOR_TWENTY_FIVE = { 1, 0.369, 0.369, 1 }
 local DAMAGE_PREVIEW_PIP_COLOR = { 1, 0.298, 0.298, 1 }
+local HEAL_PREVIEW_PIP_COLOR = { 0.55, 1, 0.05, 1 }
 local KIA_BADGE_TEXT_COLOR = { 0.902, 0.2, 0.416, 1 }
 local STRATEGIST_KEYWORD_ID = "KWSTRAT"
 local RELOADING_KEYWORD_ID = "KWRLD"
@@ -122,6 +123,7 @@ local function getRenderOptions(options)
         showBadgesInTextbox = options.showBadgesInTextbox == true,
         damagePreviewCount = options.damagePreviewCount or 0,
         blockedDamagePreviewCount = options.blockedDamagePreviewCount or 0,
+        healPreviewCount = options.healPreviewCount or 0,
         currentHealth = options.currentHealth,
         maxHealth = options.maxHealth,
         card = options.card,
@@ -164,6 +166,7 @@ local function getCardMetrics(options)
         showBadgesInTextbox = renderOptions.showBadgesInTextbox,
         damagePreviewCount = renderOptions.damagePreviewCount,
         blockedDamagePreviewCount = renderOptions.blockedDamagePreviewCount,
+        healPreviewCount = renderOptions.healPreviewCount,
         currentHealth = renderOptions.currentHealth,
         maxHealth = renderOptions.maxHealth,
         card = renderOptions.card,
@@ -823,7 +826,7 @@ local function drawRfcBadge(x, y, width, height, rfcValue, font, alpha)
     love.graphics.setFont(previousFont)
 end
 
-local function drawHealthFooter(x, y, width, height, padding, footerHeight, footerFont, healthValue, maxHealthValue, damagePreviewCount, blockedDamagePreviewCount, blockingValue, alpha, methodEntries, pipColor, pipShape, card, rfcValue)
+local function drawHealthFooter(x, y, width, height, padding, footerHeight, footerFont, healthValue, maxHealthValue, damagePreviewCount, blockedDamagePreviewCount, healPreviewCount, blockingValue, alpha, methodEntries, pipColor, pipShape, card, rfcValue)
     local footerY = y + height - footerHeight
     local expandedResources, badgeInset, badgeSize, badgeGap, totalBadgeWidth = getMethodBadgeLayout(width, footerHeight, padding, methodEntries)
     local badgesStartX = x + width - padding - totalBadgeWidth
@@ -992,6 +995,22 @@ local function drawHealthFooter(x, y, width, height, padding, footerHeight, foot
             drawPip("fill", pipX, pipY)
         end
     end
+
+    local healCount = math.min(maxPipCount - pipCount, math.max(0, tonumber(healPreviewCount) or 0))
+
+    if healCount > 0 then
+        love.graphics.setColor(HEAL_PREVIEW_PIP_COLOR[1], HEAL_PREVIEW_PIP_COLOR[2], HEAL_PREVIEW_PIP_COLOR[3], alpha)
+
+        for pipIndex = pipCount, pipCount + healCount - 1 do
+            local pipX, pipY = getPipPosition(pipIndex, 0)
+
+            drawPip("fill", pipX, pipY)
+        end
+    end
+end
+
+local function getCardMethodEntries(cardDefinition, card)
+    return card and card.method or cardDefinition and cardDefinition.method or nil
 end
 
 local function drawStrategyFooter(x, y, width, height, footerHeight, footerFont, alpha)
@@ -2228,7 +2247,7 @@ function carddraw.drawCardState(setName, cardId, x, y, expansionProgress, option
             drawPortraitBadges(cardDefinition, metrics.card, drawX, portraitY, renderWidth, portraitHeight, snap(metrics.footerHeight))
         end
 
-        drawHealthFooter(drawX, portraitY, renderWidth, portraitHeight, snap(metrics.padding), snap(metrics.footerHeight), footerFont, displayedHealth, displayedMaxHealth, metrics.damagePreviewCount, metrics.blockedDamagePreviewCount, metrics.blocking, 1, cardDefinition.method, footerPipColor, footerPipShape, metrics.card, cardDefinition.rfc)
+        drawHealthFooter(drawX, portraitY, renderWidth, portraitHeight, snap(metrics.padding), snap(metrics.footerHeight), footerFont, displayedHealth, displayedMaxHealth, metrics.damagePreviewCount, metrics.blockedDamagePreviewCount, metrics.healPreviewCount, metrics.blocking, 1, getCardMethodEntries(cardDefinition, metrics.card), footerPipColor, footerPipShape, metrics.card, cardDefinition.rfc)
     elseif cardDefinition.mcost and not metrics.showHealthOnPortrait then
         drawCostBadges(cardDefinition, drawX, portraitY, renderWidth, portraitHeight)
     end
@@ -2327,7 +2346,7 @@ function carddraw.drawCardState(setName, cardId, x, y, expansionProgress, option
             end
 
             if displayedHealth ~= nil and textboxHeight > snap(metrics.footerHeight) and not metrics.showHealthOnPortrait then
-                drawHealthFooter(drawX, textY, renderWidth, textboxHeight, snap(metrics.padding), snap(metrics.footerHeight), footerFont, displayedHealth, displayedMaxHealth, metrics.damagePreviewCount, metrics.blockedDamagePreviewCount, metrics.blocking, expansionProgress, cardDefinition.method, footerPipColor, footerPipShape, metrics.card, cardDefinition.rfc)
+                drawHealthFooter(drawX, textY, renderWidth, textboxHeight, snap(metrics.padding), snap(metrics.footerHeight), footerFont, displayedHealth, displayedMaxHealth, metrics.damagePreviewCount, metrics.blockedDamagePreviewCount, metrics.healPreviewCount, metrics.blocking, expansionProgress, getCardMethodEntries(cardDefinition, metrics.card), footerPipColor, footerPipShape, metrics.card, cardDefinition.rfc)
             elseif cardDefinition.type == "strategy" and textboxHeight > snap(metrics.footerHeight) then
                 drawStrategyFooter(drawX, textY, renderWidth, textboxHeight, snap(metrics.footerHeight), footerFont, expansionProgress)
             end
@@ -2376,8 +2395,9 @@ end
 
 function carddraw.getMethodBadgeCenters(setName, cardId, drawX, drawY, expansionProgress, options)
     local cardDefinition = getCardDefinition(setName, cardId)
+    local methodEntries = getCardMethodEntries(cardDefinition, options and options.card or nil)
 
-    if not cardDefinition or not cardDefinition.method then
+    if not cardDefinition or not methodEntries then
         return nil
     end
 
@@ -2392,7 +2412,7 @@ function carddraw.getMethodBadgeCenters(setName, cardId, drawX, drawY, expansion
     local footerHeight = snap(metrics.footerHeight)
     local padding = snap(metrics.padding)
     local footerY = snap(drawY) + portraitHeight - footerHeight
-    local expandedResources, badgeInset, badgeSize, badgeGap, totalBadgeWidth = getMethodBadgeLayout(renderWidth, footerHeight, padding, cardDefinition.method)
+    local expandedResources, badgeInset, badgeSize, badgeGap, totalBadgeWidth = getMethodBadgeLayout(renderWidth, footerHeight, padding, methodEntries)
     local badgesStartX = snap(drawX) + renderWidth - padding - totalBadgeWidth
     local centers = {}
 
@@ -2412,8 +2432,9 @@ end
 
 function carddraw.getMethodBadgeRects(setName, cardId, drawX, drawY, expansionProgress, options)
     local cardDefinition = getCardDefinition(setName, cardId)
+    local methodEntries = getCardMethodEntries(cardDefinition, options and options.card or nil)
 
-    if not cardDefinition or not cardDefinition.method then
+    if not cardDefinition or not methodEntries then
         return nil
     end
 
@@ -2428,7 +2449,7 @@ function carddraw.getMethodBadgeRects(setName, cardId, drawX, drawY, expansionPr
     local footerHeight = snap(metrics.footerHeight)
     local padding = snap(metrics.padding)
     local footerY = snap(drawY) + portraitHeight - footerHeight
-    local expandedResources, badgeInset, badgeSize, badgeGap, totalBadgeWidth = getMethodBadgeLayout(renderWidth, footerHeight, padding, cardDefinition.method)
+    local expandedResources, badgeInset, badgeSize, badgeGap, totalBadgeWidth = getMethodBadgeLayout(renderWidth, footerHeight, padding, methodEntries)
     local badgesStartX = snap(drawX) + renderWidth - padding - totalBadgeWidth
     local rects = {}
 

@@ -148,7 +148,11 @@ function inputcontroller.mousepressed(gameState, deps, x, y, button)
     end
 
     if deps.hasPendingStrategySelection and deps.hasPendingStrategySelection() then
-        if button == 2 and deps.cancelPendingStrategySelection then
+        local pendingSelection = deps.getPendingSelection and deps.getPendingSelection() or nil
+
+        if button == 2
+            and deps.cancelPendingStrategySelection
+            and (not pendingSelection or pendingSelection.kind ~= "hand_limit_discard") then
             deps.cancelPendingStrategySelection()
             clearHoverAndExpansion(gameState)
             return

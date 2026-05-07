@@ -18,11 +18,14 @@ function contextbuilders.getGameActionsContext(c)
         envdraw = c.envdraw,
         sfxrules = c.sfxrules,
         warrules = c.warrules,
+        cardlifecycle = c.cardlifecycle,
+        cardregistry = c.cardregistry,
         topsloteffects = c.topsloteffects,
         damageJitterDuration = c.damageJitterDuration,
         damageJitterMagnitude = c.damageJitterMagnitude,
         beginObjectiveEscalation = c.beginObjectiveEscalation,
         beginObjectiveHunterDeckTransformation = c.beginObjectiveHunterDeckTransformation,
+        beginReinforcementHunterDeckTransformation = c.beginReinforcementHunterDeckTransformation,
         beginWarzoneTransformation = c.beginWarzoneTransformation,
         beginPoiEmergenceEffect = c.beginPoiEmergenceEffect,
         beginPoiFlipEffect = c.beginPoiFlipEffect,
@@ -50,6 +53,8 @@ function contextbuilders.getChampionPlayContext(c)
 
     return {
         championDeck = state.championDeck,
+        playerDeck = state.playerDeck,
+        activePrimaryObjective = state.activePrimaryObjective,
         cards = state.cards,
         cardExpansion = state.cardExpansion,
         cardEntranceProgress = state.cardEntranceProgress,
@@ -59,6 +64,9 @@ function contextbuilders.getChampionPlayContext(c)
         getOppRow = c.getOppRow,
         isGridRowColumnOccupied = c.isGridRowColumnOccupied,
         initializeCardHealthState = c.initializeCardHealthState,
+        addObjectiveProgress = c.addObjectiveProgress,
+        beginObjectiveHunterDeckTransformation = c.beginObjectiveHunterDeckTransformation,
+        beginReinforcementHunterDeckTransformation = c.beginReinforcementHunterDeckTransformation,
         spawnTokensNearCard = c.spawnTokensNearCard,
     }
 end
@@ -85,6 +93,7 @@ function contextbuilders.getCardPlayControllerContext(c)
         drawCardFromPlayerDeck = c.drawCardFromPlayerDeck,
         enterCurrentPhase = c.enterCurrentPhase,
         getCardDrawPosition = c.getCardDrawPosition,
+        normalizeHandCardSlots = c.normalizeHandCardSlots,
         removeCardFromPlay = c.removeCardFromPlay,
         spawnTokensNearCard = c.spawnTokensNearCard,
         spawnTokensNearPlayerCard = c.spawnTokensNearPlayerCard,
@@ -144,6 +153,7 @@ function contextbuilders.getPhaseControllerDeps(c)
         dealDamageToChampion = c.dealDamageToChampion,
         drawCardFromPlayerDeck = c.drawCardFromPlayerDeck,
         healCard = c.healCard,
+        resolveHuntersInHand = c.resolveHuntersInHand,
         notifyMeatCacheDecayed = function(cacheCardIndex)
             c.trooprules.notifyMeatCacheDecayed(cacheCardIndex, {
                 cards = state.cards,
@@ -202,6 +212,7 @@ function contextbuilders.getCardPresentationContext(c)
     return {
         carddraw = c.carddraw,
         envdraw = c.envdraw,
+        keywordrules = c.keywordrules,
         turnrules = c.turnrules,
         warrules = c.warrules,
         cards = state.cards,
@@ -225,6 +236,7 @@ function contextbuilders.getCardPresentationContext(c)
         getDamageJitterKeyForCard = c.getDamageJitterKeyForCard,
         getTargetingContext = c.getTargetingContext,
         drawKitReturnAnimations = c.drawKitReturnAnimations,
+        drawHunterAutoPlayAnimations = c.drawHunterAutoPlayAnimations,
     }
 end
 
@@ -412,6 +424,14 @@ function contextbuilders.getTargetingContext(c)
             return c.abilityrules.isPrimedAbilityTarget(cardIndex, primedAbility, c.getModalDeps())
         end,
         isPendingStrategyTarget = function(cardIndex, pendingSelection)
+            if pendingSelection and pendingSelection.kind == "hand_limit_discard" then
+                local card = cardIndex and state.cards[cardIndex] or nil
+
+                return card
+                    and card.location
+                    and card.location.kind == "hand"
+            end
+
             if pendingSelection and pendingSelection.kind == "troop_script_sacrifice" then
                 return c.trooprules.isValidPendingSacrificeTarget(cardIndex, pendingSelection, {
                     cards = state.cards,
@@ -449,6 +469,7 @@ function contextbuilders.getInputControllerDeps(c)
         getCardMethodBadgeTarget = c.getCardMethodBadgeTarget,
         getHoveredTopSlotId = c.getHoveredTopSlotId,
         getHoveredTopSlotRollBadgeId = c.getHoveredTopSlotRollBadgeId,
+        getPendingSelection = c.getPendingSelection,
         isAlliedTopSlot = c.isAlliedTopSlot,
         getGridCardAt = c.getGridCardAt,
         getModalDeps = c.getModalDeps,

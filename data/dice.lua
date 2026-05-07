@@ -521,7 +521,7 @@ local dice = {
         pain = true,
         area = true,
         autoReload = true,
-        facename = "Exotic Weapon Area Suicide Attack",
+        facename = "Exotic Area Suicide Attack",
         facedesc = "Deal damage to a target troop and adjacent troops or Champion. Deal damage to this card. This card gains Reloading.",
 
     },
@@ -535,7 +535,7 @@ local dice = {
         pain = true,
         area = true,
         autoReload = true,
-        facename = "Exotic Weapon Area Suicide Attack",
+        facename = "Exotic Area Suicide Attack",
         facedesc = "Deal damage to a target troop and adjacent troops or Champion. Deal damage to this card. This card gains Reloading.",
 
     },
@@ -549,7 +549,7 @@ local dice = {
         pain = true,
         area = true,
         autoReload = true,
-        facename = "Exotic Weapon Area Suicide Attack",
+        facename = "Exotic Area Suicide Attack",
         facedesc = "Deal damage to a target troop and adjacent troops or Champion. Deal damage to this card. This card gains Reloading.",
 
     },

@@ -10,6 +10,7 @@ local EVASION_KEYWORD_ID = "KWEVA"
 local FAIR_WEATHER_KEYWORD_ID = "KWFAIR"
 local FLYING_KEYWORD_ID = "KWFLY"
 local ENEMY_ROW_ID = "OppRow"
+local MARKER_CARD_TYPE = "marker"
 
 local function getCardDefinition(card)
     if not card then
@@ -22,6 +23,11 @@ end
 local function cardHasKeyword(card, keywordId)
     local cardDefinition = getCardDefinition(card)
     return keywordrules.cardHasKeyword(cardDefinition, keywordId, card)
+end
+
+local function isMarkerCard(card)
+    local cardDefinition = getCardDefinition(card)
+    return cardDefinition and cardDefinition.type == MARKER_CARD_TYPE or false
 end
 
 local function isLiveGridCard(card)
@@ -194,6 +200,20 @@ function gameactions.initializeCardsHealthState(cardList)
 end
 
 function gameactions.dealDamageToCard(ctx, card, amount, suppressFeedback)
+    if isMarkerCard(card) then
+        return {
+            previousHealth = card and card.currentHealth or nil,
+            currentHealth = card and card.currentHealth or nil,
+            previousBlocking = card and math.max(0, tonumber(card.blocking) or 0) or 0,
+            currentBlocking = card and math.max(0, tonumber(card.blocking) or 0) or 0,
+            blockedDamage = 0,
+            preventedByKeywordDamage = math.max(0, tonumber(amount) or 0),
+            healthDamage = 0,
+            killed = false,
+            changed = false,
+        }
+    end
+
     local damageResult = damagerules.dealDamageToCard(card, amount)
     applyEvasionIfNeeded(card, damageResult)
 
@@ -221,6 +241,20 @@ function gameactions.dealDamageToCard(ctx, card, amount, suppressFeedback)
 end
 
 function gameactions.dealDirectDamageToCard(ctx, card, amount, suppressFeedback)
+    if isMarkerCard(card) then
+        return {
+            previousHealth = card and card.currentHealth or nil,
+            currentHealth = card and card.currentHealth or nil,
+            previousBlocking = card and math.max(0, tonumber(card.blocking) or 0) or 0,
+            currentBlocking = card and math.max(0, tonumber(card.blocking) or 0) or 0,
+            blockedDamage = 0,
+            preventedByKeywordDamage = math.max(0, tonumber(amount) or 0),
+            healthDamage = 0,
+            killed = false,
+            changed = false,
+        }
+    end
+
     local damageResult = damagerules.dealDirectDamageToCard(card, amount)
     applyEvasionIfNeeded(card, damageResult)
 
@@ -249,7 +283,7 @@ function gameactions.addBlockingToCard(card, amount, options)
     return damagerules.addBlockingToCard(card, amount, options)
 end
 
-function gameactions.healCard(card, amount)
+function gameactions.healCard(ctx, card, amount)
     if not card or amount == nil then
         return nil
     end
@@ -266,12 +300,20 @@ function gameactions.healCard(card, amount)
 
     card.currentHealth = math.min(maxHealth, previousHealth + healAmount)
 
-    return {
+    local healResult = {
         previousHealth = previousHealth,
         currentHealth = card.currentHealth,
         healed = card.currentHealth - previousHealth,
         changed = card.currentHealth > previousHealth,
     }
+
+    if ctx
+        and ctx.cardlifecycle
+        and ctx.cardlifecycle.restoreIncapAgentIfRecovered then
+        healResult.restoredIncapAgent = ctx.cardlifecycle.restoreIncapAgentIfRecovered(ctx, card)
+    end
+
+    return healResult
 end
 
 function gameactions.clearAllBlocking(ctx)

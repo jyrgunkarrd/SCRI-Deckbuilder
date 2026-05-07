@@ -1,4 +1,5 @@
 local phasecontroller = {}
+local REGEN_KEYWORD_ID = "KWREGEN"
 local keywordrules = require("src.system.keywordrules")
 local CACHE_CARD_TYPE = "cache"
 local MEAT_CACHE_CARD_ID = "MEATTOK"
@@ -218,13 +219,14 @@ local function buildStartPhaseGenerators(gameState, deps)
         if deps.isGridCard(card) and not deps.isCardUnavailable(card) then
             local drawX, drawY, expansionProgress, renderOptions = deps.getCardDrawPosition(card, cardIndex)
             local cardDefinition = deps.cardregistry.getCard(card.setName, card.cardId)
+            local methodEntries = card.method or cardDefinition and cardDefinition.method or nil
             local methodBadgeCenters = deps.carddraw.getMethodBadgeCenters(card.setName, card.cardId, drawX, drawY, expansionProgress, renderOptions)
 
-            if methodBadgeCenters and #methodBadgeCenters > 0 and cardDefinition and cardDefinition.method then
+            if methodBadgeCenters and #methodBadgeCenters > 0 and methodEntries then
                 gridCardGenerators[#gridCardGenerators + 1] = {
                     column = card.location.column,
                     methodBadgeCenters = methodBadgeCenters,
-                    methodEntries = cardDefinition.method,
+                    methodEntries = methodEntries,
                 }
             end
         end
@@ -265,7 +267,71 @@ local function buildStartPhaseGenerators(gameState, deps)
     return gridCardGenerators
 end
 
+local function resolveStartPhaseRegen(gameState, deps)
+    for _, card in ipairs(gameState.cards or {}) do
+        if card
+            and deps.isGridCard(card)
+            and not deps.isCardUnavailable(card)
+            and deps.cardregistry
+            and deps.keywordrules
+            and deps.healCard then
+            local cardDefinition = deps.cardregistry.getCard(card.setName, card.cardId)
+            local regenValue = deps.keywordrules.getCardKeywordValue(card, cardDefinition, REGEN_KEYWORD_ID)
+
+            if regenValue and regenValue > 0 then
+                deps.healCard(card, regenValue)
+            end
+        end
+    end
+end
+
+local function getHandCardCount(cards)
+    local count = 0
+
+    for _, card in ipairs(cards or {}) do
+        if card
+            and card.location
+            and card.location.kind == "hand"
+            and not card.destroyed
+            and not card.destroying then
+            count = count + 1
+        end
+    end
+
+    return count
+end
+
+local function beginHandLimitDiscardSelection(gameState, deps)
+    if gameState.endPhaseHandLimitDiscardHandled
+        or gameState.pendingHandLimitDiscardSelection
+        or getHandCardCount(gameState.cards) < 10 then
+        return false
+    end
+
+    gameState.endPhaseHandLimitDiscardHandled = true
+    gameState.pendingHandLimitDiscardSelection = {
+        kind = "hand_limit_discard",
+        prompt = "Hand limit exceeded. Choose one card in hand to discard.",
+    }
+
+    if deps.notifications then
+        deps.notifications.push(gameState.pendingHandLimitDiscardSelection.prompt)
+    end
+
+    return true
+end
+
 local function completeEndPhase(gameState, deps)
+    if deps.topsloteffects
+        and deps.topsloteffects.isPoiHunterTransformationActive
+        and deps.topsloteffects.isPoiHunterTransformationActive() then
+        return
+    end
+
+    if beginHandLimitDiscardSelection(gameState, deps) then
+        return
+    end
+
     deps.clearAllBlocking()
     deps.addObjectiveProgress(gameState.activePrimaryObjective, deps.getEndPhaseObjectiveProgress())
     deps.warrules.resetPlayerCardStates(gameState.cards)
@@ -457,6 +523,9 @@ function phasecontroller.enterCurrentPhase(gameState, deps)
 
     if currentPhase ~= "End" then
         gameState.endPhaseSacrificeHandled = false
+        gameState.endPhaseHandLimitDiscardHandled = false
+        gameState.endPhaseDrawHandled = false
+        gameState.endPhasePoiHandled = false
     end
 
     if currentPhase == deps.turnrules.getSetupPhase() then
@@ -472,7 +541,11 @@ function phasecontroller.enterCurrentPhase(gameState, deps)
         gameState.mulliganReturnedCards = nil
         gameState.mulliganPromptAlpha = 0
         deps.initializeCardsHealthState(gameState.cards)
-        deps.playHunterAddedSfxForCards(gameState.cards)
+        if deps.resolveHuntersInHand then
+            deps.resolveHuntersInHand()
+        else
+            deps.playHunterAddedSfxForCards(gameState.cards)
+        end
         deps.addSetupAgents()
         deps.normalizeSetupCardSlots()
     elseif currentPhase == "Start" then
@@ -485,6 +558,8 @@ function phasecontroller.enterCurrentPhase(gameState, deps)
                 card.usedMethodAbilities = nil
             end
         end
+
+        resolveStartPhaseRegen(gameState, deps)
 
         local gridCardGenerators = buildStartPhaseGenerators(gameState, deps)
         deps.resourcerules.enterStartPhase(gameState.playerJacl, deps.envdraw.getBottomLeftPanelLayout(gameState.playerJacl), deps.envdraw.getResourceTrackerLayout(), gridCardGenerators)
@@ -523,13 +598,23 @@ function phasecontroller.enterCurrentPhase(gameState, deps)
             end
         end
         resolveEndPhaseCaches(gameState, deps)
-        deps.drawCardFromPlayerDeck()
-        if gameState.activePoi
-            and gameState.activePoi.id
-            and gameState.activePoi.id:sub(-1) == "B"
-            and deps.beginPoiGeneratedCardTransformation(gameState.activePoi, gameState.activePoi.huntID) then
-            return
+
+        if not gameState.endPhaseDrawHandled then
+            gameState.endPhaseDrawHandled = true
+            deps.drawCardFromPlayerDeck()
         end
+
+        if not gameState.endPhasePoiHandled then
+            gameState.endPhasePoiHandled = true
+
+            if gameState.activePoi
+                and gameState.activePoi.id
+                and gameState.activePoi.id:sub(-1) == "B"
+                and deps.beginPoiGeneratedCardTransformation(gameState.activePoi, gameState.activePoi.huntID) then
+                return
+            end
+        end
+
         completeEndPhase(gameState, deps)
     end
 end
@@ -635,20 +720,33 @@ function phasecontroller.update(gameState, deps, dt)
         gameState.activePrimaryObjective = topSlotEffectEvents.objectiveEscalationSwap or gameState.activePrimaryObjective
     end
 
-    if topSlotEffectEvents.poiHunterTransformationComplete then
-        local effect = topSlotEffectEvents.poiHunterTransformationComplete
-        local generatedCard = deps.createGeneratedSupportCard(
-            effect.generatedCardDefinition,
-            effect.targetLocation
-        )
+    local completedPoiHunterTransformations = topSlotEffectEvents.poiHunterTransformationComplete
 
-        if generatedCard then
-            if not effect.sourceSlotId or effect.sourceSlotId == "poi" then
-                gameState.activePoi = nil
+    if completedPoiHunterTransformations then
+        if completedPoiHunterTransformations.generatedCardDefinition then
+            completedPoiHunterTransformations = { completedPoiHunterTransformations }
+        end
+
+        local shouldCompleteEndPhase = false
+
+        for _, effect in ipairs(completedPoiHunterTransformations) do
+            local generatedCard = deps.createGeneratedSupportCard(
+                effect.generatedCardDefinition,
+                effect.targetLocation
+            )
+
+            if generatedCard then
+                if not effect.sourceSlotId or effect.sourceSlotId == "poi" then
+                    gameState.activePoi = nil
+                end
+            end
+
+            if deps.turnrules.getCurrentPhase() == "End" then
+                shouldCompleteEndPhase = true
             end
         end
 
-        if deps.turnrules.getCurrentPhase() == "End" then
+        if shouldCompleteEndPhase then
             completeEndPhase(gameState, deps)
         end
     end

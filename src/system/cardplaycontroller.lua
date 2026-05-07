@@ -128,7 +128,9 @@ function cardplaycontroller.tryPlayKitCard(kitCardIndex, targetCardIndex, ctx)
 end
 
 function cardplaycontroller.getPendingSelection(state)
-    return state.pendingStrategySelection or state.pendingSacrificeSelection
+    return state.pendingStrategySelection
+        or state.pendingSacrificeSelection
+        or state.pendingHandLimitDiscardSelection
 end
 
 function cardplaycontroller.hasPendingStrategySelection(state)
@@ -157,6 +159,29 @@ function cardplaycontroller.tryResolvePendingStrategySelection(cardIndex, ctx)
         state.pendingSacrificeSelection = nil
         ctx.enterCurrentPhase()
         return true
+    end
+
+    if pendingSelection.kind == "hand_limit_discard" then
+        local card = cardIndex and state.cards[cardIndex] or nil
+
+        if not card
+            or not card.location
+            or card.location.kind ~= "hand" then
+            return false
+        end
+
+        if ctx.discardCardFromPlay and ctx.discardCardFromPlay(cardIndex) then
+            state.pendingHandLimitDiscardSelection = nil
+
+            if ctx.normalizeHandCardSlots then
+                ctx.normalizeHandCardSlots()
+            end
+
+            ctx.enterCurrentPhase()
+            return true
+        end
+
+        return false
     end
 
     local resolved = ctx.strategyrules.resolvePendingSelection(cardIndex, pendingSelection, {

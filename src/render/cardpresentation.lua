@@ -5,6 +5,11 @@ local keywordrules = require("src.system.keywordrules")
 local targetingrules = require("src.system.targetingrules")
 
 local cardpresentation = {}
+local REGEN_KEYWORD_ID = "KWREGEN"
+
+local function clamp(value, minValue, maxValue)
+    return math.max(minValue, math.min(maxValue, value))
+end
 
 local function getCardDefinition(card)
     if not card then
@@ -22,13 +27,89 @@ local function getDestructionProgress(card, destructionDuration)
     return math.min(1, (card.destroyElapsed or 0) / destructionDuration)
 end
 
+local function getStartPhaseHealPreviewCount(card, cardDefinition, ctx)
+    if not card
+        or not cardDefinition
+        or not ctx
+        or not ctx.keywordrules
+        or not ctx.turnrules
+        or ctx.turnrules.getCurrentPhase() == "Start" then
+        return 0
+    end
+
+    local currentHealth = math.max(0, tonumber(card.currentHealth) or 0)
+    local maxHealth = math.max(currentHealth, tonumber(card.maxHealth) or tonumber(cardDefinition.max or cardDefinition.health) or 0)
+
+    if maxHealth <= currentHealth then
+        return 0
+    end
+
+    local regenValue = ctx.keywordrules.getCardKeywordValue(card, cardDefinition, REGEN_KEYWORD_ID)
+
+    return math.min(maxHealth - currentHealth, math.max(0, tonumber(regenValue) or 0))
+end
+
+local function drawIncapRecoveryAnimation(card, drawX, drawY, cardWidth, renderOptions)
+    local animation = card and card.incapRecoveryAnimation or nil
+
+    if not animation then
+        return
+    end
+
+    local duration = math.max(0.01, animation.duration or 0.58)
+    local progress = clamp((animation.elapsed or 0) / duration, 0, 1)
+    local signalProgress = 1 - progress
+    local pulseStrength = math.sin(progress * math.pi)
+    local portraitImage = carddraw.getPortraitImage(card.setName, card.cardId, {
+        portraitPath = card.portraitPath,
+    })
+    local portraitHeight = cardWidth
+    local overlayAlpha = 0.72 * signalProgress
+    local scanY = drawY + (portraitHeight * (1 - progress))
+    local pulseInset = 3 + (pulseStrength * 5)
+
+    carddraw.drawSignalLossImage(
+        portraitImage,
+        drawX,
+        drawY,
+        cardWidth,
+        portraitHeight,
+        signalProgress,
+        animation.seed,
+        overlayAlpha,
+        { 0.07, 0.13, 0.09, 1 }
+    )
+
+    love.graphics.setColor(0.55, 1, 0.05, 0.42 * pulseStrength)
+    love.graphics.setLineWidth(2)
+    love.graphics.rectangle(
+        "line",
+        drawX - pulseInset,
+        drawY - pulseInset,
+        cardWidth + (pulseInset * 2),
+        portraitHeight + (pulseInset * 2),
+        8,
+        8
+    )
+
+    love.graphics.setColor(0.55, 1, 0.05, 0.68 * pulseStrength)
+    love.graphics.rectangle("fill", drawX, scanY - 2, cardWidth, 4)
+
+    love.graphics.setColor(0.9, 1, 0.7, 0.32 * pulseStrength)
+    love.graphics.rectangle("fill", drawX, scanY - 8, cardWidth, 16)
+    love.graphics.setLineWidth(1)
+end
+
 local function buildCommonRenderOptions(card, ctx)
+    local cardDefinition = getCardDefinition(card)
+
     return {
         currentHealth = card.currentHealth,
         maxHealth = card.maxHealth,
         card = card,
         blocking = card.blocking,
-        keywordValues = keywordrules.getCardKeywordValues(card, getCardDefinition(card)),
+        keywordValues = keywordrules.getCardKeywordValues(card, cardDefinition),
+        healPreviewCount = getStartPhaseHealPreviewCount(card, cardDefinition, ctx),
         displayName = card.displayName,
         portraitPath = card.portraitPath,
         lethalPreviewOverkill = nil,
@@ -51,7 +132,7 @@ function cardpresentation.getRenderOptions(card, cardIndex, ctx)
             blockedDamagePreviewCount = ctx.warrules.getBlockedDamagePreview(card, damagePreviewCount)
             healthDamagePreviewCount = ctx.warrules.getHealthDamagePreview(card, damagePreviewCount)
         
-            if card.currentHealth and healthDamagePreviewCount >= card.currentHealth then
+            if card.currentHealth and card.currentHealth > 0 and healthDamagePreviewCount >= card.currentHealth then
                 lethalPreviewOverkill = math.max(0, healthDamagePreviewCount - card.currentHealth)
             end
         elseif card.location.rowId == "OppRow" and cardIndex and ctx.warrules.getPainDamagePreview then
@@ -59,7 +140,7 @@ function cardpresentation.getRenderOptions(card, cardIndex, ctx)
             blockedDamagePreviewCount = ctx.warrules.getBlockedDamagePreview(card, damagePreviewCount)
             healthDamagePreviewCount = ctx.warrules.getHealthDamagePreview(card, damagePreviewCount)
         
-            if card.currentHealth and healthDamagePreviewCount >= card.currentHealth then
+            if card.currentHealth and card.currentHealth > 0 and healthDamagePreviewCount >= card.currentHealth then
                 lethalPreviewOverkill = math.max(0, healthDamagePreviewCount - card.currentHealth)
             end
         end
@@ -277,6 +358,8 @@ function cardpresentation.drawStateOverlays(card, cardIndex, drawX, drawY, expan
         love.graphics.setColor(0, 0, 0, 0.3)
         love.graphics.rectangle("fill", drawX, drawY, cardWidth, cardHeight, 8, 8)
     end
+
+    drawIncapRecoveryAnimation(card, drawX, drawY, cardWidth, renderOptions)
 
     if rollState and rollState.faceIndex then
         local badgeX, badgeY, badgeWidth, badgeHeight = carddraw.getCardRollBadgeRect(drawX, drawY, renderOptions)

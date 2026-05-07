@@ -1,67 +1,58 @@
-local envdraw = require("src.render.envdraw")
-local carddraw = require("src.render.carddraw")
-cardanimations = require("src.render.cardanimations")
-local cardpresentation = require("src.render.cardpresentation")
-local infiltrationdraw = require("src.render.infiltrationdraw")
-local sfxrules = require("src.audio.sfxrules")
-local cardregistry = require("src.system.cardregistry")
-local cardinstances = require("src.system.cardinstances")
-cardlifecycle = require("src.system.cardlifecycle")
-local cardzones = require("src.system.cardzones")
-local championplayrules = require("src.system.championplayrules")
-local championrules = require("src.system.championrules")
-local engagerules = require("src.system.engagerules")
-local envrules = require("src.system.envrules")
-local notifications = require("src.system.notifications")
-local objectiverules = require("src.system.objectiverules")
-local phasecontroller = require("src.system.phasecontroller")
-local turnrules = require("src.system.turnrules")
-local warzonerules = require("src.system.warzonerules")
-local warzonecontrolrules = require("src.system.warzonecontrolrules")
-local topsloteffects = require("src.system.topsloteffects")
-local deckrules = require("src.system.deckrules")
-local jaclrules = require("src.system.jaclrules")
-local keywordrules = require("src.system.keywordrules")
-local temporaryeffects = require("src.system.temporaryeffects")
-local kitrules = require("src.system.kitrules")
-local resourcerules = require("src.system.resourcerules")
-local abilityrules = require("src.system.abilityrules")
-local infiltrationrules = require("src.system.infiltrationrules")
-local strategyrules = require("src.system.strategyrules")
-local tomerules = require("src.system.tomerules")
-local trooprules = require("src.system.trooprules")
-local previewrules = require("src.system.previewrules")
-local gamestate = require("src.system.gamestate")
-local gamestates = require("src.system.gamestates")
-syntacrules = require("src.system.syntacrules")
-spawncontroller = require("src.system.spawncontroller")
-gameactions = require("src.system.gameactions")
-boardquery = require("src.system.boardquery")
-huntercontroller = require("src.system.huntercontroller")
-cardplaycontroller = require("src.system.cardplaycontroller")
-contextbuilders = require("src.system.contextbuilders")
-local targetoverlays = require("src.render.targetoverlays")
-local gamestatedraw = require("src.render.gamestate_draw")
-local inputcontroller = require("src.ui.inputcontroller")
-local modals = require("src.ui.modals")
-hoverpreview = require("src.ui.hoverpreview")
-local warrules = require("src.system.warrules")
+local appmodules = require("src.system.appmodules")
 
-local CARD_HOVER_ANIMATION_SPEED = 10
-local CARD_ENTRANCE_SPEED = 6
-local CARD_ENTRANCE_STAGGER = 0.1
-local CARD_ENTRANCE_MAX_DT = 1 / 60
-local DAMAGE_JITTER_DURATION = 0.28
-local DAMAGE_JITTER_MAGNITUDE = 7
-local DESTRUCTION_DURATION = 0.6
-local KIT_RETURN_FLASH_DURATION = 0.1
-local KIT_RETURN_EXPAND_DURATION = 0.14
-local KIT_RETURN_FLY_DURATION = 0.28
-local KIT_RETURN_TOTAL_DURATION = KIT_RETURN_FLASH_DURATION + KIT_RETURN_EXPAND_DURATION + KIT_RETURN_FLY_DURATION
-local PILOT_VEHICLE_ANIMATION_DURATION = 0.58
-MULLIGAN_PROMPT_FADE_DURATION = 0.16
-MULLIGAN_REPLACEMENT_ANIMATION_DURATION = 0.28
-MULLIGAN_REPLACEMENT_SLIDE_OFFSET = 96
+envdraw = appmodules.envdraw
+carddraw = appmodules.carddraw
+cardpresentation = appmodules.cardpresentation
+infiltrationdraw = appmodules.infiltrationdraw
+targetoverlays = appmodules.targetoverlays
+gamestatedraw = appmodules.gamestatedraw
+sfxrules = appmodules.sfxrules
+abilityrules = appmodules.abilityrules
+animationbridge = appmodules.animationbridge
+appconfig = appmodules.appconfig
+boardquery = appmodules.boardquery
+cardinstances = appmodules.cardinstances
+cardlifecycle = appmodules.cardlifecycle
+cardplaycontroller = appmodules.cardplaycontroller
+cardregistry = appmodules.cardregistry
+cardzones = appmodules.cardzones
+championplayrules = appmodules.championplayrules
+championrules = appmodules.championrules
+contextassembly = appmodules.contextassembly
+contextbuilders = appmodules.contextbuilders
+deckrules = appmodules.deckrules
+engagerules = appmodules.engagerules
+envrules = appmodules.envrules
+gameactions = appmodules.gameactions
+gamestate = appmodules.gamestate
+gamestates = appmodules.gamestates
+huntercontroller = appmodules.huntercontroller
+infiltrationrules = appmodules.infiltrationrules
+jaclrules = appmodules.jaclrules
+keywordrules = appmodules.keywordrules
+kitrules = appmodules.kitrules
+lifecyclebridge = appmodules.lifecyclebridge
+notifications = appmodules.notifications
+objectiverules = appmodules.objectiverules
+phasecontroller = appmodules.phasecontroller
+previewrules = appmodules.previewrules
+resourcerules = appmodules.resourcerules
+spawnbridge = appmodules.spawnbridge
+strategyrules = appmodules.strategyrules
+syntacrules = appmodules.syntacrules
+temporaryeffects = appmodules.temporaryeffects
+tomerules = appmodules.tomerules
+topsloteffects = appmodules.topsloteffects
+trooprules = appmodules.trooprules
+turnrules = appmodules.turnrules
+uibridge = appmodules.uibridge
+warrules = appmodules.warrules
+warzonecontrolrules = appmodules.warzonecontrolrules
+warzonerules = appmodules.warzonerules
+hoverpreview = appmodules.hoverpreview
+inputcontroller = appmodules.inputcontroller
+modals = appmodules.modals
+
 local setupScenario = gamestate.getDefaultScenario()
 local gameState = gamestate.createInitialState()
 local appState = gamestates.create()
@@ -70,12 +61,6 @@ local isGridRowColumnOccupied
 local isWarRollSourceActive
 local getTargetingContext
 local getTopSlotRollTargets
-local initializeCardHealthState
-local initializeCardsHealthState
-local dealDamageToCard
-local dealDamageToChampion
-local addBlockingToCard
-local clearAllBlocking
 local beginInfiltrationEffect
 local addCardKeywordValue
 local beginEndPhaseSacrificeSelection
@@ -88,12 +73,8 @@ local playHunterAddedSfxForCards
 local isPointInsideJaclPortrait
 local isHunterCard
 local getCardPresentationContext
-local releaseAttachedKits
-local getCardLifecycleContext
 local startNewRun
-local function getDamageJitterKeyForCard(cardIndex)
-    return "card:" .. tostring(cardIndex)
-end
+getDamageJitterKeyForCard = lifecyclebridge.getDamageJitterKeyForCard
 
 local function isCardDestroyed(card)
     return cardlifecycle.isCardDestroyed(card)
@@ -103,44 +84,24 @@ local function isCardUnavailable(card)
     return cardlifecycle.isCardUnavailable(card)
 end
 
-local function startCardDestruction(cardIndex)
-    return cardlifecycle.startCardDestruction(getCardLifecycleContext(), cardIndex)
+startCardDestruction = function(cardIndex)
+    return lifecyclebridge.startCardDestruction(lifecyclebridgeState, cardIndex)
 end
 
-local function startChampionDestruction()
-    topsloteffects.startChampionDestruction(gameState.activeChampion)
+startChampionDestruction = function()
+    lifecyclebridge.startChampionDestruction(lifecyclebridgeState)
 end
 
-local function startIntelDestruction()
-    topsloteffects.startIntelDestruction(gameState.activeIntel)
+startIntelDestruction = function()
+    lifecyclebridge.startIntelDestruction(lifecyclebridgeState)
 end
 
-local function triggerDamageFeedback(entityKey)
-    if not entityKey then
-        return
-    end
-
-    gameState.damageJitters[entityKey] = {
-        elapsed = 0,
-        duration = DAMAGE_JITTER_DURATION,
-        magnitude = DAMAGE_JITTER_MAGNITUDE,
-    }
-    sfxrules.playDamage()
+triggerDamageFeedback = function(entityKey)
+    lifecyclebridge.triggerDamageFeedback(lifecyclebridgeState, entityKey)
 end
 
-local function getDamageJitterOffset(entityKey)
-    local jitter = gameState.damageJitters[entityKey]
-
-    if not jitter then
-        return 0, 0
-    end
-
-    local remainingRatio = math.max(0, 1 - (jitter.elapsed / jitter.duration))
-    local amplitude = jitter.magnitude * remainingRatio
-    local offsetX = math.sin(jitter.elapsed * 90) * amplitude
-    local offsetY = math.cos(jitter.elapsed * 72) * amplitude * 0.5
-
-    return offsetX, offsetY
+getDamageJitterOffset = function(entityKey)
+    return lifecyclebridge.getDamageJitterOffset(lifecyclebridgeState, entityKey)
 end
 
 local function getObjectiveProgressJitterOffset()
@@ -175,6 +136,10 @@ local function beginObjectiveHunterDeckTransformation(objectiveDefinition, gener
     return topsloteffects.beginObjectiveHunterDeckTransformation(objectiveDefinition, generatedCardId)
 end
 
+local function beginReinforcementHunterDeckTransformation(sourceLocation, sourceCardDefinition, generatedCardId)
+    return topsloteffects.beginReinforcementHunterDeckTransformation(sourceLocation, sourceCardDefinition, generatedCardId)
+end
+
 local function copyLocation(location)
     return cardinstances.copyLocation(location)
 end
@@ -206,10 +171,8 @@ local function transformCardAtIndex(cardIndex, cardDefinition)
     return true
 end
 
-local getCardAnimationContext
-
-local function pilotCardWithVehicleAtIndex(cardIndex, vehicleDefinition)
-    return cardanimations.pilotCardWithVehicleAtIndex(getCardAnimationContext(), cardIndex, vehicleDefinition)
+pilotCardWithVehicleAtIndex = function(cardIndex, vehicleDefinition)
+    return animationbridge.pilotCardWithVehicleAtIndex(animationbridgeState, cardIndex, vehicleDefinition)
 end
 
 local function getPlayerHandLayout()
@@ -304,31 +267,69 @@ local function normalizeHandCardSlots()
     cardzones.normalizeHandCardSlots(gameState.cards, isCardDestroyed)
 end
 
-getCardAnimationContext = function()
-    return {
-        cards = gameState.cards,
-        playerDeck = gameState.playerDeck,
-        kitReturnAnimations = gameState.kitReturnAnimations,
-        pilotVehicleAnimations = gameState.pilotVehicleAnimations,
-        mulliganActive = gameState.mulliganActive,
-        mulliganResolving = gameState.mulliganResolving,
-        mulliganPromptAlpha = gameState.mulliganPromptAlpha,
-        mulliganReturnedCards = gameState.mulliganReturnedCards,
-        mulliganCompleted = gameState.mulliganCompleted,
-        cardregistry = cardregistry,
-        warrules = warrules,
-        getCardDrawPosition = getCardDrawPosition,
-        getPlayerHandLayout = getPlayerHandLayout,
-        copyLocation = copyLocation,
-        normalizeHandCardSlots = normalizeHandCardSlots,
-        kitReturnFlashDuration = KIT_RETURN_FLASH_DURATION,
-        kitReturnExpandDuration = KIT_RETURN_EXPAND_DURATION,
-        kitReturnFlyDuration = KIT_RETURN_FLY_DURATION,
-        kitReturnTotalDuration = KIT_RETURN_TOTAL_DURATION,
-        pilotVehicleAnimationDuration = PILOT_VEHICLE_ANIMATION_DURATION,
-        mulliganPromptFadeDuration = MULLIGAN_PROMPT_FADE_DURATION,
-    }
-end
+animationbridgeState = {
+    gameState = gameState,
+    cardregistry = cardregistry,
+    envdraw = envdraw,
+    warrules = warrules,
+    getCardDrawPosition = function(card, cardIndex)
+        return getCardDrawPosition(card, cardIndex)
+    end,
+    getPlayerHandLayout = getPlayerHandLayout,
+    copyLocation = copyLocation,
+    normalizeHandCardSlots = normalizeHandCardSlots,
+    kitReturnFlashDuration = appconfig.KIT_RETURN_FLASH_DURATION,
+    kitReturnExpandDuration = appconfig.KIT_RETURN_EXPAND_DURATION,
+    kitReturnFlyDuration = appconfig.KIT_RETURN_FLY_DURATION,
+    kitReturnTotalDuration = appconfig.KIT_RETURN_TOTAL_DURATION,
+    pilotVehicleAnimationDuration = appconfig.PILOT_VEHICLE_ANIMATION_DURATION,
+    hunterAutoPlayAnimationDuration = appconfig.HUNTER_AUTO_PLAY_ANIMATION_DURATION,
+    mulliganPromptFadeDuration = appconfig.MULLIGAN_PROMPT_FADE_DURATION,
+}
+
+spawnbridgeState = {
+    gameState = gameState,
+    cardzones = cardzones,
+    envrules = envrules,
+    envdraw = envdraw,
+    turnrules = turnrules,
+    warrules = warrules,
+    deckrules = deckrules,
+    resourcerules = resourcerules,
+    cardregistry = cardregistry,
+    initializeCardHealthState = function(card)
+        return initializeCardHealthState(card)
+    end,
+    isCardDestroyed = isCardDestroyed,
+    isCardUnavailable = isCardUnavailable,
+    addObjectiveProgress = function(objectiveDefinition, amount, slotId)
+        return addObjectiveProgress(objectiveDefinition, amount, slotId)
+    end,
+    beginObjectiveHunterDeckTransformation = beginObjectiveHunterDeckTransformation,
+    beginReinforcementHunterDeckTransformation = beginReinforcementHunterDeckTransformation,
+    beginHunterAutoPlayAnimation = function(card, sourceSlotIndex, rowId, column)
+        return beginHunterAutoPlayAnimation(card, sourceSlotIndex, rowId, column)
+    end,
+    playHunterAddedSfxForCard = function(card)
+        return playHunterAddedSfxForCard(card)
+    end,
+    playHunterAddedSfxForCardDefinition = function(cardDefinition)
+        return playHunterAddedSfxForCardDefinition(cardDefinition)
+    end,
+}
+
+lifecyclebridgeState = {
+    gameState = gameState,
+    appconfig = appconfig,
+    cardlifecycle = cardlifecycle,
+    contextbuilders = contextbuilders,
+    gameactions = gameactions,
+    sfxrules = sfxrules,
+    topsloteffects = topsloteffects,
+    getContextBuildersContext = function()
+        return getContextBuildersContext()
+    end,
+}
 
 function resolveOpeningMulligan()
     if not gameState.mulliganActive or gameState.mulliganResolving then
@@ -377,25 +378,24 @@ function resolveOpeningMulligan()
         replacementSlots[#replacementSlots + 1] = entry.slotIndex
         entry.card.mulliganOutAnimation = {
             elapsed = 0,
-            duration = MULLIGAN_REPLACEMENT_ANIMATION_DURATION,
-            offset = MULLIGAN_REPLACEMENT_SLIDE_OFFSET,
+            duration = appconfig.MULLIGAN_REPLACEMENT_ANIMATION_DURATION,
+            offset = appconfig.MULLIGAN_REPLACEMENT_SLIDE_OFFSET,
         }
     end
 
     table.sort(replacementSlots)
 
     for _, slotIndex in ipairs(replacementSlots) do
-        local replacementCard = deckrules.drawCardToHand(gameState.playerDeck, slotIndex)
+        local replacementCard = spawnbridge.drawCardFromPlayerDeck(spawnbridgeState, slotIndex, {
+            animate = false,
+        })
 
         if replacementCard then
-            replacementCard.deckOwner = "player"
             replacementCard.mulliganInAnimation = {
                 elapsed = 0,
-                duration = MULLIGAN_REPLACEMENT_ANIMATION_DURATION,
-                offset = MULLIGAN_REPLACEMENT_SLIDE_OFFSET,
+                duration = appconfig.MULLIGAN_REPLACEMENT_ANIMATION_DURATION,
+                offset = appconfig.MULLIGAN_REPLACEMENT_SLIDE_OFFSET,
             }
-            gameState.cards[#gameState.cards + 1] = replacementCard
-            initializeCardHealthState(replacementCard)
         end
     end
 
@@ -411,61 +411,47 @@ function resolveOpeningMulligan()
 end
 
 getNextOpenHandSlot = function()
-    return spawncontroller.getNextOpenHandSlot(getSpawnControllerContext())
+    return spawnbridge.getNextOpenHandSlot(spawnbridgeState)
 end
 
-getSpawnControllerContext = function()
-    return {
-        state = gameState,
-        cardzones = cardzones,
-        envrules = envrules,
-        envdraw = envdraw,
-        turnrules = turnrules,
-        warrules = warrules,
-        deckrules = deckrules,
-        cardregistry = cardregistry,
-        initializeCardHealthState = initializeCardHealthState,
-        isCardDestroyed = isCardDestroyed,
-        isCardUnavailable = isCardUnavailable,
-        playHunterAddedSfxForCard = playHunterAddedSfxForCard,
-        playHunterAddedSfxForCardDefinition = playHunterAddedSfxForCardDefinition,
-    }
+createGeneratedSupportCard = function(cardDefinition, targetLocation)
+    return spawnbridge.createGeneratedSupportCard(spawnbridgeState, cardDefinition, targetLocation)
 end
 
-local function createGeneratedSupportCard(cardDefinition, targetLocation)
-    return spawncontroller.createGeneratedSupportCard(getSpawnControllerContext(), cardDefinition, targetLocation)
+createGeneratedDeckCardShuffled = function(cardDefinition)
+    return spawnbridge.createGeneratedDeckCardShuffled(spawnbridgeState, cardDefinition)
 end
 
-local function createGeneratedDeckCardShuffled(cardDefinition)
-    return spawncontroller.createGeneratedDeckCardShuffled(getSpawnControllerContext(), cardDefinition)
+createGeneratedGridCard = function(cardDefinition, rowId, column)
+    return spawnbridge.createGeneratedGridCard(spawnbridgeState, cardDefinition, rowId, column)
 end
 
-local function createGeneratedGridCard(cardDefinition, rowId, column)
-    return spawncontroller.createGeneratedGridCard(getSpawnControllerContext(), cardDefinition, rowId, column)
+spawnTokensNearCard = function(sourceCardIndex, tokenDefinition, count, options)
+    return spawnbridge.spawnTokensNearCard(spawnbridgeState, sourceCardIndex, tokenDefinition, count, options)
 end
 
-local function spawnTokensNearCard(sourceCardIndex, tokenDefinition, count, options)
-    return spawncontroller.spawnTokensNearCard(getSpawnControllerContext(), sourceCardIndex, tokenDefinition, count, options)
+spawnRandomTokensNearCard = function(sourceCardIndex, tokenDefinitions, count, options)
+    return spawnbridge.spawnRandomTokensNearCard(spawnbridgeState, sourceCardIndex, tokenDefinitions, count, options)
 end
 
-local function spawnRandomTokensNearCard(sourceCardIndex, tokenDefinitions, count, options)
-    return spawncontroller.spawnRandomTokensNearCard(getSpawnControllerContext(), sourceCardIndex, tokenDefinitions, count, options)
+spawnTokensNearPlayerCard = function(sourceCardIndex, tokenDefinition, count, options)
+    return spawnbridge.spawnTokensNearPlayerCard(spawnbridgeState, sourceCardIndex, tokenDefinition, count, options)
 end
 
-local function spawnTokensNearPlayerCard(sourceCardIndex, tokenDefinition, count, options)
-    return spawncontroller.spawnTokensNearPlayerCard(getSpawnControllerContext(), sourceCardIndex, tokenDefinition, count, options)
+createOrStackPlayerCacheNearCard = function(sourceCardIndex, cacheDefinition, count)
+    return spawnbridge.createOrStackPlayerCacheNearCard(spawnbridgeState, sourceCardIndex, cacheDefinition, count)
 end
 
-local function createOrStackPlayerCacheNearCard(sourceCardIndex, cacheDefinition, count)
-    return spawncontroller.createOrStackPlayerCacheNearCard(getSpawnControllerContext(), sourceCardIndex, cacheDefinition, count)
+resolveEnemyEncounter = function(sourceCardIndex, enemyDefinition)
+    return spawnbridge.resolveEnemyEncounter(spawnbridgeState, sourceCardIndex, enemyDefinition)
 end
 
-local function resolveEnemyEncounter(sourceCardIndex, enemyDefinition)
-    return spawncontroller.resolveEnemyEncounter(getSpawnControllerContext(), sourceCardIndex, enemyDefinition)
+drawCardFromPlayerDeck = function(preferredSlotIndex, options)
+    return spawnbridge.drawCardFromPlayerDeck(spawnbridgeState, preferredSlotIndex, options)
 end
 
-local function drawCardFromPlayerDeck()
-    return spawncontroller.drawCardFromPlayerDeck(getSpawnControllerContext())
+resolveHuntersInHand = function()
+    return spawnbridge.resolveHuntersInHand(spawnbridgeState)
 end
 
 getSyntacRewardContext = function()
@@ -502,68 +488,72 @@ local function chooseSyntacMethodResource(resourceName)
     return syntacrules.chooseMethodResource(resourceName, getSyntacRewardContext())
 end
 
-local function beginKitReturnAnimation(hostCard, attachedKit, returningCard)
-    return cardanimations.beginKitReturnAnimation(getCardAnimationContext(), hostCard, attachedKit, returningCard)
+beginKitReturnAnimation = function(hostCard, attachedKit, returningCard)
+    return animationbridge.beginKitReturnAnimation(animationbridgeState, hostCard, attachedKit, returningCard)
 end
 
-local function updateKitReturnAnimations(dt)
-    cardanimations.updateKitReturnAnimations(getCardAnimationContext(), dt)
+beginHunterAutoPlayAnimation = function(card, sourceSlotIndex, rowId, column)
+    return animationbridge.beginHunterAutoPlayAnimation(animationbridgeState, card, sourceSlotIndex, rowId, column)
 end
 
-local function drawKitReturnAnimations()
-    cardanimations.drawKitReturnAnimations(getCardAnimationContext())
+updateKitReturnAnimations = function(dt)
+    animationbridge.updateKitReturnAnimations(animationbridgeState, dt)
 end
 
-local function updatePilotVehicleAnimations(dt)
-    cardanimations.updatePilotVehicleAnimations(getCardAnimationContext(), dt)
+drawKitReturnAnimations = function()
+    animationbridge.drawKitReturnAnimations(animationbridgeState)
+end
+
+updatePilotVehicleAnimations = function(dt)
+    animationbridge.updatePilotVehicleAnimations(animationbridgeState, dt)
+end
+
+updateHunterAutoPlayAnimations = function(dt)
+    animationbridge.updateHunterAutoPlayAnimations(animationbridgeState, dt)
 end
 
 updateMulliganAnimations = function(dt)
-    local animationContext = getCardAnimationContext()
-
-    cardanimations.updateMulliganAnimations(animationContext, dt)
-
-    gameState.mulliganPromptAlpha = animationContext.mulliganPromptAlpha
-    gameState.mulliganReturnedCards = animationContext.mulliganReturnedCards
-    gameState.mulliganResolving = animationContext.mulliganResolving
-    gameState.mulliganActive = animationContext.mulliganActive
-    gameState.mulliganCompleted = animationContext.mulliganCompleted
+    animationbridge.updateMulliganAnimations(animationbridgeState, dt)
 end
 
-local function drawPilotVehicleAnimations()
-    cardanimations.drawPilotVehicleAnimations(getCardAnimationContext())
+drawPilotVehicleAnimations = function()
+    animationbridge.drawPilotVehicleAnimations(animationbridgeState)
+end
+
+drawHunterAutoPlayAnimations = function()
+    animationbridge.drawHunterAutoPlayAnimations(animationbridgeState)
 end
 
 releaseAttachedKits = function(card)
-    return cardlifecycle.releaseAttachedKits(getCardLifecycleContext(), card)
+    return lifecyclebridge.releaseAttachedKits(lifecyclebridgeState, card)
 end
 
-local function removeCardFromPlay(cardIndex)
-    return cardlifecycle.removeCardFromPlay(getCardLifecycleContext(), cardIndex)
+removeCardFromPlay = function(cardIndex)
+    return lifecyclebridge.removeCardFromPlay(lifecyclebridgeState, cardIndex)
 end
 
-local function expireCardFromPlay(cardIndex)
-    return cardlifecycle.expireCardFromPlay(getCardLifecycleContext(), cardIndex)
+expireCardFromPlay = function(cardIndex)
+    return lifecyclebridge.expireCardFromPlay(lifecyclebridgeState, cardIndex)
 end
 
-local function discardCardFromPlay(cardIndex)
-    return cardlifecycle.discardCardFromPlay(getCardLifecycleContext(), cardIndex)
+discardCardFromPlay = function(cardIndex)
+    return lifecyclebridge.discardCardFromPlay(lifecyclebridgeState, cardIndex)
 end
 
 getGameActionsContext = function()
-    return contextbuilders.getGameActionsContext(getContextBuildersContext())
+    return lifecyclebridge.getGameActionsContext(lifecyclebridgeState)
 end
 
-local function addObjectiveProgress(objectiveDefinition, amount, slotId)
-    return gameactions.addObjectiveProgress(getGameActionsContext(), objectiveDefinition, amount, slotId)
+addObjectiveProgress = function(objectiveDefinition, amount, slotId)
+    return lifecyclebridge.addObjectiveProgress(lifecyclebridgeState, objectiveDefinition, amount, slotId)
 end
 
-local function canApplyObjectiveProgress(objectiveDefinition, amount)
-    return gameactions.canApplyObjectiveProgress(objectiveDefinition, amount)
+canApplyObjectiveProgress = function(objectiveDefinition, amount)
+    return lifecyclebridge.canApplyObjectiveProgress(lifecyclebridgeState, objectiveDefinition, amount)
 end
 
-local function addWarzoneControl(warzoneDefinition, amount, slotId)
-    return gameactions.addWarzoneControl(getGameActionsContext(), warzoneDefinition, amount, slotId)
+addWarzoneControl = function(warzoneDefinition, amount, slotId)
+    return lifecyclebridge.addWarzoneControl(lifecyclebridgeState, warzoneDefinition, amount, slotId)
 end
 
 local function getChampionPrimaryObjective(championDefinition)
@@ -596,39 +586,39 @@ local function getRetaliationPhaseObjectiveProgress()
 end
 
 initializeCardHealthState = function(card)
-    return gameactions.initializeCardHealthState(card)
+    return lifecyclebridge.initializeCardHealthState(lifecyclebridgeState, card)
 end
 
 initializeCardsHealthState = function(cardList)
-    return gameactions.initializeCardsHealthState(cardList)
+    return lifecyclebridge.initializeCardsHealthState(lifecyclebridgeState, cardList)
 end
 
 dealDamageToCard = function(card, amount, suppressFeedback)
-    return gameactions.dealDamageToCard(getGameActionsContext(), card, amount, suppressFeedback)
+    return lifecyclebridge.dealDamageToCard(lifecyclebridgeState, card, amount, suppressFeedback)
 end
 
 dealDirectDamageToCard = function(card, amount, suppressFeedback)
-    return gameactions.dealDirectDamageToCard(getGameActionsContext(), card, amount, suppressFeedback)
+    return lifecyclebridge.dealDirectDamageToCard(lifecyclebridgeState, card, amount, suppressFeedback)
 end
 
 addBlockingToCard = function(card, amount, options)
-    return gameactions.addBlockingToCard(card, amount, options)
+    return lifecyclebridge.addBlockingToCard(lifecyclebridgeState, card, amount, options)
 end
 
-local function healCard(card, amount)
-    return gameactions.healCard(card, amount)
+healCard = function(card, amount)
+    return lifecyclebridge.healCard(lifecyclebridgeState, card, amount)
 end
 
 clearAllBlocking = function()
-    return gameactions.clearAllBlocking(getGameActionsContext())
+    return lifecyclebridge.clearAllBlocking(lifecyclebridgeState)
 end
 
 clearEnemyGuardCarryBlocking = function()
-    return gameactions.clearEnemyGuardCarryBlocking(getGameActionsContext())
+    return lifecyclebridge.clearEnemyGuardCarryBlocking(lifecyclebridgeState)
 end
 
 dealDamageToChampion = function(amount, suppressFeedback)
-    return gameactions.dealDamageToChampion(getGameActionsContext(), amount, suppressFeedback)
+    return lifecyclebridge.dealDamageToChampion(lifecyclebridgeState, amount, suppressFeedback)
 end
 
 local function getChampionPlayContext()
@@ -699,18 +689,7 @@ local function getFullArtAt(mouseX, mouseY)
 end
 
 local function tryOpenFullArt(mouseX, mouseY)
-    local image = getFullArtAt(mouseX, mouseY)
-
-    if not image then
-        return false
-    end
-
-    gameState.fullArtImage = image
-    gameState.draggedCardIndex = nil
-    gameState.draggedCardOrigin = nil
-    gameState.expandedGridCardIndex = nil
-    gameState.expandedTopSlotId = nil
-    return true
+    return uibridge.tryOpenFullArt(uibridgeState, mouseX, mouseY)
 end
 
 local function isStrategyCard(card)
@@ -770,7 +749,7 @@ addCardKeywordValue = function(cardIndex, keywordId, amount)
 end
 
 getCardLifecycleContext = function()
-    return contextbuilders.getCardLifecycleContext(getContextBuildersContext())
+    return lifecyclebridge.getCardLifecycleContext(lifecyclebridgeState)
 end
 
 beginEndPhaseSacrificeSelection = function()
@@ -815,10 +794,8 @@ local function getEntitySourceRect(entityKey)
     return boardquery.getEntitySourceRect(getBoardQueryContext(), entityKey)
 end
 
-local getHoverPreviewDeps
-
 local function getHoverPreviewState()
-    return hoverpreview.getHoverPreviewState(gameState, getHoverPreviewDeps())
+    return uibridge.getHoverPreviewState(uibridgeState)
 end
 
 beginInfiltrationEffect = function(entityKey, generatedCardDefinition, count)
@@ -911,58 +888,69 @@ local function getHoveredPlayerRollBadgeCardIndex(mouseX, mouseY)
     return boardquery.getHoveredPlayerRollBadgeCardIndex(mouseX, mouseY, getEngageContext())
 end
 
-local function buildModalState()
-    return contextbuilders.buildModalState(gameState)
+uibridgeState = {
+    gameState = gameState,
+    abilityrules = abilityrules,
+    boardquery = boardquery,
+    contextbuilders = contextbuilders,
+    engagerules = engagerules,
+    envdraw = envdraw,
+    hoverpreview = hoverpreview,
+    modals = modals,
+    getBoardQueryContext = getBoardQueryContext,
+    getContextBuildersContext = function()
+        return getContextBuildersContext()
+    end,
+    getEngageContext = getEngageContext,
+    getFullArtAt = getFullArtAt,
+}
+
+buildModalState = function()
+    return uibridge.buildModalState(uibridgeState)
 end
 
-local function applyModalState(modalState)
-    contextbuilders.applyModalState(gameState, modalState)
+applyModalState = function(modalState)
+    uibridge.applyModalState(uibridgeState, modalState)
 end
 
-local function getModalDeps()
-    return contextbuilders.getModalDeps(getContextBuildersContext())
+getModalDeps = function()
+    return uibridge.getModalDeps(uibridgeState)
 end
 
 getHoverPreviewDeps = function()
-    return contextbuilders.getHoverPreviewDeps(getContextBuildersContext())
+    return uibridge.getHoverPreviewDeps(uibridgeState)
 end
 
-local function isPointInsideJaclScratchBadge(mouseX, mouseY)
-    return modals.isPointInsideJaclScratchBadge(mouseX, mouseY, envdraw, gameState.playerJacl)
+isPointInsideJaclScratchBadge = function(mouseX, mouseY)
+    return uibridge.isPointInsideJaclScratchBadge(uibridgeState, mouseX, mouseY)
 end
 
 isPointInsideJaclPortrait = function(mouseX, mouseY)
-    return modals.isPointInsideJaclPortrait(mouseX, mouseY, envdraw, gameState.playerJacl)
+    return uibridge.isPointInsideJaclPortrait(uibridgeState, mouseX, mouseY)
 end
 
-local function primeJaclSpecial(resourceName)
-    local modalState = buildModalState()
-    local primed = modals.primeJaclSpecial(resourceName, modalState, getModalDeps())
-    applyModalState(modalState)
-    return primed
+primeJaclSpecial = function(resourceName)
+    return uibridge.primeJaclSpecial(uibridgeState, resourceName)
 end
 
-local function primeCardMethodAbility(cardIndex, resourceName)
-    local modalState = buildModalState()
-    local primed = abilityrules.primeCardMethodAbility(cardIndex, resourceName, modalState, getModalDeps())
-    applyModalState(modalState)
-    return primed
+primeCardMethodAbility = function(cardIndex, resourceName)
+    return uibridge.primeCardMethodAbility(uibridgeState, cardIndex, resourceName)
 end
 
-local function tryUseEngageReroll(mouseX, mouseY)
-    return engagerules.tryUseReroll(mouseX, mouseY, getEngageContext())
+tryUseEngageReroll = function(mouseX, mouseY)
+    return uibridge.tryUseEngageReroll(uibridgeState, mouseX, mouseY)
 end
 
-local function getHoveredTopSlotRollBadgeId(mouseX, mouseY)
-    return boardquery.getHoveredTopSlotRollBadgeId(getBoardQueryContext(), mouseX, mouseY)
+getHoveredTopSlotRollBadgeId = function(mouseX, mouseY)
+    return uibridge.getHoveredTopSlotRollBadgeId(uibridgeState, mouseX, mouseY)
 end
 
 local function isAlliedTopSlot(slotId)
     return slotId == "warzone" and gameState.activeWarzone and gameState.activeWarzone.allied == true or false
 end
 
-local function tryCancelSelectedEngageAttacker()
-    return engagerules.tryCancelSelectedAttacker(getEngageContext())
+tryCancelSelectedEngageAttacker = function()
+    return uibridge.tryCancelSelectedEngageAttacker(uibridgeState)
 end
 
 getTargetingContext = function()
@@ -994,22 +982,22 @@ local function drawCardStateOverlays(card, cardIndex, drawX, drawY, expansionPro
 end
 
 function clearHoveredSpawnPreview()
-    hoverpreview.clearSpawnPreview(gameState)
+    uibridge.clearHoveredSpawnPreview(uibridgeState)
 end
 
-local function updateHoveredCard()
-    hoverpreview.updateHoveredCard(gameState, getHoverPreviewDeps())
+updateHoveredCard = function()
+    uibridge.updateHoveredCard(uibridgeState)
 end
 
-local function getInputControllerDeps()
-    return contextbuilders.getInputControllerDeps(getContextBuildersContext())
+getInputControllerDeps = function()
+    return uibridge.getInputControllerDeps(uibridgeState)
 end
 
-local function getContextBuilderRules()
-    return {
-        state = gameState,
+contextassemblyState = {
+        gameState = gameState,
         abilityrules = abilityrules,
         carddraw = carddraw,
+        cardlifecycle = cardlifecycle,
         cardinstances = cardinstances,
         cardregistry = cardregistry,
         cardpresentation = cardpresentation,
@@ -1033,13 +1021,9 @@ local function getContextBuilderRules()
         trooprules = trooprules,
         turnrules = turnrules,
         warrules = warrules,
-        damageJitterDuration = DAMAGE_JITTER_DURATION,
-        damageJitterMagnitude = DAMAGE_JITTER_MAGNITUDE,
-    }
-end
-
-local function getContextBuilderCoreActions()
-    return {
+        damageJitterDuration = appconfig.DAMAGE_JITTER_DURATION,
+        damageJitterMagnitude = appconfig.DAMAGE_JITTER_MAGNITUDE,
+        destructionDuration = appconfig.DESTRUCTION_DURATION,
         addBlockingToCard = addBlockingToCard,
         addCardKeywordValue = addCardKeywordValue,
         addObjectiveProgress = addObjectiveProgress,
@@ -1051,6 +1035,7 @@ local function getContextBuilderCoreActions()
         beginKitReturnAnimation = beginKitReturnAnimation,
         beginObjectiveEscalation = beginObjectiveEscalation,
         beginObjectiveHunterDeckTransformation = beginObjectiveHunterDeckTransformation,
+        beginReinforcementHunterDeckTransformation = beginReinforcementHunterDeckTransformation,
         beginPoiEmergenceEffect = beginPoiEmergenceEffect,
         beginPoiFlipEffect = beginPoiFlipEffect,
         beginPoiGeneratedCardTransformation = beginPoiGeneratedCardTransformation,
@@ -1074,10 +1059,10 @@ local function getContextBuilderCoreActions()
         dealDamageToCard = dealDamageToCard,
         dealDirectDamageToCard = dealDirectDamageToCard,
         dealDamageToChampion = dealDamageToChampion,
-        destructionDuration = DESTRUCTION_DURATION,
         discardCardFromPlay = discardCardFromPlay,
         drawCardFromPlayerDeck = drawCardFromPlayerDeck,
         drawKitReturnAnimations = drawKitReturnAnimations,
+        drawHunterAutoPlayAnimations = drawHunterAutoPlayAnimations,
         enterCurrentPhase = enterCurrentPhase,
         expireCardFromPlay = expireCardFromPlay,
         healCard = healCard,
@@ -1086,6 +1071,7 @@ local function getContextBuilderCoreActions()
         removeCardFromPlay = removeCardFromPlay,
         resolveEnemyEncounter = resolveEnemyEncounter,
         resolveKilledEnemyByPlayerCard = resolveKilledEnemyByPlayerCard,
+        resolveHuntersInHand = resolveHuntersInHand,
         resolveOpeningMulligan = resolveOpeningMulligan,
         resolvePlayedTroopCard = resolvePlayedTroopCard,
         resolveDestroyedTroopCard = resolveDestroyedTroopCard,
@@ -1099,11 +1085,6 @@ local function getContextBuilderCoreActions()
         triggerDamageFeedback = triggerDamageFeedback,
         transformCardAtIndex = transformCardAtIndex,
         updateInfiltrationEffect = updateInfiltrationEffect,
-    }
-end
-
-local function getContextBuilderGetters()
-    return {
         getCardDrawPosition = getCardDrawPosition,
         getCardMethodBadgeTarget = getCardMethodBadgeTarget,
         getChampionPlayContext = getChampionPlayContext,
@@ -1131,11 +1112,6 @@ local function getContextBuilderGetters()
         getValidDropColumn = getValidDropColumn,
         getValidJaclSpecialTargetCell = getValidJaclSpecialTargetCell,
         getPlayerRowCellAt = getPlayerRowCellAt,
-    }
-end
-
-local function getContextBuilderPredicates()
-    return {
         hasPendingStrategySelection = hasPendingStrategySelection,
         isAlliedTopSlot = isAlliedTopSlot,
         isCardDestroyed = isCardDestroyed,
@@ -1150,11 +1126,6 @@ local function getContextBuilderPredicates()
         isStrategyCard = isStrategyCard,
         isStrategyPhase = isStrategyPhase,
         isWarRollSourceActive = isWarRollSourceActive,
-    }
-end
-
-local function getContextBuilderInputActions()
-    return {
         normalizeHandCardSlots = normalizeHandCardSlots,
         normalizeSetupCardSlots = normalizeSetupCardSlots,
         payCardCosts = payCardCosts,
@@ -1177,15 +1148,9 @@ local function getContextBuilderInputActions()
         tryUseTomeCard = tryUseTomeCard,
         updateHoveredCard = updateHoveredCard,
     }
-end
 
 getContextBuildersContext = function()
-    return contextbuilders.mergeContextGroups(getContextBuilderRules(), {
-        getContextBuilderCoreActions(),
-        getContextBuilderGetters(),
-        getContextBuilderPredicates(),
-        getContextBuilderInputActions(),
-    })
+    return contextassembly.build(contextbuilders, contextassemblyState)
 end
 
 startNewRun = function(saveSlotId, saveTimestamp)
@@ -1218,7 +1183,10 @@ startNewRun = function(saveSlotId, saveTimestamp)
     gameState.playerDeck = gameState.playerJacl
         and deckrules.buildDeckWithAdditionalDecks(gameState.playerJacl.deckId, getSetupAgentDeckIds())
         or nil
-    gameState.championDeck = gameState.activeChampion and gameState.activeChampion.deckId and deckrules.buildDeck(gameState.activeChampion.deckId) or nil
+    gameState.championDeck = gameState.activeChampion
+        and gameState.activeChampion.deckId
+        and deckrules.buildDeckWithAdditionalDecks(gameState.activeChampion.deckId, setupScenario.championAdditionalDeckIds or {})
+        or nil
 
     if gameState.playerDeck then
         gameState.playerDeck.owner = "player"
@@ -1234,6 +1202,10 @@ startNewRun = function(saveSlotId, saveTimestamp)
         for _, deckCard in ipairs(gameState.championDeck.cards) do
             deckCard.deckOwner = "champion"
         end
+
+        if #(setupScenario.championAdditionalDeckIds or {}) > 0 then
+            deckrules.shuffleDeck(gameState.championDeck)
+        end
     end
 
     enterCurrentPhase()
@@ -1243,6 +1215,41 @@ startNewRun = function(saveSlotId, saveTimestamp)
         gameState.cardExpansion[cardIndex] = 0
         gameState.cardEntranceProgress[cardIndex] = 0
     end
+end
+
+startMissionFromWorldNode = function(payload)
+    if not payload or not payload.jaclId or not payload.championId or not payload.warzoneId then
+        return false
+    end
+
+    setupScenario.playerJaclId = payload.jaclId
+    setupScenario.setupAgentIds = {}
+
+    for _, agentId in ipairs(payload.agentIds or {}) do
+        setupScenario.setupAgentIds[#setupScenario.setupAgentIds + 1] = agentId
+    end
+
+    setupScenario.activeChampionId = payload.championId
+    setupScenario.activeWarzoneId = payload.warzoneId
+    setupScenario.randomWarzoneSuffix = nil
+    setupScenario.championAdditionalDeckIds = {}
+
+    for _, deckId in ipairs(payload.championAdditionalDeckIds or {}) do
+        setupScenario.championAdditionalDeckIds[#setupScenario.championAdditionalDeckIds + 1] = deckId
+    end
+
+    startNewRun(appState.selectedSaveSlot, appState.selectedSaveTimestamp)
+    appState.current = "MissionStage"
+    appState.worldMapDeckModal = nil
+    appState.worldMapObjectivePreviewModal = nil
+    appState.worldMapNodePlayButtonTarget = nil
+    appState.worldToMissionTransition = {
+        elapsed = 0,
+        duration = appconfig.WORLD_TO_MISSION_TRANSITION_DURATION,
+        seed = love.math.random(1, 1000000),
+    }
+
+    return true
 end
 
 function love.load()
@@ -1259,7 +1266,23 @@ updateInfiltrationEffect = function(dt)
     end)
 end
 
+contextassemblyState.updateInfiltrationEffect = updateInfiltrationEffect
+
 function love.update(dt)
+    if appState.worldToMissionTransition then
+        local transition = appState.worldToMissionTransition
+
+        transition.elapsed = transition.elapsed + (dt or 0)
+
+        if transition.elapsed >= transition.duration then
+            appState.worldToMissionTransition = nil
+            appState.hoveredWorldMapNode = nil
+            appState.pinnedWorldMapNode = nil
+        end
+
+        return
+    end
+
     if gamestates.isFileSelect(appState) then
         gamestates.updateFileSelect(appState, dt, {
             sfxrules = sfxrules,
@@ -1274,15 +1297,17 @@ function love.update(dt)
         return
     end
 
-    local entranceDt = math.min(dt, CARD_ENTRANCE_MAX_DT)
+    local entranceDt = math.min(dt, appconfig.CARD_ENTRANCE_MAX_DT)
 
     gameState.cardEntranceTimer = gameState.cardEntranceTimer + entranceDt
     resourcerules.update(dt)
     updateKitReturnAnimations(dt)
     updatePilotVehicleAnimations(dt)
+    updateHunterAutoPlayAnimations(dt)
     updateMulliganAnimations(dt)
 
     cardlifecycle.updateDestroyedCards(getCardLifecycleContext(), dt)
+    cardlifecycle.updateIncapRecoveryAnimations(getCardLifecycleContext(), dt)
 
     for entityKey, jitter in pairs(gameState.damageJitters) do
         jitter.elapsed = jitter.elapsed + dt
@@ -1298,7 +1323,7 @@ function love.update(dt)
     updateHoveredCard()
 
     for cardIndex, card in ipairs(gameState.cards) do
-        local startTime = (cardIndex - 1) * CARD_ENTRANCE_STAGGER
+        local startTime = (cardIndex - 1) * appconfig.CARD_ENTRANCE_STAGGER
         local entranceTarget = 1
         local expansionTarget = 0
         local entranceProgress = gameState.cardEntranceProgress[cardIndex] or 0
@@ -1317,15 +1342,15 @@ function love.update(dt)
         end
 
         if entranceProgress < entranceTarget then
-            gameState.cardEntranceProgress[cardIndex] = math.min(entranceTarget, entranceProgress + (entranceDt * CARD_ENTRANCE_SPEED))
+            gameState.cardEntranceProgress[cardIndex] = math.min(entranceTarget, entranceProgress + (entranceDt * appconfig.CARD_ENTRANCE_SPEED))
         elseif entranceProgress > entranceTarget then
-            gameState.cardEntranceProgress[cardIndex] = math.max(entranceTarget, entranceProgress - (entranceDt * CARD_ENTRANCE_SPEED))
+            gameState.cardEntranceProgress[cardIndex] = math.max(entranceTarget, entranceProgress - (entranceDt * appconfig.CARD_ENTRANCE_SPEED))
         end
 
         if expansionProgress < expansionTarget then
-            gameState.cardExpansion[cardIndex] = math.min(expansionTarget, expansionProgress + (dt * CARD_HOVER_ANIMATION_SPEED))
+            gameState.cardExpansion[cardIndex] = math.min(expansionTarget, expansionProgress + (dt * appconfig.CARD_HOVER_ANIMATION_SPEED))
         elseif expansionProgress > expansionTarget then
-            gameState.cardExpansion[cardIndex] = math.max(expansionTarget, expansionProgress - (dt * CARD_HOVER_ANIMATION_SPEED))
+            gameState.cardExpansion[cardIndex] = math.max(expansionTarget, expansionProgress - (dt * appconfig.CARD_HOVER_ANIMATION_SPEED))
         end
     end
 
@@ -1342,14 +1367,18 @@ function love.update(dt)
         local expansionTarget = gameState.expandedTopSlotId == slotId and 1 or 0
 
         if expansionProgress < expansionTarget then
-            gameState.topSlotExpansion[slotId] = math.min(expansionTarget, expansionProgress + (dt * CARD_HOVER_ANIMATION_SPEED))
+            gameState.topSlotExpansion[slotId] = math.min(expansionTarget, expansionProgress + (dt * appconfig.CARD_HOVER_ANIMATION_SPEED))
         elseif expansionProgress > expansionTarget then
-            gameState.topSlotExpansion[slotId] = math.max(expansionTarget, expansionProgress - (dt * CARD_HOVER_ANIMATION_SPEED))
+            gameState.topSlotExpansion[slotId] = math.max(expansionTarget, expansionProgress - (dt * appconfig.CARD_HOVER_ANIMATION_SPEED))
         end
     end
 end
 
 function love.mousepressed(x, y, button)
+    if appState.worldToMissionTransition then
+        return
+    end
+
     if gamestates.isFileSelect(appState) then
         gamestates.mousepressedFileSelect(appState, x, y, button, {
             sfxrules = sfxrules,
@@ -1360,6 +1389,7 @@ function love.mousepressed(x, y, button)
     if gamestates.isWorldStage(appState) then
         gamestates.mousepressedWorldStage(appState, x, y, button, {
             sfxrules = sfxrules,
+            startMissionFromWorldNode = startMissionFromWorldNode,
         })
         return
     end
@@ -1368,6 +1398,10 @@ function love.mousepressed(x, y, button)
 end
 
 function love.wheelmoved(_, y)
+    if appState.worldToMissionTransition then
+        return
+    end
+
     if gamestates.isFileSelect(appState) then
         return
     end
@@ -1381,6 +1415,10 @@ function love.wheelmoved(_, y)
 end
 
 function love.mousereleased(x, y, button)
+    if appState.worldToMissionTransition then
+        return
+    end
+
     if gamestates.isFileSelect(appState) or gamestates.isWorldStage(appState) then
         return
     end
@@ -1389,6 +1427,10 @@ function love.mousereleased(x, y, button)
 end
 
 function love.keypressed(key)
+    if appState.worldToMissionTransition then
+        return
+    end
+
     if gamestates.isFileSelect(appState) then
         gamestates.keypressedFileSelect(appState, key)
         return
@@ -1402,17 +1444,7 @@ function love.keypressed(key)
     inputcontroller.keypressed(gameState, getInputControllerDeps(), key)
 end
 
-function love.draw()
-    if gamestates.isFileSelect(appState) then
-        gamestates.drawFileSelect(appState)
-        return
-    end
-
-    if gamestates.isWorldStage(appState) then
-        gamestates.drawWorldStage(appState)
-        return
-    end
-
+function drawMissionStage()
     gameState.hasRenderedFirstFrame = true
     gamestatedraw.draw({
         turnrules = turnrules,
@@ -1440,8 +1472,14 @@ function love.draw()
         hoveredCardIndex = gameState.hoveredCardIndex,
         draggedCardIndex = gameState.draggedCardIndex,
         expandedGridCardIndex = gameState.expandedGridCardIndex,
-        pendingSelectionPrompt = gameState.pendingSacrificeSelection
-            and (gameState.pendingSacrificeSelection.prompt or "Choose a troop or token to sacrifice")
+        pendingSelectionPrompt = (
+                gameState.pendingSacrificeSelection
+                and (gameState.pendingSacrificeSelection.prompt or "Choose a troop or token to sacrifice")
+            )
+            or (
+                gameState.pendingHandLimitDiscardSelection
+                and (gameState.pendingHandLimitDiscardSelection.prompt or "Hand limit exceeded. Choose one card in hand to discard.")
+            )
             or nil,
         hoverPreview = getHoverPreviewState(),
         isJaclDeckModalOpen = gameState.isJaclDeckModalOpen,
@@ -1488,6 +1526,79 @@ function love.draw()
         drawTopSlotHoverTargetBrackets = drawTopSlotHoverTargetBrackets,
         drawInfiltrationEffect = drawInfiltrationEffect,
         drawKitReturnAnimations = drawKitReturnAnimations,
+        drawHunterAutoPlayAnimations = drawHunterAutoPlayAnimations,
         drawPilotVehicleAnimations = drawPilotVehicleAnimations,
     })
+end
+
+function drawWorldToMissionTransition(transition)
+    local windowWidth, windowHeight = love.graphics.getDimensions()
+    local progress = math.max(0, math.min(1, (transition.elapsed or 0) / math.max(0.01, transition.duration or 1)))
+    local easedProgress = progress * progress * (3 - (2 * progress))
+    local scanlineY = math.floor(windowHeight * easedProgress)
+    local burnBandHeight = appconfig.WORLD_TO_MISSION_BURN_BAND_HEIGHT
+    local burnTop = math.max(0, scanlineY - math.floor(burnBandHeight * 0.42))
+    local burnBottom = math.min(windowHeight, scanlineY + math.floor(burnBandHeight * 0.58))
+
+    gamestates.drawWorldStage(appState)
+
+    if scanlineY > 0 then
+        love.graphics.setScissor(0, 0, windowWidth, scanlineY)
+        drawMissionStage()
+        love.graphics.setScissor()
+    end
+
+    love.graphics.setColor(0.01, 0.01, 0.015, 0.32 * (1 - progress))
+    love.graphics.rectangle("fill", 0, math.max(0, scanlineY - 2), windowWidth, windowHeight - scanlineY + 2)
+
+    love.graphics.setColor(0.906, 0.102, 0.176, 0.88)
+    love.graphics.rectangle("fill", 0, scanlineY - 1, windowWidth, 2)
+    love.graphics.setColor(1, 0.84, 0.58, 0.78)
+    love.graphics.rectangle("fill", 0, scanlineY - 3, windowWidth, 1)
+
+    local noiseSeed = (transition.seed or 1) + math.floor((transition.elapsed or 0) * 60)
+    local function noiseValue(index)
+        return (math.sin((noiseSeed + index) * 12.9898) * 43758.5453) % 1
+    end
+
+    local function noiseRange(index, minValue, maxValue)
+        return minValue + ((maxValue - minValue) * noiseValue(index))
+    end
+
+    for stripIndex = 1, appconfig.WORLD_TO_MISSION_BURN_STRIP_COUNT do
+        local stripWidth = math.floor(noiseRange(stripIndex * 5, 8, 34))
+        local stripHeight = math.floor(noiseRange((stripIndex * 5) + 1, 2, 12))
+        local stripX = math.floor(noiseRange((stripIndex * 5) + 2, -16, math.max(1, windowWidth)))
+        local stripY = math.floor(noiseRange((stripIndex * 5) + 3, burnTop, math.max(burnTop, burnBottom)))
+        local alpha = noiseValue((stripIndex * 5) + 4) * 0.48 * (1 - (progress * 0.35))
+
+        if noiseValue((stripIndex * 5) + 5) < 0.62 then
+            love.graphics.setColor(0.906, 0.102, 0.176, alpha)
+        else
+            love.graphics.setColor(1, 0.82, 0.42, alpha)
+        end
+
+        love.graphics.rectangle("fill", stripX, stripY, stripWidth, stripHeight)
+    end
+
+    love.graphics.setColor(1, 1, 1, 1)
+end
+
+function love.draw()
+    if appState.worldToMissionTransition then
+        drawWorldToMissionTransition(appState.worldToMissionTransition)
+        return
+    end
+
+    if gamestates.isFileSelect(appState) then
+        gamestates.drawFileSelect(appState)
+        return
+    end
+
+    if gamestates.isWorldStage(appState) then
+        gamestates.drawWorldStage(appState)
+        return
+    end
+
+    drawMissionStage()
 end

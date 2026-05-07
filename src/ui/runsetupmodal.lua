@@ -30,10 +30,12 @@ local DECK_MODAL_MAX_HEIGHT_RATIO = 0.78
 local TITLE_HEIGHT = 58
 local PANEL_RADIUS = 6
 local SLOT_RADIUS = 4
-local PACKAGE_BUTTON_SIZE = 28
+local PACKAGE_BUTTON_SIZE = 34
 local PACKAGE_BUTTON_MARGIN = 10
 local PACKAGE_SELECTION_FLASH_DURATION = 0.48
 local PACKAGE_SELECTION_FLASH_INTERVAL = 0.08
+local DICE_SUMMON_PREVIEW_GAP = 14
+local DICE_SUMMON_PREVIEW_PADDING = 10
 
 local font = nil
 local jaclImageCache = {}
@@ -561,10 +563,8 @@ local function drawPackageButton(panelX, panelY, panelWidth)
     local triangleInsetX = buttonSize * 0.34
     local triangleInsetY = buttonSize * 0.28
 
-    love.graphics.setColor(0.36, 0.035, 0.045, 1)
+    love.graphics.setColor(0.906, 0.102, 0.176, 1)
     love.graphics.rectangle("fill", buttonX, buttonY, buttonSize, buttonSize, 3, 3)
-    love.graphics.setColor(0.66, 0.12, 0.13, 0.95)
-    love.graphics.rectangle("line", buttonX, buttonY, buttonSize, buttonSize, 3, 3)
     love.graphics.setColor(0.96, 0.96, 0.95, 1)
     love.graphics.polygon(
         "fill",
@@ -981,15 +981,192 @@ local function getDeckModalCardAt(deckModal, x, y)
     return nil
 end
 
+local function normalizeDiceSummonPreviewEntries(previewCards)
+    local entries = {}
+
+    for _, previewCard in ipairs(previewCards or {}) do
+        if previewCard.definition then
+            entries[#entries + 1] = {
+                definition = previewCard.definition,
+                count = math.max(1, math.floor(tonumber(previewCard.count or previewCard.quantity) or 1)),
+            }
+        elseif previewCard.cardDefinition then
+            entries[#entries + 1] = {
+                definition = previewCard.cardDefinition,
+                count = math.max(1, math.floor(tonumber(previewCard.count or previewCard.quantity) or 1)),
+            }
+        else
+            entries[#entries + 1] = {
+                definition = previewCard,
+                count = math.max(1, math.floor(tonumber(previewCard.count or previewCard.quantity) or 1)),
+            }
+        end
+    end
+
+    return entries
+end
+
+local function getDiceSummonPreviewEntryWidth(previewWidth, previewEntry)
+    local count = math.max(1, tonumber(previewEntry and previewEntry.count) or 1)
+    local visibleStackCount = math.min(count, 5)
+
+    return previewWidth + ((visibleStackCount - 1) * previewWidth * 0.24)
+end
+
+local function getDiceSummonPreviewWidth(previewEntries, previewWidth)
+    local width = 0
+
+    for entryIndex, previewEntry in ipairs(previewEntries or {}) do
+        if entryIndex > 1 then
+            width = width + DICE_SUMMON_PREVIEW_GAP
+        end
+
+        width = width + getDiceSummonPreviewEntryWidth(previewWidth, previewEntry)
+    end
+
+    return width
+end
+
+local function drawDiceSummonPreviewStack(previewEntry, x, y, previewWidth, previewHeight, labelFont)
+    local definition = previewEntry and previewEntry.definition or nil
+
+    if not definition then
+        return
+    end
+
+    local count = math.max(1, math.floor(tonumber(previewEntry.count) or 1))
+    local visibleStackCount = math.min(count, 5)
+    local stackOffset = previewWidth * 0.24
+
+    for stackIndex = visibleStackCount, 1, -1 do
+        local cardX = x + ((stackIndex - 1) * stackOffset)
+
+        if stackIndex > 1 then
+            love.graphics.setColor(0.02, 0.025, 0.03, 0.72)
+            love.graphics.rectangle("fill", cardX - 4, y + 4, previewWidth, previewHeight, 8, 8)
+            love.graphics.setColor(0.86, 0.88, 0.93, 0.64)
+            love.graphics.rectangle("line", cardX, y, previewWidth, previewHeight, 8, 8)
+        end
+
+        carddraw.drawCardState(definition.setName, definition.id, cardX, y, 1, {
+            width = previewWidth,
+            showBadgesInTextbox = true,
+        })
+    end
+
+    if count > 1 then
+        local badgeText = "x" .. tostring(count)
+        local badgePaddingX = DICE_SUMMON_PREVIEW_PADDING * 0.7
+        local badgeHeight = labelFont:getHeight() + 8
+        local badgeWidth = math.max(labelFont:getWidth(badgeText) + (badgePaddingX * 2), badgeHeight)
+        local badgeX = x + getDiceSummonPreviewEntryWidth(previewWidth, previewEntry) - badgeWidth - 8
+        local badgeY = y + previewHeight - badgeHeight - 8
+
+        love.graphics.setColor(0.04, 0.045, 0.055, 0.94)
+        love.graphics.rectangle("fill", badgeX, badgeY, badgeWidth, badgeHeight, 5, 5)
+        love.graphics.setColor(0.92, 0.94, 0.98, 0.92)
+        love.graphics.rectangle("line", badgeX, badgeY, badgeWidth, badgeHeight, 5, 5)
+        love.graphics.setFont(labelFont)
+        love.graphics.setColor(0.96, 0.97, 1, 1)
+        love.graphics.printf(badgeText, badgeX, badgeY + ((badgeHeight - labelFont:getHeight()) / 2), badgeWidth, "center")
+    end
+end
+
+local function drawDiceSummonPreviewLeft(previewCards, labelText, cardLayout)
+    local previewEntries = normalizeDiceSummonPreviewEntries(previewCards)
+
+    if #previewEntries <= 0 or not cardLayout then
+        return
+    end
+
+    local windowWidth, windowHeight = love.graphics.getDimensions()
+    local labelFont = getFont()
+    local previewWidth, previewHeight = carddraw.getExpandedCardSize({
+        width = math.min(190, math.max(150, windowWidth * 0.1)),
+    })
+    local totalWidth = getDiceSummonPreviewWidth(previewEntries, previewWidth)
+    local bubbleHeight = (DICE_SUMMON_PREVIEW_PADDING * 2) + labelFont:getHeight()
+    local totalHeight = previewHeight + DICE_SUMMON_PREVIEW_GAP + bubbleHeight
+    local boxX = math.max(8, cardLayout.cardX - DICE_SUMMON_PREVIEW_GAP - totalWidth)
+    local boxY = math.max(8, math.min(cardLayout.cardY, windowHeight - totalHeight - 8))
+    local bubbleY = boxY + previewHeight + DICE_SUMMON_PREVIEW_GAP
+    local previewX = boxX
+
+    love.graphics.setColor(0.02, 0.025, 0.03, 0.42)
+    love.graphics.rectangle(
+        "fill",
+        boxX - DICE_SUMMON_PREVIEW_PADDING,
+        boxY - DICE_SUMMON_PREVIEW_PADDING,
+        totalWidth + (DICE_SUMMON_PREVIEW_PADDING * 2),
+        totalHeight + (DICE_SUMMON_PREVIEW_PADDING * 2),
+        8,
+        8
+    )
+
+    for _, previewEntry in ipairs(previewEntries) do
+        drawDiceSummonPreviewStack(previewEntry, previewX, boxY, previewWidth, previewHeight, labelFont)
+        previewX = previewX + getDiceSummonPreviewEntryWidth(previewWidth, previewEntry) + DICE_SUMMON_PREVIEW_GAP
+    end
+
+    love.graphics.setColor(0.05, 0.05, 0.06, 0.96)
+    love.graphics.rectangle("fill", boxX, bubbleY, totalWidth, bubbleHeight, 6, 6)
+    love.graphics.setColor(0.82, 0.85, 0.89, 0.82)
+    love.graphics.rectangle("line", boxX, bubbleY, totalWidth, bubbleHeight, 6, 6)
+
+    love.graphics.setFont(labelFont)
+    love.graphics.setColor(0.95, 0.96, 0.98, 1)
+    love.graphics.printf(
+        labelText or "SUMMON",
+        boxX + DICE_SUMMON_PREVIEW_PADDING,
+        bubbleY + ((bubbleHeight - labelFont:getHeight()) / 2),
+        totalWidth - (DICE_SUMMON_PREVIEW_PADDING * 2),
+        "center"
+    )
+end
+
 local function drawDeckCardPreview(card)
     if not card then
         return
     end
 
     local cardDefinition = cardregistry.getCard(card.setName, card.cardId)
-    local preview = previewrules.getDefinitionPreview(cardDefinition)
+    local preview = previewrules.getDefinitionPreview(cardDefinition, nil, card)
+    local previewCards = preview and (preview.cardDefinitionEntries or preview.cardDefinitions) or nil
+    local layout = envdraw.getJaclDeckPreviewModalLayout(previewCards)
+    local mouseX, mouseY = love.mouse.getPosition()
+    local diceTooltip = nil
 
     envdraw.drawJaclDeckPreviewModal(card, preview)
+
+    diceTooltip = carddraw.getHoveredDiceFace(
+        card.setName,
+        card.cardId,
+        layout.cardX,
+        layout.cardY,
+        1,
+        {
+            displayName = card.displayName,
+            portraitPath = card.portraitPath,
+            showBadgesInTextbox = true,
+        },
+        mouseX,
+        mouseY,
+        nil
+    )
+
+    if diceTooltip then
+        previewrules.applyDefinitionPreviewToTooltip(diceTooltip.definition or diceTooltip, diceTooltip, diceTooltip.previewLabel or "SUMMON")
+
+        local dicePreviewCards = diceTooltip.previewCardDefinitionEntries or diceTooltip.previewCardDefinitions
+
+        if dicePreviewCards and #dicePreviewCards > 0 then
+            drawDiceSummonPreviewLeft(dicePreviewCards, diceTooltip.previewLabel, layout)
+        elseif diceTooltip.previewCardDefinition then
+            drawDiceSummonPreviewLeft({ diceTooltip.previewCardDefinition }, diceTooltip.previewLabel, layout)
+        end
+
+        carddraw.drawDiceFaceTooltip(diceTooltip)
+    end
 end
 
 local function drawDeckModal(deckModal)

@@ -169,25 +169,27 @@ local function resolveImmediateCardAction(ctx, cardIndex, action)
     return true
 end
 
-local function applyAttackSideEffects(ctx, rollState)
+local function applyAttackSideEffects(ctx, rollState, sourceCardIndex)
     if rollState and rollState.sabotageObjective == true and ctx.activePrimaryObjective then
         ctx.addObjectiveProgress(ctx.activePrimaryObjective, -(rollState.damageValue or 0), "objective")
     end
 
     applyRollUtilitySideEffects(ctx, rollState)
 
-    if rollState and rollState.selfBlock == true and ctx.selectedAttackerCardIndex then
-        local attackerCard = ctx.cards[ctx.selectedAttackerCardIndex]
+    local attackerCardIndex = sourceCardIndex or ctx.selectedAttackerCardIndex
 
-        if attackerCard then
+    if rollState and rollState.selfBlock == true and attackerCardIndex then
+        local attackerCard = ctx.cards[attackerCardIndex]
+
+        if attackerCard and (not ctx.isCardUnavailable or not ctx.isCardUnavailable(attackerCard)) then
             ctx.addBlockingToCard(attackerCard, rollState.damageValue or 0)
         end
     end
 
-    if rollState and rollState.selfHeal == true and ctx.selectedAttackerCardIndex and ctx.healCard then
-        local attackerCard = ctx.cards[ctx.selectedAttackerCardIndex]
+    if rollState and rollState.selfHeal == true and attackerCardIndex and ctx.healCard then
+        local attackerCard = ctx.cards[attackerCardIndex]
 
-        if attackerCard then
+        if attackerCard and (not ctx.isCardUnavailable or not ctx.isCardUnavailable(attackerCard)) then
             ctx.healCard(attackerCard, rollState.damageValue or 0)
         end
     end
@@ -287,17 +289,18 @@ function engagerules.tryResolveClick(hoveredTopSlotId, ctx)
     end
 
     if ctx.selectedAttackerCardIndex or ctx.selectedAttackerTopSlotId then
+        local attackerCardIndex = ctx.selectedAttackerCardIndex
         local selectedTopSlotDefinition = ctx.selectedAttackerTopSlotId == "warzone" and ctx.activeWarzone
             or ctx.selectedAttackerTopSlotId == "poi" and ctx.activePoi
             or nil
-        local attackerCard = ctx.selectedAttackerCardIndex and ctx.cards[ctx.selectedAttackerCardIndex] or nil
+        local attackerCard = attackerCardIndex and ctx.cards[attackerCardIndex] or nil
         local attackerDefinition = attackerCard and cardregistry.getCard(attackerCard.setName, attackerCard.cardId) or selectedTopSlotDefinition
-        local attackerRollState = ctx.selectedAttackerCardIndex
-            and ctx.warrules.getCardRollState(ctx.selectedAttackerCardIndex)
+        local attackerRollState = attackerCardIndex
+            and ctx.warrules.getCardRollState(attackerCardIndex)
             or ctx.selectedAttackerTopSlotId and ctx.warrules.getDisplayStates()[ctx.selectedAttackerTopSlotId]
             or nil
 
-        if ctx.selectedAttackerCardIndex and (not attackerCard or not ctx.warrules.canCardAttack(ctx.selectedAttackerCardIndex)) then
+        if attackerCardIndex and (not attackerCard or not ctx.warrules.canCardAttack(attackerCardIndex)) then
             clearSelectedAttacker(ctx)
             return false
         end
@@ -307,9 +310,9 @@ function engagerules.tryResolveClick(hoveredTopSlotId, ctx)
             return false
         end
 
-        if ctx.selectedAttackerCardIndex and ctx.warrules.refreshCardRollValue then
-            ctx.warrules.refreshCardRollValue(ctx.selectedAttackerCardIndex, ctx.cards)
-            attackerRollState = ctx.warrules.getCardRollState(ctx.selectedAttackerCardIndex)
+        if attackerCardIndex and ctx.warrules.refreshCardRollValue then
+            ctx.warrules.refreshCardRollValue(attackerCardIndex, ctx.cards)
+            attackerRollState = ctx.warrules.getCardRollState(attackerCardIndex)
         end
 
         if ctx.warrules.hasTargetType(attackerRollState, "Blk") then
@@ -451,7 +454,7 @@ function engagerules.tryResolveClick(hoveredTopSlotId, ctx)
                 if attackerCard then
                     applyWoundToTarget(ctx.activeChampion, ctx.activeChampion, attackerRollState)
                 end
-                applyAttackSideEffects(ctx, attackerRollState)
+                applyAttackSideEffects(ctx, attackerRollState, attackerCardIndex)
                 return true
             end)
             return true
@@ -486,17 +489,17 @@ function engagerules.tryResolveClick(hoveredTopSlotId, ctx)
                             ctx.warrules.refreshCardRollValue(ctx.hoveredCardIndex, ctx.cards)
                         end
 
-                        if damageResult and damageResult.killed and ctx.resolveKilledEnemyByPlayerCard and ctx.selectedAttackerCardIndex then
-                            ctx.resolveKilledEnemyByPlayerCard(ctx.selectedAttackerCardIndex, ctx.hoveredCardIndex)
+                        if damageResult and damageResult.killed and ctx.resolveKilledEnemyByPlayerCard and attackerCardIndex then
+                            ctx.resolveKilledEnemyByPlayerCard(attackerCardIndex, ctx.hoveredCardIndex)
                         end
 
-                        if ctx.selectedAttackerCardIndex then
-                            applyAreaDamageToAdjacentCards(ctx, ctx.selectedAttackerCardIndex, attackerRollState, ctx.hoveredCardIndex)
+                        if attackerCardIndex then
+                            applyAreaDamageToAdjacentCards(ctx, attackerCardIndex, attackerRollState, ctx.hoveredCardIndex)
                         else
                             applyAreaDamageToAdjacentCards(ctx, nil, attackerRollState, ctx.hoveredCardIndex)
                         end
 
-                        applyAttackSideEffects(ctx, attackerRollState)
+                        applyAttackSideEffects(ctx, attackerRollState, attackerCardIndex)
                         return true
                     end)
                 end

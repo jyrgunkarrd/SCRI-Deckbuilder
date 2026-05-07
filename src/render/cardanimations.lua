@@ -415,4 +415,113 @@ function cardanimations.drawPilotVehicleAnimations(ctx)
     love.graphics.setColor(1, 1, 1, 1)
 end
 
+function cardanimations.beginHunterAutoPlayAnimation(ctx, card, sourceSlotIndex, rowId, column)
+    if not ctx or not card or not sourceSlotIndex or not rowId or not column then
+        return false
+    end
+
+    local handLayout = ctx.getPlayerHandLayout and ctx.getPlayerHandLayout() or nil
+    local sourceSlot = handLayout and handLayout.slots and handLayout.slots[sourceSlotIndex] or nil
+    local targetRow = ctx.envdraw and ctx.envdraw.getGridRow and ctx.envdraw.getGridRow(rowId) or nil
+    local targetCell = nil
+
+    for _, cell in ipairs(targetRow and targetRow.cells or {}) do
+        if cell.column == column then
+            targetCell = cell
+            break
+        end
+    end
+
+    if not sourceSlot or not targetCell then
+        return false
+    end
+
+    local renderOptions = {
+        width = sourceSlot.width,
+        showLabelWhenCollapsed = true,
+        showHealthOnPortrait = true,
+        showBadgesInTextbox = true,
+        displayName = card.displayName,
+        portraitPath = card.portraitPath,
+        card = card,
+        currentHealth = card.currentHealth,
+        maxHealth = card.maxHealth,
+    }
+    local cardWidth, cardHeight = carddraw.getCardSize(renderOptions)
+    local targetX = targetCell.x + ((targetCell.width - cardWidth) / 2)
+    local targetY = targetCell.y + ((targetCell.height - cardHeight) / 2)
+
+    card.hunterAutoPlayAnimation = true
+    ctx.hunterAutoPlayAnimations[#ctx.hunterAutoPlayAnimations + 1] = {
+        elapsed = 0,
+        duration = ctx.hunterAutoPlayAnimationDuration or 0.46,
+        card = card,
+        setName = card.setName,
+        cardId = card.cardId,
+        renderOptions = renderOptions,
+        startX = sourceSlot.x,
+        startY = sourceSlot.y,
+        targetX = targetX,
+        targetY = targetY,
+        peakY = math.min(sourceSlot.y, targetY) - math.max(42, cardHeight * 0.18),
+        cardWidth = cardWidth,
+        cardHeight = cardHeight,
+    }
+
+    return true
+end
+
+function cardanimations.updateHunterAutoPlayAnimations(ctx, dt)
+    for animationIndex = #ctx.hunterAutoPlayAnimations, 1, -1 do
+        local animation = ctx.hunterAutoPlayAnimations[animationIndex]
+        animation.elapsed = animation.elapsed + (dt or 0)
+
+        if animation.elapsed >= animation.duration then
+            if animation.card then
+                animation.card.hunterAutoPlayAnimation = nil
+            end
+
+            table.remove(ctx.hunterAutoPlayAnimations, animationIndex)
+        end
+    end
+end
+
+function cardanimations.drawHunterAutoPlayAnimations(ctx)
+    for _, animation in ipairs(ctx.hunterAutoPlayAnimations or {}) do
+        local progress = easeInOutCubic((animation.elapsed or 0) / math.max(0.01, animation.duration or 0.46))
+        local invProgress = 1 - progress
+        local controlX = (animation.startX + animation.targetX) / 2
+        local controlY = animation.peakY
+        local drawX = (invProgress * invProgress * animation.startX)
+            + (2 * invProgress * progress * controlX)
+            + (progress * progress * animation.targetX)
+        local drawY = (invProgress * invProgress * animation.startY)
+            + (2 * invProgress * progress * controlY)
+            + (progress * progress * animation.targetY)
+        local pulseAlpha = math.sin(progress * math.pi)
+
+        love.graphics.setColor(0.84, 0.12, 0.16, 0.22 * pulseAlpha)
+        love.graphics.rectangle(
+            "fill",
+            drawX - 5,
+            drawY - 5,
+            animation.cardWidth + 10,
+            animation.cardHeight + 10,
+            8,
+            8
+        )
+
+        carddraw.drawCardState(
+            animation.setName,
+            animation.cardId,
+            drawX,
+            drawY,
+            0,
+            animation.renderOptions
+        )
+    end
+
+    love.graphics.setColor(1, 1, 1, 1)
+end
+
 return cardanimations

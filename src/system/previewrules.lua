@@ -75,7 +75,21 @@ local function getPreviewSpec(definition)
     return preview
 end
 
-function previewrules.getPreviewCardIds(definition)
+local function getAssociatedCardId(preview, card)
+    if not preview or not card then
+        return nil
+    end
+
+    local fieldName = preview.associatedCardField
+
+    if not fieldName or fieldName == "" then
+        return nil
+    end
+
+    return card[fieldName]
+end
+
+function previewrules.getPreviewCardIds(definition, card)
     local preview = getPreviewSpec(definition)
     local cardIds = {}
 
@@ -83,6 +97,7 @@ function previewrules.getPreviewCardIds(definition)
         return cardIds
     end
 
+    addCardId(cardIds, getAssociatedCardId(preview, card))
     addCardId(cardIds, preview.cardId)
     addCardIds(cardIds, preview.cardIds)
 
@@ -97,7 +112,7 @@ function previewrules.getPreviewCardIds(definition)
     return cardIds
 end
 
-function previewrules.getPreviewCardEntries(definition)
+function previewrules.getPreviewCardEntries(definition, card)
     local preview = getPreviewSpec(definition)
     local cardEntries = {}
 
@@ -105,6 +120,7 @@ function previewrules.getPreviewCardEntries(definition)
         return cardEntries
     end
 
+    addCardEntry(cardEntries, getAssociatedCardId(preview, card), preview.quantity or preview.count)
     addCardEntry(cardEntries, preview.cardId, preview.quantity or preview.count)
     addCardEntries(cardEntries, preview.cardIds)
 
@@ -131,10 +147,10 @@ function previewrules.getPreviewLabel(definition, fallbackLabel)
     return fallbackLabel or DEFAULT_PREVIEW_LABEL
 end
 
-function previewrules.getPreviewCardDefinitions(definition)
+function previewrules.getPreviewCardDefinitions(definition, card)
     local previewCardDefinitions = {}
 
-    for _, cardId in ipairs(previewrules.getPreviewCardIds(definition)) do
+    for _, cardId in ipairs(previewrules.getPreviewCardIds(definition, card)) do
         local previewCardDefinition = cardregistry.getCardById(cardId)
 
         if previewCardDefinition then
@@ -145,10 +161,10 @@ function previewrules.getPreviewCardDefinitions(definition)
     return previewCardDefinitions
 end
 
-function previewrules.getPreviewCardDefinitionEntries(definition)
+function previewrules.getPreviewCardDefinitionEntries(definition, card)
     local previewCardDefinitionEntries = {}
 
-    for _, cardEntry in ipairs(previewrules.getPreviewCardEntries(definition)) do
+    for _, cardEntry in ipairs(previewrules.getPreviewCardEntries(definition, card)) do
         local previewCardDefinition = cardregistry.getCardById(cardEntry.cardId)
 
         if previewCardDefinition then
@@ -162,8 +178,8 @@ function previewrules.getPreviewCardDefinitionEntries(definition)
     return previewCardDefinitionEntries
 end
 
-function previewrules.getDefinitionPreview(definition, fallbackLabel)
-    local previewCardDefinitionEntries = previewrules.getPreviewCardDefinitionEntries(definition)
+function previewrules.getDefinitionPreview(definition, fallbackLabel, card)
+    local previewCardDefinitionEntries = previewrules.getPreviewCardDefinitionEntries(definition, card)
     local previewCardDefinitions = {}
 
     if #previewCardDefinitionEntries == 0 then

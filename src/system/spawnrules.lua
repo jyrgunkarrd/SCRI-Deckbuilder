@@ -1,9 +1,9 @@
 local cardinstances = require("src.system.cardinstances")
 local cardzones = require("src.system.cardzones")
-local keywordrules = require("src.system.keywordrules")
 
 local spawnrules = {}
-local GROWTH_KEYWORD_ID = "KWGRO"
+local DEFAULT_REINFORCEMENT_HUNTER_ID = "HNTINFFM"
+local HUNTER_CARD_TYPE = "hunter"
 
 local function getCards(ctx)
     return ctx and ctx.cards or nil
@@ -23,6 +23,72 @@ end
 
 local function getCardCurrentHealth(card)
     return math.max(0, tonumber(card and card.currentHealth) or 0)
+end
+
+local function getReplacementHunterId(cardDefinition)
+    return cardDefinition
+        and (cardDefinition.hunterID or cardDefinition.hunterId or cardDefinition.hunterid)
+        or DEFAULT_REINFORCEMENT_HUNTER_ID
+end
+
+local function discardReplacedCard(ctx, replacedCard, replacedDefinition)
+    if not ctx or not replacedCard or not ctx.deckrules then
+        return nil
+    end
+
+    replacedCard.replacedByReinforcement = true
+    replacedCard.rfcChampionDamageApplied = true
+
+    if replacedDefinition and replacedDefinition.type == HUNTER_CARD_TYPE and ctx.playerDeck then
+        return ctx.deckrules.discardCard(ctx.playerDeck, replacedCard)
+    end
+
+    if ctx.championDeck then
+        return ctx.deckrules.discardCard(ctx.championDeck, replacedCard)
+    end
+
+    return nil
+end
+
+local function beginReinforcementHunterDeckTransformation(ctx, replacedCard, replacedDefinition, hunterId)
+    if not ctx or not hunterId then
+        return false
+    end
+
+    if ctx.beginReinforcementHunterDeckTransformation and replacedCard and replacedCard.location then
+        return ctx.beginReinforcementHunterDeckTransformation(
+            replacedCard.location,
+            replacedDefinition,
+            hunterId
+        )
+    end
+
+    if ctx.beginObjectiveHunterDeckTransformation and ctx.activePrimaryObjective then
+        return ctx.beginObjectiveHunterDeckTransformation(ctx.activePrimaryObjective, hunterId)
+    end
+
+    return false
+end
+
+local function applyReplacementConsequences(ctx, replacedCard, replacedDefinition)
+    local replacementRfc = getEnemyRfc(replacedDefinition)
+
+    if replacementRfc <= 0 then
+        discardReplacedCard(ctx, replacedCard, replacedDefinition)
+        return
+    end
+
+    if ctx.addObjectiveProgress and ctx.activePrimaryObjective then
+        ctx.addObjectiveProgress(ctx.activePrimaryObjective, replacementRfc, "objective")
+    end
+
+    local hunterId = getReplacementHunterId(replacedDefinition)
+
+    for _ = 1, replacementRfc do
+        beginReinforcementHunterDeckTransformation(ctx, replacedCard, replacedDefinition, hunterId)
+    end
+
+    discardReplacedCard(ctx, replacedCard, replacedDefinition)
 end
 
 local function findLowestRfcEnemyInRow(ctx, rowId)
@@ -82,7 +148,6 @@ local function createReinforcedReplacementCard(ctx, cardDefinition, rowId)
         return nil
     end
 
-    local reinforcementValue = getEnemyRfc(replacedDefinition) * getCardCurrentHealth(replacedCard)
     local generatedCard = cardinstances.createGenerated(cardDefinition, {
         kind = "grid",
         rowId = rowId,
@@ -94,10 +159,7 @@ local function createReinforcedReplacementCard(ctx, cardDefinition, rowId)
     end
 
     cardinstances.initializeHealth(generatedCard)
-
-    if reinforcementValue > 0 then
-        keywordrules.addCardKeywordValue(generatedCard, cardDefinition, GROWTH_KEYWORD_ID, reinforcementValue)
-    end
+    applyReplacementConsequences(ctx, replacedCard, replacedDefinition)
 
     ctx.cards[replacedCardIndex] = generatedCard
 
@@ -113,7 +175,7 @@ local function createReinforcedReplacementCard(ctx, cardDefinition, rowId)
         ctx.warrules.clearCardRollState(replacedCardIndex)
     end
 
-    return generatedCard, replacedCardIndex, reinforcementValue
+    return generatedCard, replacedCardIndex
 end
 
 local function createGeneratedGridCard(ctx, cardDefinition, rowId, column)

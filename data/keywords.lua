@@ -116,6 +116,13 @@ local keywords = {
             hasvalue = 1,
         },
 
+        {
+            id = "KWREGEN",
+            name = "Regeneration",
+            text = "At the beginning of each turn this card heals.",
+            hasvalue = 1,
+        },
+
 }
 
 return keywords

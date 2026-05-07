@@ -156,6 +156,47 @@ function deckrules.buildDeckWithAdditionalDecks(deckId, additionalDeckIds)
     return deck
 end
 
+function deckrules.resetDeckToInitialState(deck)
+    if not deck or not deck.id then
+        return false
+    end
+
+    local owner = deck.owner
+    local resetDeck = deckrules.buildDeckWithAdditionalDecks(deck.id, deck.additionalDeckIds or {})
+
+    if not resetDeck then
+        return false
+    end
+
+    deck.name = resetDeck.name
+    deck.cards = resetDeck.cards
+    deck.discard = {}
+    deck.missingCards = resetDeck.missingCards or {}
+    deck.createdCardCount = resetDeck.createdCardCount or 0
+    deck.additionalDeckIds = resetDeck.additionalDeckIds or {}
+    deck.owner = owner
+
+    for _, card in ipairs(deck.cards or {}) do
+        card.deckOwner = owner
+    end
+
+    return true
+end
+
+function deckrules.shuffleDeck(deck)
+    if not deck or not deck.cards then
+        return false
+    end
+
+    for cardIndex = #deck.cards, 2, -1 do
+        local swapIndex = love.math.random(1, cardIndex)
+
+        deck.cards[cardIndex], deck.cards[swapIndex] = deck.cards[swapIndex], deck.cards[cardIndex]
+    end
+
+    return true
+end
+
 function deckrules.discardCard(deck, card)
     if not deck or not card then
         return nil

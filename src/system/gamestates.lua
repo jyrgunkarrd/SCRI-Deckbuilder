@@ -52,6 +52,17 @@ end
 function gamestates.updateWorldStage(state, dt, deps)
     runsetupmodal.ensure(state)
     runsetupmodal.update(state, dt, deps)
+
+    if state.runSetupModal and state.runSetupModal.isOpen then
+        state.hoveredWorldMapNode = nil
+        state.pinnedWorldMapNode = nil
+        state.worldMapDeckModal = nil
+        state.worldMapObjectivePreviewModal = nil
+        state.worldMapNodePlayButtonTarget = nil
+        return
+    end
+
+    worldmapdraw.updateHover(state, deps)
 end
 
 function gamestates.keypressedFileSelect(_, key)
@@ -73,6 +84,11 @@ function gamestates.keypressedWorldStage(state, key)
     state.selectedRunJaclId = nil
     state.selectedRunAgentIds = {}
     state.selectedRunPackage = nil
+    state.hoveredWorldMapNode = nil
+    state.pinnedWorldMapNode = nil
+    state.worldMapDeckModal = nil
+    state.worldMapObjectivePreviewModal = nil
+    state.worldMapNodePlayButtonTarget = nil
     state.saveSlots = fileselect.getSaveSlots()
 
     return true
@@ -83,10 +99,18 @@ function gamestates.mousepressedFileSelect(state, x, y, button, deps)
 end
 
 function gamestates.mousepressedWorldStage(state, x, y, button, deps)
-    return runsetupmodal.mousepressed(state, x, y, button, deps)
+    if runsetupmodal.mousepressed(state, x, y, button, deps) then
+        return true
+    end
+
+    return worldmapdraw.mousepressed(state, x, y, button, deps)
 end
 
 function gamestates.wheelmovedWorldStage(state, x, y)
+    if worldmapdraw.wheelmoved(state, x, y) then
+        return true
+    end
+
     return runsetupmodal.wheelmoved(state, x, y)
 end
 

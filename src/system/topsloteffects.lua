@@ -16,6 +16,8 @@ local WARZONE_TRANSFORMATION_EFFECT_DURATION = 0.52
 local POI_EMERGENCE_EFFECT_DURATION = 0.56
 local POI_FLIP_EFFECT_DURATION = 0.48
 local POI_HUNTER_TRANSFORMATION_DURATION = 0.72
+local POI_HUNTER_TRANSFORMATION_STAGGER = 0.16
+local POI_HUNTER_TRANSFORMATION_MAX_ACTIVE = 4
 
 local championDestructionState = nil
 local intelDestructionState = nil
@@ -24,7 +26,8 @@ local objectiveEscalationEffect = nil
 local warzoneTransformationEffect = nil
 local poiEmergenceEffect = nil
 local poiFlipEffect = nil
-local poiHunterTransformationEffect = nil
+local poiHunterTransformationEffects = {}
+local poiHunterTransformationQueue = {}
 
 local function progressFor(effect)
     return effect and math.min(1, effect.elapsed / effect.duration) or nil
@@ -52,7 +55,54 @@ function topsloteffects.reset()
     warzoneTransformationEffect = nil
     poiEmergenceEffect = nil
     poiFlipEffect = nil
-    poiHunterTransformationEffect = nil
+    poiHunterTransformationEffects = {}
+    poiHunterTransformationQueue = {}
+end
+
+local function startPoiHunterTransformation(effect)
+    poiHunterTransformationEffects[#poiHunterTransformationEffects + 1] = effect
+    return true
+end
+
+local function shouldStartQueuedPoiHunterTransformation()
+    if #poiHunterTransformationQueue <= 0
+        or #poiHunterTransformationEffects >= POI_HUNTER_TRANSFORMATION_MAX_ACTIVE then
+        return false
+    end
+
+    if #poiHunterTransformationEffects == 0 then
+        return true
+    end
+
+    local newestElapsed = nil
+
+    for _, effect in ipairs(poiHunterTransformationEffects) do
+        if newestElapsed == nil or (effect.elapsed or 0) < newestElapsed then
+            newestElapsed = effect.elapsed or 0
+        end
+    end
+
+    return (newestElapsed or 0) >= POI_HUNTER_TRANSFORMATION_STAGGER
+end
+
+local function startQueuedPoiHunterTransformations()
+    while shouldStartQueuedPoiHunterTransformation() do
+        startPoiHunterTransformation(table.remove(poiHunterTransformationQueue, 1))
+    end
+end
+
+local function queuePoiHunterTransformation(effect)
+    if not effect then
+        return false
+    end
+
+    if #poiHunterTransformationEffects > 0 then
+        poiHunterTransformationQueue[#poiHunterTransformationQueue + 1] = effect
+        startQueuedPoiHunterTransformations()
+        return true
+    end
+
+    return startPoiHunterTransformation(effect)
 end
 
 function topsloteffects.startChampionDestruction(activeChampion)
@@ -211,7 +261,7 @@ function topsloteffects.beginPoiGeneratedCardTransformation(poiDefinition, gener
     }
 
     carddraw.preloadPortrait(generatedCardDefinition.setName, generatedCardDefinition.id)
-    poiHunterTransformationEffect = {
+    return queuePoiHunterTransformation({
         elapsed = 0,
         duration = POI_HUNTER_TRANSFORMATION_DURATION,
         seed = love.math.random() * 1000,
@@ -219,8 +269,7 @@ function topsloteffects.beginPoiGeneratedCardTransformation(poiDefinition, gener
         sourcePoi = poiDefinition,
         generatedCardDefinition = generatedCardDefinition,
         targetLocation = targetLocation,
-    }
-    return true
+    })
 end
 
 function topsloteffects.beginObjectiveHunterDeckTransformation(objectiveDefinition, generatedCardId)
@@ -235,7 +284,7 @@ function topsloteffects.beginObjectiveHunterDeckTransformation(objectiveDefiniti
     end
 
     carddraw.preloadPortrait(generatedCardDefinition.setName, generatedCardDefinition.id)
-    poiHunterTransformationEffect = {
+    return queuePoiHunterTransformation({
         elapsed = 0,
         duration = POI_HUNTER_TRANSFORMATION_DURATION,
         seed = love.math.random() * 1000,
@@ -245,12 +294,46 @@ function topsloteffects.beginObjectiveHunterDeckTransformation(objectiveDefiniti
         targetLocation = {
             kind = "deck",
         },
-    }
-    return true
+    })
+end
+
+function topsloteffects.beginReinforcementHunterDeckTransformation(sourceLocation, sourceCardDefinition, generatedCardId)
+    if not sourceLocation or not generatedCardId then
+        return false
+    end
+
+    local generatedCardDefinition = cardregistry.getCardById(generatedCardId)
+
+    if not generatedCardDefinition then
+        return false
+    end
+
+    carddraw.preloadPortrait(generatedCardDefinition.setName, generatedCardDefinition.id)
+
+    if sourceCardDefinition then
+        carddraw.preloadPortrait(sourceCardDefinition.setName, sourceCardDefinition.id)
+    end
+
+    return queuePoiHunterTransformation({
+        elapsed = 0,
+        duration = POI_HUNTER_TRANSFORMATION_DURATION,
+        seed = love.math.random() * 1000,
+        sourceSlotId = "grid",
+        sourceLocation = {
+            kind = sourceLocation.kind,
+            rowId = sourceLocation.rowId,
+            column = sourceLocation.column,
+        },
+        sourceCardDefinition = sourceCardDefinition,
+        generatedCardDefinition = generatedCardDefinition,
+        targetLocation = {
+            kind = "deck",
+        },
+    })
 end
 
 function topsloteffects.isPoiHunterTransformationActive()
-    return poiHunterTransformationEffect ~= nil
+    return #poiHunterTransformationEffects > 0 or #poiHunterTransformationQueue > 0
 end
 
 function topsloteffects.update(dt)
@@ -321,18 +404,25 @@ function topsloteffects.update(dt)
         end
     end
 
-    if poiHunterTransformationEffect then
-        poiHunterTransformationEffect.elapsed = poiHunterTransformationEffect.elapsed + dt
+    if #poiHunterTransformationEffects > 0 then
+        for effectIndex = #poiHunterTransformationEffects, 1, -1 do
+            local effect = poiHunterTransformationEffects[effectIndex]
 
-        if poiHunterTransformationEffect.elapsed >= poiHunterTransformationEffect.duration then
-            events.poiHunterTransformationComplete = {
-                sourceSlotId = poiHunterTransformationEffect.sourceSlotId,
-                generatedCardDefinition = poiHunterTransformationEffect.generatedCardDefinition,
-                targetLocation = poiHunterTransformationEffect.targetLocation,
-            }
-            poiHunterTransformationEffect = nil
+            effect.elapsed = effect.elapsed + dt
+
+            if effect.elapsed >= effect.duration then
+                events.poiHunterTransformationComplete = events.poiHunterTransformationComplete or {}
+                events.poiHunterTransformationComplete[#events.poiHunterTransformationComplete + 1] = {
+                    sourceSlotId = effect.sourceSlotId,
+                    generatedCardDefinition = effect.generatedCardDefinition,
+                    targetLocation = effect.targetLocation,
+                }
+                table.remove(poiHunterTransformationEffects, effectIndex)
+            end
         end
     end
+
+    startQueuedPoiHunterTransformations()
 
     return events
 end
@@ -399,16 +489,26 @@ function topsloteffects.getRenderStates()
         }
     end
 
-    if poiHunterTransformationEffect then
-        states.poiHunterTransformation = {
-            progress = progressFor(poiHunterTransformationEffect),
-            seed = poiHunterTransformationEffect.seed,
-            sourceSlotId = poiHunterTransformationEffect.sourceSlotId,
-            sourcePoi = poiHunterTransformationEffect.sourcePoi,
-            sourceObjective = poiHunterTransformationEffect.sourceObjective,
-            generatedCardDefinition = poiHunterTransformationEffect.generatedCardDefinition,
-            targetLocation = poiHunterTransformationEffect.targetLocation,
-        }
+    if #poiHunterTransformationEffects > 0 then
+        states.poiHunterTransformations = {}
+
+        for _, effect in ipairs(poiHunterTransformationEffects) do
+            local renderState = {
+                progress = progressFor(effect),
+                seed = effect.seed,
+                sourceSlotId = effect.sourceSlotId,
+                sourcePoi = effect.sourcePoi,
+                sourceObjective = effect.sourceObjective,
+                sourceLocation = effect.sourceLocation,
+                sourceCardDefinition = effect.sourceCardDefinition,
+                generatedCardDefinition = effect.generatedCardDefinition,
+                targetLocation = effect.targetLocation,
+            }
+
+            states.poiHunterTransformations[#states.poiHunterTransformations + 1] = renderState
+        end
+
+        states.poiHunterTransformation = states.poiHunterTransformations[1]
     end
 
     return states

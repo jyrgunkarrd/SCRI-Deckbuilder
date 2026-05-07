@@ -719,20 +719,36 @@ local function drawPoiHunterTransformation(slots, effect)
 
     local sourceSlot = nil
     local sourceSlotId = effect.sourceSlotId or "poi"
+    local sourceRect = nil
 
-    for _, slot in ipairs(slots) do
-        if slot.id == sourceSlotId then
-            sourceSlot = slot
-            break
+    if sourceSlotId == "grid" and effect.sourceLocation then
+        local sourceRow = envdraw.getGridRow(effect.sourceLocation.rowId)
+        local sourceCell = sourceRow and sourceRow.cells and sourceRow.cells[effect.sourceLocation.column] or nil
+
+        if sourceCell then
+            sourceRect = {
+                x = sourceCell.x,
+                y = sourceCell.y,
+                width = sourceCell.width,
+                height = sourceCell.height,
+            }
         end
+    else
+        for _, slot in ipairs(slots) do
+            if slot.id == sourceSlotId then
+                sourceSlot = slot
+                break
+            end
+        end
+
+        sourceRect = sourceSlot and sourceSlot.imageRect or nil
     end
 
-    if not sourceSlot or not sourceSlot.imageRect then
+    if not sourceRect then
         return
     end
 
     local progress = clamp(effect.progress or 0, 0, 1)
-    local sourceRect = sourceSlot.imageRect
     local sourceImage = nil
 
     if sourceSlotId == "objective" and effect.sourceObjective then
@@ -793,6 +809,16 @@ local function drawPoiHunterTransformation(slots, effect)
             0,
             drawWidth / sourceImage:getWidth(),
             drawHeight / sourceImage:getHeight()
+        )
+    elseif sourceSlotId == "grid" and sourceAlpha > 0 then
+        carddraw.drawPortraitPreview(
+            effect.generatedCardDefinition.setName,
+            effect.generatedCardDefinition.id,
+            drawX,
+            drawY,
+            drawWidth,
+            drawHeight,
+            sourceAlpha
         )
     end
 
@@ -1834,10 +1860,6 @@ function envdraw.drawChampion(championDefinition, currentPhase, warzoneDefinitio
         drawPoiFlipTransition(poiSlot, poiFlipEffect)
     end
 
-    if poiHunterTransformationEffect and poiHunterTransformationEffect.targetLocation and poiHunterTransformationEffect.targetLocation.kind ~= "hand" then
-        drawPoiHunterTransformation(slots, poiHunterTransformationEffect)
-    end
-
     if not expandedSlotId or not expandedSlotProgress or expandedSlotProgress <= 0 then
         love.graphics.setColor(1, 1, 1, 1)
         return
@@ -2504,16 +2526,6 @@ local function drawHoverPreviewArtPanel(preview)
     love.graphics.rectangle("line", layout.x, layout.y, layout.width, layout.height, 10, 10)
     love.graphics.rectangle("line", layout.x, layout.y, layout.width, HOVER_PREVIEW_LABEL_HEIGHT, 10, 10)
 
-    love.graphics.setFont(labelFont)
-    love.graphics.setColor(0.95, 0.96, 0.98, 1)
-    love.graphics.printf(
-        preview.label or preview.slotId or "Preview",
-        layout.x + 12,
-        layout.y + ((HOVER_PREVIEW_LABEL_HEIGHT - labelFont:getHeight()) / 2),
-        layout.width - 24,
-        "center"
-    )
-
     if preview.image then
         love.graphics.setColor(1, 1, 1, 1)
         love.graphics.draw(
@@ -2552,6 +2564,20 @@ local function drawHoverPreviewArtPanel(preview)
         )
     end
 
+    love.graphics.setColor(0.06, 0.07, 0.09, 0.96)
+    love.graphics.rectangle("fill", layout.x, layout.y, layout.width, HOVER_PREVIEW_LABEL_HEIGHT, 10, 10)
+    love.graphics.setColor(accentColor[1], accentColor[2], accentColor[3], 0.92)
+    love.graphics.rectangle("line", layout.x, layout.y, layout.width, HOVER_PREVIEW_LABEL_HEIGHT, 10, 10)
+    love.graphics.setFont(labelFont)
+    love.graphics.setColor(0.95, 0.96, 0.98, 1)
+    love.graphics.printf(
+        preview.label or preview.slotId or "Preview",
+        layout.x + 12,
+        layout.y + ((HOVER_PREVIEW_LABEL_HEIGHT - labelFont:getHeight()) / 2),
+        layout.width - 24,
+        "center"
+    )
+
     love.graphics.setColor(1, 1, 1, 1)
 end
 
@@ -2575,6 +2601,52 @@ function envdraw.drawHoverPreview(preview, drawCardStateOverlays)
 
         if drawCardStateOverlays and preview.card and preview.cardIndex then
             drawCardStateOverlays(preview.card, preview.cardIndex, layout.x, layout.y, 1, renderOptions)
+        end
+
+        if preview.definitionPreview
+            and preview.definitionPreview.cardDefinitionEntries
+            and #preview.definitionPreview.cardDefinitionEntries > 0
+            and normalizeSummonPreviewEntries
+            and getSummonPreviewEntriesWidth
+            and drawSummonPreviewEntries then
+            local previewEntries = normalizeSummonPreviewEntries(preview.definitionPreview.cardDefinitionEntries)
+            local labelFont = getFont(JACL_LABEL_FONT_PATH, 14)
+            local previewGap = SPECIAL_TOOLTIP_PREVIEW_GAP
+            local sideGap = math.max(20, previewGap * 1.35)
+            local labelGap = math.max(14, previewGap)
+            local previewWidth = math.min(layout.width, 180)
+            local previewHeight = select(2, carddraw.getExpandedCardSize({
+                width = previewWidth,
+            }))
+            local previewTotalWidth = getSummonPreviewEntriesWidth(previewEntries, previewWidth, previewGap)
+            local previewX = layout.side == "left"
+                and (layout.x + layout.width + sideGap)
+                or (layout.x - sideGap - previewTotalWidth)
+            previewX = math.max(8, math.min(previewX, love.graphics.getWidth() - previewTotalWidth - 8))
+            local visualPreviewHeight = select(2, carddraw.getExpandedCardSize({
+                width = previewWidth,
+                showBadgesInTextbox = true,
+            }))
+            local labelHeight = labelFont:getHeight() + 10
+            local totalPreviewHeight = visualPreviewHeight + labelGap + labelHeight
+            local previewY = math.max(8, math.min(layout.y, love.graphics.getHeight() - totalPreviewHeight - 8))
+            local labelY = previewY + visualPreviewHeight + labelGap
+
+            drawSummonPreviewEntries(previewEntries, previewX, previewY, previewWidth, previewHeight, previewGap, labelFont)
+
+            love.graphics.setColor(0.05, 0.05, 0.06, 0.96)
+            love.graphics.rectangle("fill", previewX, labelY, previewTotalWidth, labelHeight, 6, 6)
+            love.graphics.setColor(0.82, 0.85, 0.89, 0.82)
+            love.graphics.rectangle("line", previewX, labelY, previewTotalWidth, labelHeight, 6, 6)
+            love.graphics.setFont(labelFont)
+            love.graphics.setColor(0.95, 0.96, 0.98, 1)
+            love.graphics.printf(
+                preview.definitionPreview.label or "PREVIEW",
+                previewX + SPECIAL_TOOLTIP_PADDING,
+                labelY + ((labelHeight - labelFont:getHeight()) / 2),
+                previewTotalWidth - (SPECIAL_TOOLTIP_PADDING * 2),
+                "center"
+            )
         end
 
         return
@@ -2611,17 +2683,20 @@ function envdraw.drawPlayerHand()
     local handLayout = envdraw.getPlayerHandLayout()
     local previousFont = love.graphics.getFont()
     local slotLabelFont = getFont(HAND_SLOT_FONT_PATH, 26)
+    local safeSlotColor = { 0, 0.918, 0.765, 1 }
+    local limitSlotColor = { 1, 0.188, 0.188, 1 }
 
     love.graphics.setColor(0.8, 0.84, 0.88, 0.35)
 
     for slotIndex, slot in ipairs(handLayout.slots) do
         local visualX = slot.x + ((slot.width - HAND_SLOT_VISUAL_WIDTH) / 2) + HAND_SLOT_VISUAL_OFFSET_X
+        local slotColor = slotIndex >= 10 and limitSlotColor or safeSlotColor
 
         love.graphics.setColor(0, 0, 0, 0.9)
         love.graphics.rectangle("fill", visualX, slot.y, HAND_SLOT_VISUAL_WIDTH, slot.height, 8, 8)
-        love.graphics.setColor(0.8, 0.84, 0.88, 0.35)
+        love.graphics.setColor(slotColor[1], slotColor[2], slotColor[3], 0.75)
         love.graphics.rectangle("line", visualX, slot.y, HAND_SLOT_VISUAL_WIDTH, slot.height, 8, 8)
-        love.graphics.setColor(1, 0.192, 0.192, 1)
+        love.graphics.setColor(slotColor)
         love.graphics.setFont(slotLabelFont)
         love.graphics.printf(tostring(slotIndex), visualX, slot.y + ((slot.height - slotLabelFont:getHeight()) / 2), HAND_SLOT_VISUAL_WIDTH, "center")
         love.graphics.setColor(0.8, 0.84, 0.88, 0.35)
@@ -3430,6 +3505,7 @@ drawSummonPreviewStack = function(previewEntry, previewX, previewY, previewWidth
         end
 
         carddraw.drawCardState(previewCardDefinition.setName, previewCardDefinition.id, cardX, previewY, 1, {
+            width = previewWidth,
             showBadgesInTextbox = true,
         })
     end
@@ -3522,11 +3598,14 @@ function envdraw.drawJaclSpecialTooltip(specialDefinition, previewCards, anchorX
         8
     )
 
+    if previewEntries then
+        drawSummonPreviewEntries(previewEntries, boxX, boxY, previewWidth, previewHeight, previewGap, titleFont)
+    end
+
     love.graphics.setColor(0.05, 0.05, 0.06, 0.96)
     love.graphics.rectangle("fill", boxX, tooltipY, tooltipWidth, tooltipHeight, 6, 6)
     love.graphics.setColor(0.82, 0.85, 0.89, 0.82)
     love.graphics.rectangle("line", boxX, tooltipY, tooltipWidth, tooltipHeight, 6, 6)
-
     love.graphics.setFont(titleFont)
     love.graphics.setColor(0.95, 0.96, 0.98, 1)
     love.graphics.print(specialDefinition.name or specialDefinition.id or "Special", boxX + SPECIAL_TOOLTIP_PADDING, tooltipY + SPECIAL_TOOLTIP_PADDING)
@@ -3541,15 +3620,11 @@ function envdraw.drawJaclSpecialTooltip(specialDefinition, previewCards, anchorX
         "left"
     )
 
-    if previewEntries then
-        drawSummonPreviewEntries(previewEntries, boxX, boxY, previewWidth, previewHeight, previewGap, titleFont)
-    end
-
     love.graphics.setFont(previousFont)
     love.graphics.setColor(1, 1, 1, 1)
 end
 
-function envdraw.drawSummonPreviewTooltip(previewCards, anchorX, anchorY, anchorWidth, anchorHeight, labelText)
+function envdraw.drawSummonPreviewTooltip(previewCards, anchorX, anchorY, anchorWidth, anchorHeight, labelText, preferredSide)
     local previewEntries = normalizeSummonPreviewEntries(previewCards)
 
     if #previewEntries <= 0 then
@@ -3568,7 +3643,9 @@ function envdraw.drawSummonPreviewTooltip(previewCards, anchorX, anchorY, anchor
     local gap = SPECIAL_TOOLTIP_OFFSET_X
     local rightX = (anchorX or 0) + (anchorWidth or 0) + gap
     local leftX = (anchorX or 0) - gap - totalWidth
-    local boxX = rightX + totalWidth <= windowWidth - 8 and rightX or leftX
+    local boxX = preferredSide == "left"
+        and leftX
+        or (rightX + totalWidth <= windowWidth - 8 and rightX or leftX)
     local boxY = anchorY or 0
     local bubbleY = boxY + previewHeight + SPECIAL_TOOLTIP_PREVIEW_GAP
 

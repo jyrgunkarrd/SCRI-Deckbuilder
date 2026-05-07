@@ -7,7 +7,8 @@ local championplayrules = {}
 
 local DEFAULT_PLAY_DELAY = 0.2
 local DEFAULT_ENCOUNTER_SPAWN_DELAY = 0.16
-local GROWTH_KEYWORD_ID = "KWGRO"
+local DEFAULT_REINFORCEMENT_HUNTER_ID = "HNTINFFM"
+local HUNTER_CARD_TYPE = "hunter"
 
 function championplayrules.createState()
     return {
@@ -60,6 +61,72 @@ local function getCardCurrentHealth(card)
     return math.max(0, tonumber(card and card.currentHealth) or 0)
 end
 
+local function getReplacementHunterId(cardDefinition)
+    return cardDefinition
+        and (cardDefinition.hunterID or cardDefinition.hunterId or cardDefinition.hunterid)
+        or DEFAULT_REINFORCEMENT_HUNTER_ID
+end
+
+local function discardReplacedCard(ctx, replacedCard, replacedDefinition)
+    if not ctx or not replacedCard then
+        return nil
+    end
+
+    replacedCard.replacedByReinforcement = true
+    replacedCard.rfcChampionDamageApplied = true
+
+    if replacedDefinition and replacedDefinition.type == HUNTER_CARD_TYPE and ctx.playerDeck then
+        return deckrules.discardCard(ctx.playerDeck, replacedCard)
+    end
+
+    if ctx.championDeck then
+        return deckrules.discardCard(ctx.championDeck, replacedCard)
+    end
+
+    return nil
+end
+
+local function beginReinforcementHunterDeckTransformation(ctx, replacedCard, replacedDefinition, hunterId)
+    if not ctx or not hunterId then
+        return false
+    end
+
+    if ctx.beginReinforcementHunterDeckTransformation and replacedCard and replacedCard.location then
+        return ctx.beginReinforcementHunterDeckTransformation(
+            replacedCard.location,
+            replacedDefinition,
+            hunterId
+        )
+    end
+
+    if ctx.beginObjectiveHunterDeckTransformation and ctx.activePrimaryObjective then
+        return ctx.beginObjectiveHunterDeckTransformation(ctx.activePrimaryObjective, hunterId)
+    end
+
+    return false
+end
+
+local function applyReplacementConsequences(ctx, replacedCard, replacedDefinition)
+    local replacementRfc = getEnemyRfc(replacedDefinition)
+
+    if replacementRfc <= 0 then
+        discardReplacedCard(ctx, replacedCard, replacedDefinition)
+        return
+    end
+
+    if ctx.addObjectiveProgress and ctx.activePrimaryObjective then
+        ctx.addObjectiveProgress(ctx.activePrimaryObjective, replacementRfc, "objective")
+    end
+
+    local hunterId = getReplacementHunterId(replacedDefinition)
+
+    for _ = 1, replacementRfc do
+        beginReinforcementHunterDeckTransformation(ctx, replacedCard, replacedDefinition, hunterId)
+    end
+
+    discardReplacedCard(ctx, replacedCard, replacedDefinition)
+end
+
 local function findLowestRfcOppRowEnemy(ctx)
     local lowestCardIndex = nil
     local lowestCard = nil
@@ -98,7 +165,7 @@ function championplayrules.playHouseCard(ctx)
     end
 
     if #championDeck.cards == 0 then
-        deckrules.reshuffleDiscardIntoDeck(championDeck)
+        deckrules.resetDeckToInitialState(championDeck)
     end
 
     if #championDeck.cards == 0 then
@@ -123,7 +190,10 @@ function championplayrules.playHouseCard(ctx)
     local randomIndex = love.math.random(1, #championDeck.cards)
     local card = table.remove(championDeck.cards, randomIndex)
     local playedCardIndex = replacedCardIndex or (#ctx.cards + 1)
-    local reinforcementValue = replacedDefinition and (getEnemyRfc(replacedDefinition) * getCardCurrentHealth(replacedCard)) or 0
+
+    if replacedCard then
+        applyReplacementConsequences(ctx, replacedCard, replacedDefinition)
+    end
 
     ctx.cards[playedCardIndex] = {
         instanceId = card.instanceId,
@@ -141,10 +211,6 @@ function championplayrules.playHouseCard(ctx)
     ctx.initializeCardHealthState(ctx.cards[playedCardIndex])
 
     local playedCardDefinition = cardregistry.getCard(card.setName, card.cardId)
-
-    if reinforcementValue > 0 then
-        keywordrules.addCardKeywordValue(ctx.cards[playedCardIndex], playedCardDefinition, GROWTH_KEYWORD_ID, reinforcementValue)
-    end
 
     ctx.cardExpansion[playedCardIndex] = 0
     ctx.cardEntranceProgress[playedCardIndex] = 1

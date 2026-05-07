@@ -41,6 +41,10 @@ function hoverpreview.getHoveredCardPreview(state, deps)
     local cardWidth, collapsedHeight = deps.carddraw.getCardSize(renderOptions)
     local _, expandedHeight = deps.carddraw.getExpandedCardSize(renderOptions)
     local cardHeight = collapsedHeight + ((expandedHeight - collapsedHeight) * (expansionProgress or 0))
+    local cardDefinition = deps.cardregistry and deps.cardregistry.getCard(card.setName, card.cardId) or nil
+    local definitionPreview = deps.previewrules
+        and deps.previewrules.getDefinitionPreview(cardDefinition, nil, card)
+        or nil
 
     return {
         kind = "card",
@@ -55,6 +59,7 @@ function hoverpreview.getHoveredCardPreview(state, deps)
         setName = card.setName,
         cardId = card.cardId,
         renderOptions = copyRenderOptions(renderOptions),
+        definitionPreview = definitionPreview,
     }
 end
 

@@ -22,6 +22,8 @@ local PILOT_SFX_PATH = "assets/audio/sfx/pilot.wav"
 local FILE_SELECT_SFX_PATH = "assets/audio/sfx/file_select.wav"
 local CLICK_SFX_PATH = "assets/audio/sfx/click.wav"
 local GO_SFX_PATH = "assets/audio/sfx/go.wav"
+local MISSION_START_SFX_PATH = "assets/audio/sfx/missionstart.wav"
+local RESTORED_SFX_PATH = "assets/audio/sfx/restored.wav"
 
 local hoverSource = nil
 local resourceMoveSource = nil
@@ -45,6 +47,8 @@ local pilotSource = nil
 local fileSelectSource = nil
 local clickSource = nil
 local goSource = nil
+local missionStartSource = nil
+local restoredSource = nil
 
 local function getHoverSource()
     if hoverSource ~= nil then
@@ -244,6 +248,24 @@ local function getGoSource()
     return goSource
 end
 
+local function getMissionStartSource()
+    if missionStartSource ~= nil then
+        return missionStartSource
+    end
+
+    missionStartSource = love.audio.newSource(MISSION_START_SFX_PATH, "static")
+    return missionStartSource
+end
+
+local function getRestoredSource()
+    if restoredSource ~= nil then
+        return restoredSource
+    end
+
+    restoredSource = love.audio.newSource(RESTORED_SFX_PATH, "static")
+    return restoredSource
+end
+
 function sfxrules.playHover()
     local source = getHoverSource():clone()
     source:play()
@@ -351,6 +373,16 @@ end
 
 function sfxrules.playGo()
     local source = getGoSource():clone()
+    source:play()
+end
+
+function sfxrules.playMissionStart()
+    local source = getMissionStartSource():clone()
+    source:play()
+end
+
+function sfxrules.playRestored()
+    local source = getRestoredSource():clone()
     source:play()
 end
 
