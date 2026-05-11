@@ -134,17 +134,25 @@ local decks = {
             },
         },
 
+        --- Champion Decks ---
+
+
+        {
+            id = "PAMDCK",
+            name = "PAM",
+            cards = {
+                {
+                    cardId = "ENEXTDRVWSP",
+                    quantity = 5,
+                },
+            },
+        },
+
         --- Modular Packages ---
 
         {
             id = "DEMOPKG",
             name = "Demo package",
-            cards = {
-                {
-                    cardId = "ENSTRD",
-                    quantity = 10,
-                },
-            },
         },
 
         --- Standard Packages ---
@@ -153,12 +161,6 @@ local decks = {
         {
             id = "STDPKG",
             name = "Standard Demo package",
-            cards = {
-                {
-                    cardId = "ENSTRD",
-                    quantity = 10,
-                },
-            },
         },
 
 }

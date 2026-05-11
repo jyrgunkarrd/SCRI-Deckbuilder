@@ -212,7 +212,7 @@ local dice = {
             target = "enemy_card",
             autoReload = true,
             area = true,
-            facename = "Exotic Area Weapon Attack",
+            facename = "Exotic Hi-Ex Weapon Attack",
             facedesc = "Deal damage to a target troop and adjacent troops or Champion. This card gains Reloading.",
         },
 
@@ -289,6 +289,17 @@ local dice = {
         },
 
         {
+            id = "ARDMG2",
+            type = "Black",
+            over = "AreaAtk",
+            value = 2,
+            targ = "Atk",
+            facename = "High Explosive Attack",
+            facedesc = "Deal damage to a target troop or Champion. Damages adjacent troops.",
+            area = true,
+        },
+
+        {
             id = "RNGDMG1",
             type = "Black",
             over = "BscRngAtk",
@@ -339,7 +350,7 @@ local dice = {
             over = "AreaAtk",
             value = 1,
             targ = "Atk",
-            facename = "Area Wound Attack",
+            facename = "Hi-Ex Wound Attack",
             facedesc = "Deal damage to a target troop and adjacent troops or Champion. Inflict the Wound condition.",
             wound = true,
             area = true,
@@ -351,7 +362,7 @@ local dice = {
             over = "AreaAtk",
             value = 2,
             targ = "Atk",
-            facename = "Area Wound Attack",
+            facename = "Hi-Ex Wound Attack",
             facedesc = "Deal damage to a target troop and adjacent troops or Champion. Inflict the Wound condition.",
             wound = true,
             area = true,
@@ -481,7 +492,7 @@ local dice = {
         targ = "Atk",
         pain = true,
         area = true,
-        facename = "Area Suicide Attack",
+        facename = "Hi-Ex Suicide Attack",
         facedesc = "Deal damage to a target troop and adjacent troops or Champion. Deal damage to this card.",
 
     },
@@ -494,7 +505,7 @@ local dice = {
         targ = "Atk",
         pain = true,
         area = true,
-        facename = "Area Suicide Attack",
+        facename = "Hi-Ex Suicide Attack",
         facedesc = "Deal damage to a target troop and adjacent troops or Champion. Deal damage to this card.",
 
     },
@@ -507,7 +518,7 @@ local dice = {
         targ = "Atk",
         pain = true,
         area = true,
-        facename = "Area Suicide Attack",
+        facename = "Hi-Ex Suicide Attack",
         facedesc = "Deal damage to a target troop and adjacent troops or Champion. Deal damage to this card.",
 
     },
@@ -521,7 +532,7 @@ local dice = {
         pain = true,
         area = true,
         autoReload = true,
-        facename = "Exotic Area Suicide Attack",
+        facename = "Exotic Hi-Ex Suicide Attack",
         facedesc = "Deal damage to a target troop and adjacent troops or Champion. Deal damage to this card. This card gains Reloading.",
 
     },
@@ -535,7 +546,7 @@ local dice = {
         pain = true,
         area = true,
         autoReload = true,
-        facename = "Exotic Area Suicide Attack",
+        facename = "Exotic Hi-Ex Suicide Attack",
         facedesc = "Deal damage to a target troop and adjacent troops or Champion. Deal damage to this card. This card gains Reloading.",
 
     },
@@ -549,7 +560,7 @@ local dice = {
         pain = true,
         area = true,
         autoReload = true,
-        facename = "Exotic Area Suicide Attack",
+        facename = "Exotic Hi-Ex Suicide Attack",
         facedesc = "Deal damage to a target troop and adjacent troops or Champion. Deal damage to this card. This card gains Reloading.",
 
     },
@@ -1053,6 +1064,23 @@ local dice = {
         preview = {
             label = "SUMMON",
             cardId = "AEGFZTOK",
+        },
+    },
+
+    {
+        id = "LWSPATKSMN",
+        type = "SuiSmnBg",
+        over = "BscAtk",
+        value = 2,
+        targ = "AtkSmn",
+        facename = "Suicide Attack and Summon",
+        facedesc = "Deal damage to a target troop or Champion. Summon the shown token. Deal damage to this card.",
+        target = { "ENLWSP" },
+        func = "Spawn",
+        pain = true,
+        preview = {
+            label = "SUMMON",
+            cardId = "ENLWSP",
         },
     },
 

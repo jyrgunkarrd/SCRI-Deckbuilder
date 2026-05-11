@@ -13,26 +13,14 @@ local warzoneDefinitions = require("data.warzones")
 
 local JACL_IMAGE_DIRECTORY = "assets/images/jacl/"
 local CARD_FONT_PATH = "assets/fonts/Furore.otf"
-local MAP_SHOP_IMAGE_PATH = "assets/images/map/shop.png"
-local MAP_CACHE_IMAGE_PATH = "assets/images/map/cache.png"
-local MAP_REGFOR_IMAGE_PATH = "assets/images/map/regfor.png"
-local MAP_GLORYFOR_IMAGE_PATH = "assets/images/map/gloryfor.png"
-local MAP_CITYEVT_IMAGE_PATH = "assets/images/map/cityevt.png"
-local MAP_JNGLEVT_IMAGE_PATH = "assets/images/map/jnglevt.png"
-local MAP_BOSS_IMAGE_PATH = "assets/images/map/boss.png"
+local MAP_IMAGE_DIRECTORY = "assets/images/map/"
 local CHAMP_IMAGE_DIRECTORY = "assets/images/champ/"
 local STDPKG_IMAGE_DIRECTORY = "assets/images/stdpkg/"
 local MODULARPKG_IMAGE_DIRECTORY = "assets/images/modularpkg/"
 local WARZONE_IMAGE_DIRECTORY = "assets/images/warzone/"
 
-local mapShopImage = nil
-local mapCacheImage = nil
-local mapRegforImage = nil
-local mapGloryforImage = nil
-local mapCityevtImage = nil
-local mapJnglevtImage = nil
-local mapBossImage = nil
 local jaclImageCache = {}
+local nodePreviewIconCache = {}
 local encounterPreviewImageCache = {}
 local objectivePreviewImageCache = {}
 local warzonePreviewImageCache = {}
@@ -44,8 +32,6 @@ local PLAYER_POSITION_PULSE_MAX_ALPHA = 1
 local NEXT_DESTINATION_COLOR = { 1, 0.16, 0.1, 1 }
 local MAP_CLUSTER_COUNT = 3
 local MAP_CLUSTER_SIZE = 5
-local MAP_BRANCH_TOP = 1
-local MAP_BRANCH_BOTTOM = 2
 local NODE_PREVIEW_MARGIN_X = 34
 local NODE_PREVIEW_WIDTH = 560
 local NODE_PREVIEW_PADDING = 18
@@ -61,6 +47,7 @@ local NODE_PREVIEW_OBJECTIVE_ROW_GAP = 12
 local NODE_PREVIEW_PLAY_BUTTON_SIZE = 34
 local NODE_PREVIEW_PLAY_BUTTON_MARGIN = 10
 local NODE_PREVIEW_PLAY_BUTTON_COLOR = { 0.906, 0.102, 0.176, 1 }
+local NODE_PREVIEW_CORNER_ICON_SIZE = 34
 local WORLD_DECK_MODAL_CARD_WIDTH = 150
 local WORLD_DECK_MODAL_CARD_GAP = 14
 local WORLD_DECK_MODAL_HEADER_HEIGHT = 44
@@ -125,11 +112,7 @@ local function getMapLayout()
         eventCircleRadius = 15,
         bossDiamondRadius = 30,
         bossInnerDiamondRadius = 18,
-        shopIconSize = 208,
-        bossIconSize = 208,
         nonBossNodeShift = 24,
-        dottedConnectorInset = 12,
-        dottedConnectorOffsetY = 8,
         clusterSize = clusterSize,
         clusterCount = clusterCount,
         horizontalMargin = horizontalMargin,
@@ -285,6 +268,48 @@ local function getJaclImage(jaclDefinition)
     return jaclImageCache[jaclDefinition.name]
 end
 
+local function getNodePreviewIconImage(nodeDefinition)
+    if not nodeDefinition then
+        return nil
+    end
+
+    local candidates = {}
+
+    if nodeDefinition.id then
+        candidates[#candidates + 1] = nodeDefinition.id
+        candidates[#candidates + 1] = tostring(nodeDefinition.id):lower()
+    end
+
+    if nodeDefinition.icon then
+        candidates[#candidates + 1] = nodeDefinition.icon
+    end
+
+    for _, candidate in ipairs(candidates) do
+        local cacheKey = tostring(candidate)
+
+        if nodePreviewIconCache[cacheKey] ~= nil then
+            return nodePreviewIconCache[cacheKey] or nil
+        end
+
+        local imagePath = MAP_IMAGE_DIRECTORY .. cacheKey .. ".png"
+
+        if love.filesystem.getInfo(imagePath) then
+            local image = love.graphics.newImage(imagePath, {
+                mipmaps = true,
+            })
+
+            image:setFilter("linear", "linear")
+            image:setMipmapFilter("linear")
+            nodePreviewIconCache[cacheKey] = image
+            return image
+        end
+
+        nodePreviewIconCache[cacheKey] = false
+    end
+
+    return nil
+end
+
 local function getEncounterPreviewImage(encounter)
     local definition = encounter and encounter.definition or nil
 
@@ -328,130 +353,6 @@ local function getEncounterPreviewImage(encounter)
     image:setMipmapFilter("linear")
     encounterPreviewImageCache[cacheKey] = image
     return image
-end
-
-local function getMapShopImage()
-    if mapShopImage ~= nil then
-        return mapShopImage
-    end
-
-    mapShopImage = love.graphics.newImage(MAP_SHOP_IMAGE_PATH, {
-        mipmaps = true,
-    })
-    mapShopImage:setFilter("linear", "linear")
-    mapShopImage:setMipmapFilter("linear")
-    return mapShopImage
-end
-
-local function getMapCacheImage()
-    if mapCacheImage ~= nil then
-        return mapCacheImage
-    end
-
-    mapCacheImage = love.graphics.newImage(MAP_CACHE_IMAGE_PATH, {
-        mipmaps = true,
-    })
-    mapCacheImage:setFilter("linear", "linear")
-    mapCacheImage:setMipmapFilter("linear")
-    return mapCacheImage
-end
-
-local function getMapRegforImage()
-    if mapRegforImage ~= nil then
-        return mapRegforImage
-    end
-
-    mapRegforImage = love.graphics.newImage(MAP_REGFOR_IMAGE_PATH, {
-        mipmaps = true,
-    })
-    mapRegforImage:setFilter("linear", "linear")
-    mapRegforImage:setMipmapFilter("linear")
-    return mapRegforImage
-end
-
-local function getMapGloryforImage()
-    if mapGloryforImage ~= nil then
-        return mapGloryforImage
-    end
-
-    mapGloryforImage = love.graphics.newImage(MAP_GLORYFOR_IMAGE_PATH, {
-        mipmaps = true,
-    })
-    mapGloryforImage:setFilter("linear", "linear")
-    mapGloryforImage:setMipmapFilter("linear")
-    return mapGloryforImage
-end
-
-local function getMapCityevtImage()
-    if mapCityevtImage ~= nil then
-        return mapCityevtImage
-    end
-
-    mapCityevtImage = love.graphics.newImage(MAP_CITYEVT_IMAGE_PATH, {
-        mipmaps = true,
-    })
-    mapCityevtImage:setFilter("linear", "linear")
-    mapCityevtImage:setMipmapFilter("linear")
-    return mapCityevtImage
-end
-
-local function getMapJnglevtImage()
-    if mapJnglevtImage ~= nil then
-        return mapJnglevtImage
-    end
-
-    mapJnglevtImage = love.graphics.newImage(MAP_JNGLEVT_IMAGE_PATH, {
-        mipmaps = true,
-    })
-    mapJnglevtImage:setFilter("linear", "linear")
-    mapJnglevtImage:setMipmapFilter("linear")
-    return mapJnglevtImage
-end
-
-local function getMapBossImage()
-    if mapBossImage ~= nil then
-        return mapBossImage
-    end
-
-    mapBossImage = love.graphics.newImage(MAP_BOSS_IMAGE_PATH, {
-        mipmaps = true,
-    })
-    mapBossImage:setFilter("linear", "linear")
-    mapBossImage:setMipmapFilter("linear")
-    return mapBossImage
-end
-
-local function getMapImageByIcon(icon)
-    if icon == "regfor" then
-        return getMapRegforImage()
-    elseif icon == "gloryfor" then
-        return getMapGloryforImage()
-    elseif icon == "cityevt" or icon == "city_event" then
-        return getMapCityevtImage()
-    elseif icon == "jnglevt" or icon == "jungle_event" then
-        return getMapJnglevtImage()
-    elseif icon == "shop" then
-        return getMapShopImage()
-    elseif icon == "cache" then
-        return getMapCacheImage()
-    elseif icon == "boss" then
-        return getMapBossImage()
-    end
-
-    return nil
-end
-
-local function drawVerticalDottedLine(x, startY, endY, dotRadius, gapLength)
-    local direction = startY <= endY and 1 or -1
-    local cursorY = startY
-
-    dotRadius = dotRadius or 4
-    gapLength = gapLength or 8
-
-    while (direction == 1 and cursorY <= endY) or (direction == -1 and cursorY >= endY) do
-        love.graphics.circle("fill", x, cursorY, dotRadius)
-        cursorY = cursorY + (((dotRadius * 2) + gapLength) * direction)
-    end
 end
 
 local function getPlayerMapPosition(state)
@@ -521,14 +422,6 @@ local function setDestinationPulseColor()
     love.graphics.setColor(NEXT_DESTINATION_COLOR[1], NEXT_DESTINATION_COLOR[2], NEXT_DESTINATION_COLOR[3], getMapPulseAlpha())
 end
 
-local function setMapImageColor(isPulsing)
-    if isPulsing then
-        love.graphics.setColor(1, 1, 1, getMapPulseAlpha())
-    else
-        love.graphics.setColor(1, 1, 1, 1)
-    end
-end
-
 local function getClusterNodeX(layout, clusterIndex, nodeIndex)
     local clusterStartX = layout.firstDiamondX
         + ((clusterIndex - 1) * ((layout.clusterSize - 1) * layout.intraClusterSpacing + layout.clusterGap))
@@ -541,54 +434,78 @@ local function getClusterNodeX(layout, clusterIndex, nodeIndex)
     return x
 end
 
-local function getBranchImageRect(layout, clusterIndex, nodeIndex, branchIndex, nodeDefinition)
-    if clusterIndex ~= 1 or not nodeDefinition then
-        return nil
+local function getRouteNodeDefinitionIds(state, clusterIndex, nodeIndex)
+    local mapDefinition = worldmaprules.getActiveMap(state)
+    local cluster = mapDefinition and mapDefinition.clusters and mapDefinition.clusters[clusterIndex] or nil
+    local routeNode = cluster and cluster.nodes and cluster.nodes[nodeIndex] or nil
+    local nodeDefinitionIds = {}
+
+    for _, nodeDefinitionId in ipairs(routeNode and routeNode.branches or {}) do
+        nodeDefinitionIds[#nodeDefinitionIds + 1] = nodeDefinitionId
     end
 
-    local image = getMapImageByIcon(nodeDefinition.icon)
-
-    if not image then
-        return nil
+    if #nodeDefinitionIds <= 0 and routeNode and routeNode.nodeId then
+        nodeDefinitionIds[#nodeDefinitionIds + 1] = routeNode.nodeId
     end
 
-    local isEventNode = nodeIndex == 3
+    return nodeDefinitionIds
+end
+
+local function getRouteNodePreviewGroup(state, clusterIndex, nodeIndex)
+    local layout = getMapLayout()
     local x = getClusterNodeX(layout, clusterIndex, nodeIndex)
-    local nodeRadius = isEventNode and layout.eventCircleRadius or layout.diamondRadius
-    local verticalOffset = (nodeIndex == 2 or nodeIndex == 4) and 164 or 20
-    local scale = layout.shopIconSize / math.max(image:getWidth(), image:getHeight())
-    local imageWidth = image:getWidth() * scale
-    local imageHeight = image:getHeight() * scale
-    local imageX = x - (imageWidth * 0.5)
-    local imageY = branchIndex == MAP_BRANCH_TOP
-        and (layout.y - nodeRadius - imageHeight - verticalOffset)
-        or (layout.y + nodeRadius + verticalOffset)
+    local isBossNode = nodeIndex == layout.clusterSize
+    local isEventNode = nodeIndex == 3
+    local nodeRadius = isBossNode and layout.bossDiamondRadius
+        or (isEventNode and layout.eventCircleRadius or layout.diamondRadius)
+    local previewNodes = {}
+
+    for branchIndex, nodeDefinitionId in ipairs(getRouteNodeDefinitionIds(state, clusterIndex, nodeIndex)) do
+        local nodeDefinition = worldmaprules.getNodeDefinition(nodeDefinitionId)
+
+        if nodeDefinition then
+            previewNodes[#previewNodes + 1] = {
+                clusterIndex = clusterIndex,
+                nodeIndex = nodeIndex,
+                branchIndex = branchIndex,
+                nodeDefinition = nodeDefinition,
+                sourceRect = {
+                    x = x - nodeRadius,
+                    y = layout.y - nodeRadius,
+                    width = nodeRadius * 2,
+                    height = nodeRadius * 2,
+                },
+                preview = worldmaprules.getNodeEncounterPreview(nodeDefinition),
+            }
+        end
+    end
+
+    if #previewNodes <= 0 then
+        return nil
+    end
 
     return {
-        x = imageX,
-        y = imageY,
-        width = imageWidth,
-        height = imageHeight,
+        clusterIndex = clusterIndex,
+        nodeIndex = nodeIndex,
+        sourceRect = {
+            x = x - nodeRadius,
+            y = layout.y - nodeRadius,
+            width = nodeRadius * 2,
+            height = nodeRadius * 2,
+        },
+        previewNodes = previewNodes,
     }
 end
 
 local function getHoveredFunctionalNode(state, mouseX, mouseY)
     local layout = getMapLayout()
 
-    for nodeIndex = 1, MAP_CLUSTER_SIZE do
-        for branchIndex = MAP_BRANCH_TOP, MAP_BRANCH_BOTTOM do
-            local nodeDefinition = worldmaprules.getFirstClusterBranchNode(state, nodeIndex, branchIndex)
-            local rect = getBranchImageRect(layout, 1, nodeIndex, branchIndex, nodeDefinition)
+    for clusterIndex = 1, layout.clusterCount do
+        for nodeIndex = 1, layout.clusterSize do
+            local previewGroup = getRouteNodePreviewGroup(state, clusterIndex, nodeIndex)
 
-            if rect and isPointInsideRect(mouseX, mouseY, rect) then
-                return {
-                    clusterIndex = 1,
-                    nodeIndex = nodeIndex,
-                    branchIndex = branchIndex,
-                    nodeDefinition = nodeDefinition,
-                    sourceRect = rect,
-                    preview = worldmaprules.getNodeEncounterPreview(nodeDefinition),
-                }
+            if previewGroup and isPointInsideRect(mouseX, mouseY, previewGroup.sourceRect) then
+                return previewGroup
             end
         end
     end
@@ -596,11 +513,14 @@ local function getHoveredFunctionalNode(state, mouseX, mouseY)
     return nil
 end
 
-local function getPreviewSide(sourceRect)
-    local screenWidth = love.graphics.getWidth()
-    local sourceCenterX = sourceRect and (sourceRect.x + ((sourceRect.width or 0) * 0.5)) or (screenWidth * 0.5)
+local function getDefaultFunctionalNode(state)
+    local nextMapPosition = getNextMapPosition(getPlayerMapPosition(state))
 
-    return sourceCenterX < (screenWidth * 0.5) and "right" or "left"
+    if not nextMapPosition or nextMapPosition.kind ~= "path" then
+        return nil
+    end
+
+    return getRouteNodePreviewGroup(state, nextMapPosition.clusterIndex, nextMapPosition.nodeIndex)
 end
 
 local function printWrappedLine(text, x, y, width, font)
@@ -950,36 +870,71 @@ local function drawNodePreviewPlayButton(state, hoveredNode, panelX, panelY, pan
     )
 
     if state then
-        state.worldMapNodePlayButtonTarget = {
+        state.worldMapNodePlayButtonTargets = state.worldMapNodePlayButtonTargets or {}
+        state.worldMapNodePlayButtonTargets[#state.worldMapNodePlayButtonTargets + 1] = {
             x = buttonX,
             y = buttonY,
             width = buttonSize,
             height = buttonSize,
             hoveredNode = hoveredNode,
         }
+        state.worldMapNodePlayButtonTarget = state.worldMapNodePlayButtonTargets[#state.worldMapNodePlayButtonTargets]
     end
+end
+
+local function drawNodePreviewCornerIcon(hoveredNode, panelX, panelY)
+    local image = getNodePreviewIconImage(hoveredNode and hoveredNode.nodeDefinition or nil)
+
+    if not image then
+        return
+    end
+
+    local iconSize = NODE_PREVIEW_CORNER_ICON_SIZE
+    local iconX = panelX - math.floor(iconSize * 0.32)
+    local iconY = panelY - math.floor(iconSize * 0.32)
+    local imageScale = math.min(iconSize / image:getWidth(), iconSize / image:getHeight())
+    local imageWidth = image:getWidth() * imageScale
+    local imageHeight = image:getHeight() * imageScale
+
+    love.graphics.setColor(0.015, 0.018, 0.023, 0.96)
+    love.graphics.rectangle("fill", iconX, iconY, iconSize, iconSize, 5, 5)
+    love.graphics.setColor(0.9, 0.92, 0.95, 0.78)
+    love.graphics.rectangle("line", iconX, iconY, iconSize, iconSize, 5, 5)
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.draw(
+        image,
+        iconX + ((iconSize - imageWidth) * 0.5),
+        iconY + ((iconSize - imageHeight) * 0.5),
+        0,
+        imageScale,
+        imageScale
+    )
 end
 
 local function drawChampionPreviewRail(championRow, x, y, width, imageHeight, healthHeight, labelHeight, titleFont, metaFont, accentColor, state)
     local nameText = championRow and (championRow.name or championRow.id) or "Unknown Champion"
-    local railHeight = imageHeight + healthHeight + labelHeight
-    local labelY = y + imageHeight + healthHeight
-
-    love.graphics.setColor(0.025, 0.028, 0.035, 1)
-    love.graphics.rectangle("fill", x, y, width, railHeight, 5, 5)
+    local frameX = x
+    local frameY = y
+    local frameWidth = width
+    local frameHeight = imageHeight
+    local labelY = nil
 
     if championRow and championRow.image then
         local image = championRow.image
         local scale = math.min(width / image:getWidth(), imageHeight / image:getHeight())
-        local imageWidth = image:getWidth() * scale
+        local scaledImageWidth = image:getWidth() * scale
         local scaledImageHeight = image:getHeight() * scale
-        local imageX = x + ((width - imageWidth) * 0.5)
-        local imageY = y + ((imageHeight - scaledImageHeight) * 0.5)
         local previousScissorX, previousScissorY, previousScissorWidth, previousScissorHeight = love.graphics.getScissor()
 
-        love.graphics.setScissor(x, y, width, imageHeight)
+        frameX = x + ((width - scaledImageWidth) * 0.5)
+        frameWidth = scaledImageWidth
+        frameHeight = scaledImageHeight
+
+        love.graphics.setColor(0.025, 0.028, 0.035, 1)
+        love.graphics.rectangle("fill", frameX, frameY, frameWidth, frameHeight, 5, 5)
+        love.graphics.setScissor(frameX, frameY, frameWidth, frameHeight)
         love.graphics.setColor(1, 1, 1, 1)
-        love.graphics.draw(image, imageX, imageY, 0, scale, scale)
+        love.graphics.draw(image, frameX, frameY, 0, scale, scale)
 
         if previousScissorX then
             love.graphics.setScissor(previousScissorX, previousScissorY, previousScissorWidth, previousScissorHeight)
@@ -987,32 +942,49 @@ local function drawChampionPreviewRail(championRow, x, y, width, imageHeight, he
             love.graphics.setScissor()
         end
     else
+        frameX = x + 6
+        frameY = y + 6
+        frameWidth = width - 12
+        frameHeight = imageHeight - 12
+
+        love.graphics.setColor(0.025, 0.028, 0.035, 1)
+        love.graphics.rectangle("fill", frameX, frameY, frameWidth, frameHeight, 5, 5)
         love.graphics.setColor(0.15, 0.16, 0.19, 1)
-        love.graphics.rectangle("fill", x + 6, y + 6, width - 12, imageHeight - 12, 3, 3)
+        love.graphics.rectangle("fill", frameX + 6, frameY + 6, frameWidth - 12, frameHeight - 12, 3, 3)
     end
 
-    addWorldMapPreviewDeckTarget(state, x, y, width, imageHeight, championRow)
+    love.graphics.setColor(accentColor[1], accentColor[2], accentColor[3], 0.9)
+    love.graphics.rectangle("line", frameX, frameY, frameWidth, frameHeight, 5, 5)
 
+    addWorldMapPreviewDeckTarget(state, frameX, frameY, frameWidth, frameHeight, championRow)
+
+    labelY = frameY + frameHeight + healthHeight
     love.graphics.setColor(0.035, 0.035, 0.025, 0.98)
-    love.graphics.rectangle("fill", x, y + imageHeight, width, healthHeight)
-    drawChampionHealthBar(championRow, x + 10, y + imageHeight + 4, width - 20, healthHeight - 8)
+    love.graphics.rectangle("fill", frameX, frameY + frameHeight, frameWidth, healthHeight)
+    drawChampionHealthBar(championRow, frameX + 10, frameY + frameHeight + 4, frameWidth - 20, healthHeight - 8)
 
     love.graphics.setColor(0.02, 0.02, 0.025, 0.96)
-    love.graphics.rectangle("fill", x, labelY, width, labelHeight, 0, 0)
+    love.graphics.rectangle("fill", frameX, labelY, frameWidth, labelHeight, 0, 0)
 
     love.graphics.setFont(metaFont)
     love.graphics.setColor(accentColor[1], accentColor[2], accentColor[3], 1)
-    love.graphics.printf("Champion", x + 10, labelY + 8, width - 20, "left")
+    love.graphics.printf("Champion", frameX + 10, labelY + 8, frameWidth - 20, "left")
 
     love.graphics.setFont(titleFont)
     love.graphics.setColor(0.94, 0.95, 0.96, 1)
-    love.graphics.printf(nameText, x + 10, labelY + metaFont:getHeight() + 12, width - 20, "left")
-
-    love.graphics.setColor(accentColor[1], accentColor[2], accentColor[3], 0.9)
-    love.graphics.rectangle("line", x, y, width, railHeight, 5, 5)
+    love.graphics.printf(nameText, frameX + 10, labelY + metaFont:getHeight() + 12, frameWidth - 20, "left")
 end
 
-local function drawNodeEncounterPreview(state, hoveredNode)
+local function getNodePreviewEdge(hoveredNode)
+    local pos = hoveredNode
+        and hoveredNode.nodeDefinition
+        and hoveredNode.nodeDefinition.pos
+        or nil
+
+    return tostring(pos):lower() == "bottom" and "bottom" or "top"
+end
+
+local function drawNodeEncounterPreview(state, hoveredNode, panelIndexOnEdge)
     local preview = hoveredNode and hoveredNode.preview or nil
 
     if not preview then
@@ -1141,9 +1113,12 @@ local function drawNodeEncounterPreview(state, hoveredNode)
     local championRailHeight = NODE_PREVIEW_CHAMPION_IMAGE_HEIGHT + NODE_PREVIEW_CHAMPION_HEALTH_HEIGHT + 70
     local panelHeight = math.max(rightColumnHeight, championRailHeight + (NODE_PREVIEW_PADDING * 2))
 
-    local side = getPreviewSide(hoveredNode.sourceRect)
-    local panelX = side == "left" and NODE_PREVIEW_MARGIN_X or (screenWidth - NODE_PREVIEW_MARGIN_X - panelWidth)
-    local panelY = math.max(NODE_PREVIEW_MARGIN_X, (screenHeight - panelHeight) * 0.5)
+    local previewEdge = getNodePreviewEdge(hoveredNode)
+    local panelX = (screenWidth - panelWidth) * 0.5
+    local panelOffsetY = ((panelIndexOnEdge or 1) - 1) * (panelHeight + NODE_PREVIEW_MARGIN_X)
+    local panelY = previewEdge == "bottom"
+        and math.max(NODE_PREVIEW_MARGIN_X, screenHeight - NODE_PREVIEW_MARGIN_X - panelHeight - panelOffsetY)
+        or (NODE_PREVIEW_MARGIN_X + panelOffsetY)
     local accentColor = hoveredNode.nodeDefinition and hoveredNode.nodeDefinition.accentColor or { 0.82, 0.85, 0.89, 1 }
     local railX = panelX + NODE_PREVIEW_PADDING
     local railY = panelY + ((panelHeight - championRailHeight) * 0.5)
@@ -1157,6 +1132,8 @@ local function drawNodeEncounterPreview(state, hoveredNode)
     love.graphics.rectangle("fill", panelX, panelY, panelWidth, panelHeight, 6, 6)
     love.graphics.setColor(accentColor[1], accentColor[2], accentColor[3], 0.95)
     love.graphics.rectangle("line", panelX, panelY, panelWidth, panelHeight, 6, 6)
+
+    drawNodePreviewCornerIcon(hoveredNode, panelX, panelY)
 
     if showPlayButton then
         drawNodePreviewPlayButton(state, hoveredNode, panelX, panelY, panelWidth)
@@ -1251,6 +1228,30 @@ local function drawNodeEncounterPreview(state, hoveredNode)
             accentColor,
             state
         )
+    end
+end
+
+local function drawNodeEncounterPreviewGroup(state, previewGroup)
+    local previewNodes = previewGroup and previewGroup.previewNodes or nil
+
+    if not previewNodes then
+        if previewGroup then
+            drawNodeEncounterPreview(state, previewGroup, 1)
+        end
+
+        return
+    end
+
+    local edgeCounts = {
+        top = 0,
+        bottom = 0,
+    }
+
+    for _, previewNode in ipairs(previewNodes) do
+        local edge = getNodePreviewEdge(previewNode)
+
+        edgeCounts[edge] = (edgeCounts[edge] or 0) + 1
+        drawNodeEncounterPreview(state, previewNode, edgeCounts[edge])
     end
 end
 
@@ -1468,7 +1469,16 @@ local function buildMissionLaunchPayload(state, hoveredNode)
 end
 
 local function tryLaunchMissionFromNodePreview(state, x, y, deps)
-    local target = state and state.worldMapNodePlayButtonTarget or nil
+    local target = nil
+
+    for _, candidateTarget in ipairs(state and state.worldMapNodePlayButtonTargets or {}) do
+        if isPointInsideRect(x, y, candidateTarget) then
+            target = candidateTarget
+            break
+        end
+    end
+
+    target = target or state and state.worldMapNodePlayButtonTarget or nil
 
     if not target or not isPointInsideRect(x, y, target) then
         return false
@@ -2137,7 +2147,6 @@ function worldmapdraw.updateHover(state, deps)
             not previousHoveredNode
             or previousHoveredNode.clusterIndex ~= state.hoveredWorldMapNode.clusterIndex
             or previousHoveredNode.nodeIndex ~= state.hoveredWorldMapNode.nodeIndex
-            or previousHoveredNode.branchIndex ~= state.hoveredWorldMapNode.branchIndex
         )
         and deps
         and deps.sfxrules
@@ -2363,6 +2372,32 @@ local function drawSelectedRunLoadout(state)
     end
 end
 
+local function drawHybridEncounterEventNode(mode, x, y, radius)
+    if mode == "line" then
+        love.graphics.line(x - radius, y, x, y - radius, x + radius, y)
+        love.graphics.arc("line", "open", x, y, radius, 0, math.pi, 24)
+        return
+    end
+
+    love.graphics.polygon(
+        "fill",
+        x - radius,
+        y + 1,
+        x,
+        y - radius,
+        x + radius,
+        y + 1
+    )
+    love.graphics.arc("fill", "pie", x, y, radius, 0, math.pi, 24)
+    love.graphics.rectangle("fill", x - radius, y - 1, radius * 2, 2)
+end
+
+local function drawCenteredSquare(mode, x, y, radius)
+    local size = radius * 2
+
+    love.graphics.rectangle(mode, x - radius, y - radius, size, size)
+end
+
 function worldmapdraw.draw(state)
     local screenWidth = love.graphics.getWidth()
     local screenHeight = love.graphics.getHeight()
@@ -2372,11 +2407,7 @@ function worldmapdraw.draw(state)
     local eventCircleRadius = 15
     local bossDiamondRadius = 30
     local bossInnerDiamondRadius = 18
-    local shopIconSize = 208
-    local bossIconSize = 208
     local nonBossNodeShift = 24
-    local dottedConnectorInset = 12
-    local dottedConnectorOffsetY = 8
     local clusterSize = MAP_CLUSTER_SIZE
     local clusterCount = MAP_CLUSTER_COUNT
     local horizontalMargin = math.max(54, screenWidth * 0.045)
@@ -2416,6 +2447,8 @@ function worldmapdraw.draw(state)
             local x = clusterStartX + ((nodeIndex - 1) * intraClusterSpacing)
             local isBossNode = nodeIndex == clusterSize
             local isEventNode = nodeIndex == 3
+            local isHybridNode = nodeIndex == 4
+            local isSquareNode = clusterIndex == 2 and nodeIndex == 3
             local isNextDestinationNode = isPlayerMapNode(nextMapPosition, "path", clusterIndex, nodeIndex)
             local nodeColor = { 0.5, 0.5, 0.5, 1 }
             local nodeRadius = isBossNode and bossDiamondRadius or diamondRadius
@@ -2425,7 +2458,11 @@ function worldmapdraw.draw(state)
             end
 
             love.graphics.setColor(0, 0, 0, 1)
-            if isEventNode then
+            if isSquareNode then
+                drawCenteredSquare("fill", x, y, eventCircleRadius)
+            elseif isHybridNode then
+                drawHybridEncounterEventNode("fill", x, y, nodeRadius)
+            elseif isEventNode then
                 love.graphics.circle("fill", x, y, eventCircleRadius)
             else
                 love.graphics.polygon(
@@ -2451,7 +2488,11 @@ function worldmapdraw.draw(state)
 
             love.graphics.setColor(nodeColor[1], nodeColor[2], nodeColor[3], nodeColor[4])
 
-            if isEventNode then
+            if isSquareNode then
+                drawCenteredSquare("line", x, y, eventCircleRadius)
+            elseif isHybridNode then
+                drawHybridEncounterEventNode("line", x, y, nodeRadius)
+            elseif isEventNode then
                 love.graphics.circle("line", x, y, eventCircleRadius)
             else
                 love.graphics.polygon(
@@ -2487,7 +2528,11 @@ function worldmapdraw.draw(state)
                 setDestinationPulseColor()
             end
 
-            if isEventNode then
+            if isSquareNode then
+                drawCenteredSquare("fill", x, y, eventCircleRadius * 0.45)
+            elseif isHybridNode then
+                drawHybridEncounterEventNode("fill", x, y, nodeRadius * 0.42)
+            elseif isEventNode then
                 love.graphics.circle("fill", x, y, eventCircleRadius * 0.45)
             else
                 local nestedDiamondRadius = nodeRadius * 0.42
@@ -2504,178 +2549,6 @@ function worldmapdraw.draw(state)
                     y
                 )
             end
-
-            if nodeIndex == 1 then
-                local regforImage = getMapRegforImage()
-                local scale = shopIconSize / math.max(regforImage:getWidth(), regforImage:getHeight())
-                local imageWidth = regforImage:getWidth() * scale
-                local imageHeight = regforImage:getHeight() * scale
-                local imageX = x - (imageWidth * 0.5)
-                local imageY = y - nodeRadius - imageHeight - 20
-                local connectorTopY = imageY + imageHeight
-                local connectorBottomY = y - nodeRadius
-
-                love.graphics.setColor(0.5, 0.5, 0.5, 1)
-                love.graphics.line(x, connectorTopY, x, connectorBottomY)
-                setMapImageColor(isNextDestinationNode)
-                love.graphics.draw(regforImage, imageX, imageY, 0, scale, scale)
-            end
-
-            if nodeIndex == 1 then
-                local gloryforImage = getMapGloryforImage()
-                local scale = shopIconSize / math.max(gloryforImage:getWidth(), gloryforImage:getHeight())
-                local imageWidth = gloryforImage:getWidth() * scale
-                local imageHeight = gloryforImage:getHeight() * scale
-                local imageX = x - (imageWidth * 0.5)
-                local imageY = y + nodeRadius + 20
-                local connectorTopY = y + nodeRadius
-                local connectorBottomY = imageY
-
-                love.graphics.setColor(0.5, 0.5, 0.5, 1)
-                love.graphics.line(x, connectorTopY, x, connectorBottomY)
-                setMapImageColor(isNextDestinationNode)
-                love.graphics.draw(gloryforImage, imageX, imageY, 0, scale, scale)
-            end
-
-            if nodeIndex == 2 then
-                local regforImage = getMapRegforImage()
-                local scale = shopIconSize / math.max(regforImage:getWidth(), regforImage:getHeight())
-                local imageWidth = regforImage:getWidth() * scale
-                local imageHeight = regforImage:getHeight() * scale
-                local imageX = x - (imageWidth * 0.5)
-                local imageY = y - nodeRadius - imageHeight - 164
-                local connectorTopY = imageY + imageHeight
-                local connectorBottomY = y - nodeRadius
-
-                love.graphics.setColor(0.5, 0.5, 0.5, 1)
-                love.graphics.line(x, connectorTopY, x, connectorBottomY)
-                setMapImageColor(isNextDestinationNode)
-                love.graphics.draw(regforImage, imageX, imageY, 0, scale, scale)
-            end
-
-            if nodeIndex == 2 then
-                local gloryforImage = getMapGloryforImage()
-                local scale = shopIconSize / math.max(gloryforImage:getWidth(), gloryforImage:getHeight())
-                local imageWidth = gloryforImage:getWidth() * scale
-                local imageHeight = gloryforImage:getHeight() * scale
-                local imageX = x - (imageWidth * 0.5)
-                local imageY = y + nodeRadius + 164
-                local connectorTopY = y + nodeRadius
-                local connectorBottomY = imageY
-
-                love.graphics.setColor(0.5, 0.5, 0.5, 1)
-                love.graphics.line(x, connectorTopY, x, connectorBottomY)
-                setMapImageColor(isNextDestinationNode)
-                love.graphics.draw(gloryforImage, imageX, imageY, 0, scale, scale)
-            end
-
-            if (clusterIndex == 1 or clusterIndex == 3) and nodeIndex == 3 then
-                local cityevtImage = getMapCityevtImage()
-                local scale = shopIconSize / math.max(cityevtImage:getWidth(), cityevtImage:getHeight())
-                local imageWidth = cityevtImage:getWidth() * scale
-                local imageHeight = cityevtImage:getHeight() * scale
-                local imageX = x - (imageWidth * 0.5)
-                local imageY = y - eventCircleRadius - imageHeight - 20
-                local connectorTopY = imageY + imageHeight
-                local connectorBottomY = y - eventCircleRadius
-
-                love.graphics.setColor(1, 0.08, 0.62, 1)
-                love.graphics.line(x, connectorTopY, x, connectorBottomY)
-                setMapImageColor(isNextDestinationNode)
-                love.graphics.draw(cityevtImage, imageX, imageY, 0, scale, scale)
-            end
-
-            if (clusterIndex == 1 or clusterIndex == 3) and nodeIndex == 3 then
-                local jnglevtImage = getMapJnglevtImage()
-                local scale = shopIconSize / math.max(jnglevtImage:getWidth(), jnglevtImage:getHeight())
-                local imageWidth = jnglevtImage:getWidth() * scale
-                local imageHeight = jnglevtImage:getHeight() * scale
-                local imageX = x - (imageWidth * 0.5)
-                local imageY = y + eventCircleRadius + 20
-                local connectorTopY = y + eventCircleRadius
-                local connectorBottomY = imageY
-
-                love.graphics.setColor(1, 0.08, 0.62, 1)
-                love.graphics.line(x, connectorTopY, x, connectorBottomY)
-                setMapImageColor(isNextDestinationNode)
-                love.graphics.draw(jnglevtImage, imageX, imageY, 0, scale, scale)
-            end
-
-            if nodeIndex == 4 then
-                local gloryforImage = getMapGloryforImage()
-                local scale = shopIconSize / math.max(gloryforImage:getWidth(), gloryforImage:getHeight())
-                local imageWidth = gloryforImage:getWidth() * scale
-                local imageHeight = gloryforImage:getHeight() * scale
-                local imageX = x - (imageWidth * 0.5)
-                local imageY = y - nodeRadius - imageHeight - 164
-                local connectorTopY = imageY + imageHeight
-                local connectorBottomY = y - nodeRadius
-
-                love.graphics.setColor(0.5, 0.5, 0.5, 1)
-                love.graphics.line(x, connectorTopY, x, connectorBottomY)
-                setMapImageColor(isNextDestinationNode)
-                love.graphics.draw(gloryforImage, imageX, imageY, 0, scale, scale)
-            end
-
-            if nodeIndex == 4 then
-                local jnglevtImage = getMapJnglevtImage()
-                local scale = shopIconSize / math.max(jnglevtImage:getWidth(), jnglevtImage:getHeight())
-                local imageWidth = jnglevtImage:getWidth() * scale
-                local imageHeight = jnglevtImage:getHeight() * scale
-                local imageX = x - (imageWidth * 0.5)
-                local imageY = y + nodeRadius + 164
-                local connectorTopY = y + nodeRadius + dottedConnectorInset + dottedConnectorOffsetY
-                local connectorBottomY = imageY - dottedConnectorInset + dottedConnectorOffsetY
-
-                love.graphics.setColor(1, 0.08, 0.62, 1)
-                drawVerticalDottedLine(x, connectorTopY, connectorBottomY, 4, 8)
-                setMapImageColor(isNextDestinationNode)
-                love.graphics.draw(jnglevtImage, imageX, imageY, 0, scale, scale)
-            end
-
-            if nodeIndex == 5 then
-                local bossImage = getMapBossImage()
-                local scale = bossIconSize / math.max(bossImage:getWidth(), bossImage:getHeight())
-                local imageWidth = bossImage:getWidth() * scale
-                local imageHeight = bossImage:getHeight() * scale
-                local imageX = x - (imageWidth * 0.5)
-                local imageY = y - (imageHeight * 0.5)
-
-                setMapImageColor(isNextDestinationNode)
-                love.graphics.draw(bossImage, imageX, imageY, 0, scale, scale)
-            end
-
-            if clusterIndex == 2 and nodeIndex == 3 then
-                local shopImage = getMapShopImage()
-                local scale = shopIconSize / math.max(shopImage:getWidth(), shopImage:getHeight())
-                local imageWidth = shopImage:getWidth() * scale
-                local imageHeight = shopImage:getHeight() * scale
-                local imageX = x - (imageWidth * 0.5)
-                local imageY = y - nodeRadius - imageHeight - 20
-                local connectorTopY = imageY + imageHeight
-                local connectorBottomY = y - eventCircleRadius
-
-                love.graphics.setColor(0.27, 0.86, 0.39, 1)
-                love.graphics.line(x, connectorTopY, x, connectorBottomY)
-                setMapImageColor(isNextDestinationNode)
-                love.graphics.draw(shopImage, imageX, imageY, 0, scale, scale)
-            end
-
-            if clusterIndex == 2 and nodeIndex == 3 then
-                local cacheImage = getMapCacheImage()
-                local scale = shopIconSize / math.max(cacheImage:getWidth(), cacheImage:getHeight())
-                local imageWidth = cacheImage:getWidth() * scale
-                local imageHeight = cacheImage:getHeight() * scale
-                local imageX = x - (imageWidth * 0.5)
-                local imageY = y + eventCircleRadius + 20
-                local connectorTopY = y + eventCircleRadius
-                local connectorBottomY = imageY
-
-                love.graphics.setColor(0.27, 0.86, 0.39, 1)
-                love.graphics.line(x, connectorTopY, x, connectorBottomY)
-                setMapImageColor(isNextDestinationNode)
-                love.graphics.draw(cacheImage, imageX, imageY, 0, scale, scale)
-            end
         end
     end
 
@@ -2686,10 +2559,14 @@ function worldmapdraw.draw(state)
         state.worldMapPreviewDeckTargets = {}
         state.worldMapObjectivePreviewTargets = {}
         state.worldMapNodePlayButtonTarget = nil
+        state.worldMapNodePlayButtonTargets = {}
     end
 
     drawSelectedRunLoadout(state)
-    drawNodeEncounterPreview(state, state and (state.pinnedWorldMapNode or state.hoveredWorldMapNode) or nil)
+    drawNodeEncounterPreviewGroup(
+        state,
+        state and (state.pinnedWorldMapNode or state.hoveredWorldMapNode or getDefaultFunctionalNode(state)) or nil
+    )
     drawWorldMapDeckModal(state and state.worldMapDeckModal or nil)
     drawObjectiveCardPreviewModal(state and state.worldMapObjectivePreviewModal or nil)
 end

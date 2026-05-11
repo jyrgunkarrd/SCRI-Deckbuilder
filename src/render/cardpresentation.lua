@@ -124,6 +124,7 @@ function cardpresentation.getRenderOptions(card, cardIndex, ctx)
         local cell = gridRow and gridRow.cells[card.location.column]
         local damagePreviewCount = 0
         local blockedDamagePreviewCount = 0
+        local blockPreviewCount = 0
         local healthDamagePreviewCount = 0
         local lethalPreviewOverkill = nil
 
@@ -139,6 +140,9 @@ function cardpresentation.getRenderOptions(card, cardIndex, ctx)
             damagePreviewCount = ctx.warrules.getPainDamagePreview(cardIndex, ctx.isWarRollSourceActive, ctx.cards)
             blockedDamagePreviewCount = ctx.warrules.getBlockedDamagePreview(card, damagePreviewCount)
             healthDamagePreviewCount = ctx.warrules.getHealthDamagePreview(card, damagePreviewCount)
+            if ctx.warrules.getIncomingBlockPreview then
+                blockPreviewCount = ctx.warrules.getIncomingBlockPreview(cardIndex, ctx.isWarRollSourceActive, ctx.cards)
+            end
         
             if card.currentHealth and card.currentHealth > 0 and healthDamagePreviewCount >= card.currentHealth then
                 lethalPreviewOverkill = math.max(0, healthDamagePreviewCount - card.currentHealth)
@@ -154,6 +158,7 @@ function cardpresentation.getRenderOptions(card, cardIndex, ctx)
             options.showBadgesInTextbox = true
             options.damagePreviewCount = healthDamagePreviewCount
             options.blockedDamagePreviewCount = blockedDamagePreviewCount
+            options.blockPreviewCount = blockPreviewCount
             options.lethalPreviewOverkill = lethalPreviewOverkill
             options.dimmed = ctx.warrules.isCardExhausted(cardIndex) or card.preludeStrategyExhausted == true
             options.selected = ctx.selectedAttackerCardIndex == cardIndex
@@ -321,13 +326,15 @@ function cardpresentation.drawStateOverlays(card, cardIndex, drawX, drawY, expan
         local bracketLayers = targetingrules.getCardBracketLayers(cardIndex, targetingContext)
 
         for _, bracketColorName in ipairs(bracketLayers) do
-            if bracketColorName == "strategy" then
+            if bracketColorName == "strategy" or bracketColorName == "strategy_hover" then
                 targetoverlays.drawBrackets(
                     drawX,
                     drawY,
                     cardWidth,
                     cardHeight,
-                    targetoverlays.getStrategyBracketColor(),
+                    bracketColorName == "strategy_hover"
+                        and targetoverlays.getDefaultBracketColor()
+                        or targetoverlays.getStrategyBracketColor(),
                     {
                         bracketLengthScale = 0.5,
                     }

@@ -18,6 +18,7 @@ local retaliateTimer = 0
 local objectiveTargetPreview = nil
 local intelTargetPreview = nil
 local warzoneTargetPreview = nil
+local findLowestHealthOppRowCard
 local FLYING_KEYWORD_ID = "KWFLY"
 local SAVIOR_KEYWORD_ID = "KWSAV"
 local RELOADING_KEYWORD_ID = "KWRLD"
@@ -25,7 +26,7 @@ local TOME_CARD_TYPE = "tome"
 local CACHE_CARD_TYPE = "cache"
 local MARKER_CARD_TYPE = "marker"
 local MANGLED_DIE_FACE_ID = "MNGL"
-local ENEMY_CARD_TARGET_TYPES = { "Atk", "AtkSab", "TAtk", "closeatk", "maulatk" }
+local ENEMY_CARD_TARGET_TYPES = { "Atk", "AtkSab", "AtkSmn", "TAtk", "closeatk", "maulatk" }
 local PLAYER_WARZONE_TARGET_TYPES = { "WZPlayer", "InfTac" }
 
 local function hasFlyingKeyword(definition, card)
@@ -287,7 +288,7 @@ local function canTargetEnemyCard(rollStateOrTargetType)
 end
 
 local function firstEnemyCardTargetType(rollStateOrTargetType)
-    return firstTargetTypeMatching(rollStateOrTargetType, { "AtkSab", "TAtk", "Atk", "closeatk", "maulatk" })
+    return firstTargetTypeMatching(rollStateOrTargetType, { "AtkSab", "AtkSmn", "TAtk", "Atk", "closeatk", "maulatk" })
         or firstTargetTypeMatching(rollStateOrTargetType, ENEMY_CARD_TARGET_TYPES)
 end
 
@@ -421,6 +422,7 @@ local function getNormalizedFaceBehavior(faceDefinition)
             selfBlock = false,
             selfHeal = false,
             sabotageObjective = false,
+            summonOnAttack = false,
         }
     end
 
@@ -446,6 +448,9 @@ local function getNormalizedFaceBehavior(faceDefinition)
             action = "attack"
             targetClass = "enemy_card"
         elseif hasTargetType(faceDefinition.targ, "AtkSab") then
+            action = "attack"
+            targetClass = "enemy_card"
+        elseif hasTargetType(faceDefinition.targ, "AtkSmn") then
             action = "attack"
             targetClass = "enemy_card"
         elseif hasTargetType(faceDefinition.targ, "Atk") then
@@ -505,6 +510,7 @@ local function getNormalizedFaceBehavior(faceDefinition)
     local selfBlock = faceDefinition.selfBlock == true or hasTargetType(faceDefinition.targ, "closeatk")
     local selfHeal = faceDefinition.selfHeal == true or hasTargetType(faceDefinition.targ, "maulatk")
     local sabotageObjective = faceDefinition.sabotageObjective == true or hasTargetType(faceDefinition.targ, "AtkSab")
+    local summonOnAttack = faceDefinition.summonOnAttack == true or hasTargetType(faceDefinition.targ, "AtkSmn")
     local wound = faceDefinition.wound == true
     local mangle = faceDefinition.mangle == true
     local drawCards = faceDefinition.drawcard == true
@@ -529,6 +535,7 @@ local function getNormalizedFaceBehavior(faceDefinition)
         selfBlock = selfBlock,
         selfHeal = selfHeal,
         sabotageObjective = sabotageObjective,
+        summonOnAttack = summonOnAttack,
         wound = wound,
         mangle = mangle,
     }
@@ -589,6 +596,24 @@ local function buildRollState(entityKey, definition, faceIndices, isEnemy, prese
                 portraitPath = target.portraitPath,
             }
             targetType = firstTargetTypeMatching(effectiveTargetType, ENEMY_CARD_TARGET_TYPES)
+        end
+    elseif isEnemy
+        and selectedFaceDefinition
+        and not isReloading
+        and hasTargetType(effectiveTargetType, "Blk")
+        and findLowestHealthOppRowCard then
+        local blockTargetCard = nil
+        targetCardIndex, blockTargetCard = findLowestHealthOppRowCard(activeWarCards)
+
+        if blockTargetCard then
+            targetCard = {
+                kind = "card",
+                setName = blockTargetCard.setName,
+                cardId = blockTargetCard.cardId,
+                displayName = blockTargetCard.displayName,
+                portraitPath = blockTargetCard.portraitPath,
+            }
+            targetType = "Blk"
         end
     elseif selectedFaceDefinition
         and not isReloading
@@ -679,6 +704,7 @@ local function buildRollState(entityKey, definition, faceIndices, isEnemy, prese
         selfBlock = normalizedBehavior.selfBlock,
         selfHeal = normalizedBehavior.selfHeal,
         sabotageObjective = normalizedBehavior.sabotageObjective,
+        summonOnAttack = normalizedBehavior.summonOnAttack,
         wound = normalizedBehavior.wound,
         mangle = normalizedBehavior.mangle,
         autoReload = autoReload,
@@ -942,6 +968,44 @@ local function buildTargetCardPreview(card)
     }
 end
 
+findLowestHealthOppRowCard = function(cards)
+    local lowestCardIndex = nil
+    local lowestCard = nil
+    local lowestHealth = nil
+    local lowestColumn = nil
+
+    for cardIndex, card in ipairs(cards or {}) do
+        if isEnemyGridCard(card) then
+            cardinstances.initializeHealth(card)
+
+            if card.currentHealth ~= nil
+                and math.max(0, tonumber(card.currentHealth) or 0) > 0
+                and card.pilotVehicleAnimation ~= true
+                and card.hunterAutoPlayAnimation ~= true then
+                local currentHealth = math.max(0, tonumber(card.currentHealth) or 0)
+                local column = card.location and card.location.column or cardIndex
+
+                if lowestHealth == nil
+                    or currentHealth < lowestHealth
+                    or (
+                        currentHealth == lowestHealth
+                        and (
+                            column < lowestColumn
+                            or (column == lowestColumn and cardIndex < lowestCardIndex)
+                        )
+                    ) then
+                    lowestCardIndex = cardIndex
+                    lowestCard = card
+                    lowestHealth = currentHealth
+                    lowestColumn = column
+                end
+            end
+        end
+    end
+
+    return lowestCardIndex, lowestCard
+end
+
 local function isAvailablePlayerAttackTarget(cards, cardIndex)
     local card = cards and cards[cardIndex] or nil
 
@@ -995,6 +1059,20 @@ local function findClosestLegalPlayerAttackTarget(cards, sourceDefinition, sourc
     return bestCardIndex
 end
 
+local function isAvailableOppRowBlockTarget(cards, cardIndex)
+    local card = cards and cards[cardIndex] or nil
+
+    if not isEnemyGridCard(card) then
+        return false
+    end
+
+    cardinstances.initializeHealth(card)
+    return card.currentHealth ~= nil
+        and math.max(0, tonumber(card.currentHealth) or 0) > 0
+        and card.pilotVehicleAnimation ~= true
+        and card.hunterAutoPlayAnimation ~= true
+end
+
 local rollStateDealsAreaDamageToCard
 
 function warrules.retargetIllegalEnemyAttacks(cards)
@@ -1028,6 +1106,16 @@ function warrules.retargetIllegalEnemyAttacks(cards)
 
                 retargetedCount = retargetedCount + 1
             end
+        elseif rollState
+            and rollState.faceIndex
+            and hasTargetType(rollState, "Blk")
+            and rollState.targetCardIndex
+            and not isAvailableOppRowBlockTarget(cards, rollState.targetCardIndex) then
+            local blockTargetCard = nil
+            rollState.targetCardIndex, blockTargetCard = findLowestHealthOppRowCard(cards)
+            rollState.targetCard = buildTargetCardPreview(blockTargetCard)
+            rollState.targetColumn = blockTargetCard and blockTargetCard.location and blockTargetCard.location.column or nil
+            retargetedCount = retargetedCount + 1
         end
     end
 
@@ -1372,6 +1460,39 @@ function warrules.getPainDamagePreview(cardIndex, isSourceActive, cards)
     return math.max(0, tonumber(rollState.damageValue) or 0)
 end
 
+function warrules.getIncomingBlockPreview(cardIndex, isSourceActive)
+    local incomingBlock = 0
+
+    if not cardIndex then
+        return incomingBlock
+    end
+
+    local cardKey = warrules.getCardEntityKey(cardIndex)
+
+    for entityKey, rollState in pairs(warRollDisplayStates) do
+        local sourceIsActive = isSourceActive == nil or isSourceActive(entityKey, rollState)
+
+        if sourceIsActive
+            and rollState
+            and rollState.faceIndex
+            and (rollState.damageValue or 0) > 0
+            and not rollState.exhausted then
+            if hasTargetType(rollState, "Blk")
+                and rollState.targetCardIndex
+                and warrules.getCardEntityKey(rollState.targetCardIndex) == cardKey then
+                incomingBlock = incomingBlock + (rollState.damageValue or 0)
+            elseif rollState.selfBlock == true
+                and entityKey == cardKey
+                and canTargetEnemyCard(rollState)
+                and rollState.targetCardIndex then
+                incomingBlock = incomingBlock + (rollState.damageValue or 0)
+            end
+        end
+    end
+
+    return incomingBlock
+end
+
 function warrules.getBlockedDamagePreview(card, incomingDamage)
     local damage = math.max(0, tonumber(incomingDamage) or 0)
     local blocking = math.max(0, tonumber(card and card.blocking) or 0)
@@ -1523,14 +1644,24 @@ function warrules.beginRetaliatePhase(topSlotTargets, cards)
         if rollState
             and target.isEnemy ~= false
             and rollStateCanRetaliate(rollState) then
+                local targetType = firstEnemyCardTargetType(rollState)
+                    or firstTargetTypeMatching(rollState, { "Blk", "smn", "rsmn", "Inf", "Obj", "WZOpp", "IntCD" })
+                local targetCardIndex = rollState.targetCardIndex
+                local targetCard = rollState.targetCard
+
+                if targetType == "Blk" and not isAvailableOppRowBlockTarget(cards, targetCardIndex) then
+                    local blockTargetCard = nil
+                    targetCardIndex, blockTargetCard = findLowestHealthOppRowCard(cards)
+                    targetCard = buildTargetCardPreview(blockTargetCard)
+                end
+
                 pendingRetaliations[#pendingRetaliations + 1] = {
                     entityKey = target.id,
                     sourceDefinition = rollState.sourceDefinition,
                     sourceCard = rollState.sourceCard,
-                    targetType = firstEnemyCardTargetType(rollState)
-                        or firstTargetTypeMatching(rollState, { "Blk", "smn", "rsmn", "Inf", "Obj", "WZOpp", "IntCD" }),
-                    targetCardIndex = rollState.targetCardIndex,
-                    targetCard = rollState.targetCard,
+                    targetType = targetType,
+                    targetCardIndex = targetCardIndex,
+                    targetCard = targetCard,
                     damageValue = rollState.damageValue,
                     cardgen = rollState.cardgen,
                     cardgenPool = rollState.cardgenPool,
@@ -1540,6 +1671,7 @@ function warrules.beginRetaliatePhase(topSlotTargets, cards)
                     heavy = rollState.heavy,
                     selfBlock = rollState.selfBlock,
                     selfHeal = rollState.selfHeal,
+                    summonOnAttack = rollState.summonOnAttack,
                     wound = rollState.wound,
                     mangle = rollState.mangle,
                     isTopSlot = true,
@@ -1570,15 +1702,25 @@ function warrules.beginRetaliatePhase(topSlotTargets, cards)
 
         if rollState
             and rollStateCanRetaliate(rollState) then
+                local targetType = firstEnemyCardTargetType(rollState)
+                    or firstTargetTypeMatching(rollState, { "Blk", "smn", "rsmn", "Inf", "Obj", "WZOpp", "IntCD" })
+                local targetCardIndex = rollState.targetCardIndex
+                local targetCard = rollState.targetCard
+
+                if targetType == "Blk" and not isAvailableOppRowBlockTarget(cards, targetCardIndex) then
+                    local blockTargetCard = nil
+                    targetCardIndex, blockTargetCard = findLowestHealthOppRowCard(cards)
+                    targetCard = buildTargetCardPreview(blockTargetCard)
+                end
+
                 pendingRetaliations[#pendingRetaliations + 1] = {
                     entityKey = entityKey,
                     sourceDefinition = rollState.sourceDefinition,
                     sourceCard = rollState.sourceCard,
                     sourceCardIndex = rowCard.cardIndex,
-                    targetType = firstEnemyCardTargetType(rollState)
-                        or firstTargetTypeMatching(rollState, { "Blk", "smn", "rsmn", "Inf", "Obj", "WZOpp", "IntCD" }),
-                    targetCardIndex = rollState.targetCardIndex,
-                    targetCard = rollState.targetCard,
+                    targetType = targetType,
+                    targetCardIndex = targetCardIndex,
+                    targetCard = targetCard,
                     damageValue = rollState.damageValue,
                     cardgen = rollState.cardgen,
                     cardgenPool = rollState.cardgenPool,
@@ -1588,6 +1730,7 @@ function warrules.beginRetaliatePhase(topSlotTargets, cards)
                     heavy = rollState.heavy,
                     selfBlock = rollState.selfBlock,
                     selfHeal = rollState.selfHeal,
+                    summonOnAttack = rollState.summonOnAttack,
                     wound = rollState.wound,
                     mangle = rollState.mangle,
                     isTopSlot = false,

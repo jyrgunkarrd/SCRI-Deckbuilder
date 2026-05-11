@@ -521,6 +521,34 @@ Stuff we need:
 
  - Need to have card draw animations. 
 
+ - Need to fix encounter system; we should have a dedicated encounter lua data files that lists the different pools, with each pool containing the different encounter components it can feature. 
+
+
+PAM Cards: 
+
+ - Piledriver (Drone Bulldozer)
+ - Vulture (Quadcopter Drone)
+ - Mercenary Jungler
+ - Terminator (Old war machine)
+ - Clocked (Subverted person)
+ - Clocker (Subverts killed cards)
+
+Ezekial Cards:
+
+ - Ezekial (Airship)
+ - Advent Squadron (F-16C)
+ - Enforcer Drone (Gunship drone)
+ - Storm Rider (Jetpack troop)
+ - Fogbank (Psychic SpecOps)
+
+The Red Dot Gang:
+
+ - Red Dot
+ - The Fiddle 
+ - Fey Dough 
+ - Octopuss
+ - The Wagon
+ - Pilled
 
 
 

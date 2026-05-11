@@ -5,6 +5,7 @@ local mapnodes = {
         type = "combat",
         icon = "regfor",
         accentColor = { 0.5, 0.5, 0.5, 1 },
+        pos = "bottom",
         preview = {
             title = "Regular Forces",
             summary = "Standard combat encounter.",

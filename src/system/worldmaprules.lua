@@ -2,12 +2,43 @@ local worldmaprules = {}
 
 local maps = require("data.maps")
 local mapnodes = require("data.mapnodes")
+local nodeencounters = require("data.nodeencounters")
 local champions = require("data.champions")
 local stdpkg = require("data.stdpkg")
 local modularpkg = require("data.modularpkg")
 local warzones = require("data.warzones")
 
 local nodeDefinitionsById = nil
+local encounterPoolsById = nil
+local definitionIndexes = {}
+
+local ENCOUNTER_CATEGORY_ORDER = {
+    {
+        field = "champions",
+        sourceLabel = "Champion",
+        sourceKind = "champion",
+        definitions = champions,
+    },
+    {
+        field = "warzones",
+        sourceLabel = "Warzone",
+        sourceKind = "warzone",
+        definitions = warzones,
+        definitionType = "warzone",
+    },
+    {
+        field = "standardPackages",
+        sourceLabel = "Standard Package",
+        sourceKind = "stdpkg",
+        definitions = stdpkg,
+    },
+    {
+        field = "modularPackages",
+        sourceLabel = "Modular Package",
+        sourceKind = "modularpkg",
+        definitions = modularpkg,
+    },
+}
 
 local function buildNodeDefinitionIndex()
     local definitionsById = {}
@@ -29,41 +60,60 @@ local function getNodeDefinitionsById()
     return nodeDefinitionsById
 end
 
-local function addEncounterEntries(entries, definitions, sourceLabel, sourceKind)
-    for _, definition in ipairs(definitions or {}) do
-        if definition.encounter then
+local function buildEncounterPoolIndex()
+    local poolsById = {}
+
+    for _, poolDefinition in ipairs(nodeencounters or {}) do
+        if poolDefinition.id then
+            poolsById[poolDefinition.id] = poolDefinition
+        end
+    end
+
+    return poolsById
+end
+
+local function getEncounterPoolsById()
+    if not encounterPoolsById then
+        encounterPoolsById = buildEncounterPoolIndex()
+    end
+
+    return encounterPoolsById
+end
+
+local function getDefinitionIndex(category)
+    local key = category.field
+
+    if definitionIndexes[key] then
+        return definitionIndexes[key]
+    end
+
+    local definitionsById = {}
+
+    for _, definition in ipairs(category.definitions or {}) do
+        if definition.id and (not category.definitionType or definition.type == category.definitionType) then
+            definitionsById[definition.id] = definition
+        end
+    end
+
+    definitionIndexes[key] = definitionsById
+    return definitionsById
+end
+
+local function addPoolCategoryEntries(entries, poolDefinition, category)
+    local definitionsById = getDefinitionIndex(category)
+
+    for _, definitionId in ipairs(poolDefinition[category.field] or {}) do
+        local definition = definitionsById[definitionId]
+
+        if definition then
             entries[#entries + 1] = {
-                poolId = definition.encounter,
-                sourceLabel = sourceLabel,
-                sourceKind = sourceKind,
+                poolId = poolDefinition.id,
+                sourceLabel = category.sourceLabel,
+                sourceKind = category.sourceKind,
                 definition = definition,
             }
         end
     end
-end
-
-local function addWarzoneEncounterEntries(entries)
-    for _, definition in ipairs(warzones or {}) do
-        if definition.encounter and definition.type == "warzone" then
-            entries[#entries + 1] = {
-                poolId = definition.encounter,
-                sourceLabel = "Warzone",
-                sourceKind = "warzone",
-                definition = definition,
-            }
-        end
-    end
-end
-
-local function collectEncounterEntries()
-    local entries = {}
-
-    addEncounterEntries(entries, champions, "Champion", "champion")
-    addEncounterEntries(entries, stdpkg, "Standard Package", "stdpkg")
-    addEncounterEntries(entries, modularpkg, "Modular Package", "modularpkg")
-    addWarzoneEncounterEntries(entries)
-
-    return entries
 end
 
 function worldmaprules.getActiveMap(state)
@@ -104,15 +154,14 @@ end
 
 function worldmaprules.getEncounterPoolEntries(poolId)
     local poolEntries = {}
+    local poolDefinition = poolId and getEncounterPoolsById()[poolId] or nil
 
-    if not poolId then
+    if not poolDefinition then
         return poolEntries
     end
 
-    for _, entry in ipairs(collectEncounterEntries()) do
-        if entry.poolId == poolId then
-            poolEntries[#poolEntries + 1] = entry
-        end
+    for _, category in ipairs(ENCOUNTER_CATEGORY_ORDER) do
+        addPoolCategoryEntries(poolEntries, poolDefinition, category)
     end
 
     return poolEntries

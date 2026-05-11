@@ -24,6 +24,8 @@ local function findCardIndex(cards, card)
     return nil
 end
 
+local getRetaliationSourceCardIndex
+
 local function applyAreaDamageToAdjacentCards(gameState, deps, retaliation)
     if not retaliation
         or retaliation.area ~= true
@@ -37,7 +39,19 @@ local function applyAreaDamageToAdjacentCards(gameState, deps, retaliation)
         local adjacentCard = gameState.cards[adjacentCardIndex]
 
         if adjacentCard and not deps.isCardUnavailable(adjacentCard) then
-            deps.dealDamageToCard(adjacentCard, retaliation.damageValue or 0)
+            local damageResult = deps.dealDamageToCard(adjacentCard, retaliation.damageValue or 0)
+
+            if damageResult and damageResult.killed then
+                local sourceCardIndex = getRetaliationSourceCardIndex(gameState, retaliation)
+
+                if sourceCardIndex and deps.trooprules then
+                    deps.trooprules.resolveKill(sourceCardIndex, adjacentCardIndex, {
+                        cards = gameState.cards,
+                        cardregistry = deps.cardregistry,
+                        spawnTokensNearCard = deps.spawnTokensNearCard,
+                    })
+                end
+            end
         end
     end
 end
@@ -63,7 +77,45 @@ local function applyMangleToTarget(deps, targetCard, targetDefinition, rollState
     return 0
 end
 
-local function getRetaliationSourceCardIndex(gameState, retaliation)
+local function findLowestHealthOppRowCard(cards, deps)
+    local lowestCardIndex = nil
+    local lowestCard = nil
+    local lowestHealth = nil
+    local lowestColumn = nil
+
+    for cardIndex, card in ipairs(cards or {}) do
+        if card
+            and not deps.isCardUnavailable(card)
+            and card.location
+            and card.location.kind == "grid"
+            and card.location.rowId == "OppRow" then
+            local currentHealth = math.max(0, tonumber(card.currentHealth) or 0)
+            local column = card.location.column or cardIndex
+
+            if currentHealth > 0
+                and (
+                    lowestHealth == nil
+                    or currentHealth < lowestHealth
+                    or (
+                        currentHealth == lowestHealth
+                        and (
+                            column < lowestColumn
+                            or (column == lowestColumn and cardIndex < lowestCardIndex)
+                        )
+                    )
+                ) then
+                lowestCardIndex = cardIndex
+                lowestCard = card
+                lowestHealth = currentHealth
+                lowestColumn = column
+            end
+        end
+    end
+
+    return lowestCardIndex, lowestCard
+end
+
+getRetaliationSourceCardIndex = function(gameState, retaliation)
     local sourceCardIndex = retaliation.sourceCardIndex or getCardIndexFromEntityKey(retaliation.entityKey)
 
     if sourceCardIndex
@@ -87,7 +139,7 @@ local function resolveSummonRetaliation(gameState, deps, retaliation)
         return false
     end
 
-    if retaliation.targetType == "smn" and deps.spawnTokensNearCard then
+    if (retaliation.targetType == "smn" or retaliation.summonOnAttack == true) and deps.spawnTokensNearCard then
         local generatedCardDefinition = deps.cardregistry.getCardById(retaliation.cardgen)
 
         if generatedCardDefinition then
@@ -374,11 +426,20 @@ end
 local function resolveRetaliation(gameState, deps, retaliation)
     if retaliation.targetType == "Blk" then
         local sourceCardIndex = getCardIndexFromEntityKey(retaliation.entityKey)
-        local sourceCard = sourceCardIndex and gameState.cards[sourceCardIndex] or nil
+        local targetCardIndex = retaliation.targetCardIndex or sourceCardIndex
+        local targetCard = targetCardIndex and gameState.cards[targetCardIndex] or nil
 
-        if sourceCard and not deps.isCardUnavailable(sourceCard) then
-            deps.addBlockingToCard(sourceCard, retaliation.damageValue or 0, {
-                carryEnemyGuard = true,
+        if not targetCard
+            or deps.isCardUnavailable(targetCard)
+            or math.max(0, tonumber(targetCard.currentHealth) or 0) <= 0 then
+            targetCardIndex, targetCard = findLowestHealthOppRowCard(gameState.cards, deps)
+        end
+
+        if targetCard and not deps.isCardUnavailable(targetCard) then
+            deps.addBlockingToCard(targetCard, retaliation.damageValue or 0, {
+                carryEnemyGuard = targetCard.location
+                    and targetCard.location.kind == "grid"
+                    and targetCard.location.rowId == "OppRow",
             })
         end
 
@@ -443,7 +504,7 @@ local function resolveRetaliation(gameState, deps, retaliation)
         local shouldApplyAreaDamage = targetCard and not deps.isCardUnavailable(targetCard)
 
         if shouldApplyAreaDamage then
-            deps.dealDamageToCard(targetCard, retaliation.damageValue or 0)
+            local damageResult = deps.dealDamageToCard(targetCard, retaliation.damageValue or 0)
             if retaliation.sourceCard then
                 local targetDefinition = deps.cardregistry.getCard(targetCard.setName, targetCard.cardId)
                 applyWoundToTarget(targetCard, targetDefinition, retaliation)
@@ -454,8 +515,27 @@ local function resolveRetaliation(gameState, deps, retaliation)
                     deps.warrules.refreshCardRollValue(retaliation.targetCardIndex, gameState.cards)
                 end
             end
+            if damageResult and damageResult.killed then
+                local sourceCardIndex = getRetaliationSourceCardIndex(gameState, retaliation)
+
+                if sourceCardIndex and deps.trooprules then
+                    deps.trooprules.resolveKill(sourceCardIndex, retaliation.targetCardIndex, {
+                        cards = gameState.cards,
+                        cardregistry = deps.cardregistry,
+                        spawnTokensNearCard = deps.spawnTokensNearCard,
+                    })
+                end
+            end
             applyAreaDamageToAdjacentCards(gameState, deps, retaliation)
             applyRetaliationSideEffects(gameState, deps, retaliation)
+
+            if retaliation.summonOnAttack == true then
+                local resolved = resolveSummonRetaliation(gameState, deps, retaliation)
+
+                if resolved and deps.sfxrules and deps.sfxrules.playUnitPlay then
+                    deps.sfxrules.playUnitPlay()
+                end
+            end
         end
 
         if retaliation.targetType == "AtkSab" and gameState.activePrimaryObjective then

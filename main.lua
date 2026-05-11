@@ -1243,6 +1243,7 @@ startMissionFromWorldNode = function(payload)
     appState.worldMapDeckModal = nil
     appState.worldMapObjectivePreviewModal = nil
     appState.worldMapNodePlayButtonTarget = nil
+    appState.worldMapNodePlayButtonTargets = nil
     appState.worldToMissionTransition = {
         elapsed = 0,
         duration = appconfig.WORLD_TO_MISSION_TRANSITION_DURATION,

@@ -43,6 +43,26 @@ local function getCardScriptHandler(funcName)
     return nil
 end
 
+local function getScriptTriggerHandler(handler, triggerName)
+    if type(handler) ~= "table" or not triggerName then
+        return nil
+    end
+
+    local normalizedTrigger = tostring(triggerName):lower()
+
+    if type(handler[normalizedTrigger]) == "function" then
+        return handler[normalizedTrigger]
+    end
+
+    local methodName = "on" .. normalizedTrigger:sub(1, 1):upper() .. normalizedTrigger:sub(2)
+
+    if type(handler[methodName]) == "function" then
+        return handler[methodName]
+    end
+
+    return nil
+end
+
 local function getFuncNameForTrigger(troopDefinition, triggerName)
     if not troopDefinition or not troopDefinition.func or not triggerName then
         return nil
@@ -128,6 +148,7 @@ local function isUnitDefinition(cardDefinition)
             cardDefinition.type == TROOP_CARD_TYPE
             or cardDefinition.type == TOKEN_CARD_TYPE
             or cardDefinition.type == AGENT_CARD_TYPE
+            or cardDefinition.classname == "Enemy"
         )
         or false
 end
@@ -148,6 +169,13 @@ local function executeTroopEffect(troopDefinition, triggerName, state)
         if handler then
             return handler(troopDefinition, state) ~= false
         end
+    end
+
+    local scriptHandler = troopDefinition and getCardScriptHandler(troopDefinition.func) or nil
+    local triggerHandler = getScriptTriggerHandler(scriptHandler, triggerName)
+
+    if triggerHandler then
+        return triggerHandler(state.troopCardIndex, state) ~= false
     end
 
     return true

@@ -29,6 +29,7 @@ local function canTargetEnemyCard(rollState, context)
 
     return hasTargetType(rollState, "Atk")
         or hasTargetType(rollState, "AtkSab")
+        or hasTargetType(rollState, "AtkSmn")
         or hasTargetType(rollState, "TAtk")
         or hasTargetType(rollState, "closeatk")
         or hasTargetType(rollState, "maulatk")
@@ -318,14 +319,10 @@ end
 function targetingrules.shouldBracketCard(cardIndex, context)
     context = context or {}
 
-    if cardIndex == context.hoveredCardIndex then
-        return false
-    end
-
     return isPendingChoiceTarget(cardIndex, context)
         or isPrimedAbilityTarget(cardIndex, context)
         or ((context.selectedAttackerCardIndex or context.selectedAttackerTopSlotId) and isSelectedAttackerCardTarget(cardIndex, context) or false)
-        or isThreatBracketCard(cardIndex, context)
+        or (cardIndex ~= context.hoveredCardIndex and isThreatBracketCard(cardIndex, context) or false)
 end
 
 function targetingrules.shouldBracketTopSlot(slotId, context)
@@ -425,22 +422,20 @@ end
 function targetingrules.getCardBracketLayers(cardIndex, context)
     context = context or {}
 
-    if cardIndex == context.hoveredCardIndex then
-        return {}
-    end
-
     local layers = {}
 
-    if isThreatBracketCard(cardIndex, context) then
+    if cardIndex ~= context.hoveredCardIndex and isThreatBracketCard(cardIndex, context) then
         layers[#layers + 1] = "default"
     end
 
     if isPendingChoiceTarget(cardIndex, context)
-        or isPrimedAbilityTarget(cardIndex, context)
-        or (
-        (context.selectedAttackerCardIndex or context.selectedAttackerTopSlotId) and isSelectedAttackerCardTarget(cardIndex, context)
-    ) then
+        or isPrimedAbilityTarget(cardIndex, context) then
         layers[#layers + 1] = "strategy"
+    end
+
+    if (context.selectedAttackerCardIndex or context.selectedAttackerTopSlotId)
+        and isSelectedAttackerCardTarget(cardIndex, context) then
+        layers[#layers + 1] = cardIndex == context.hoveredCardIndex and "strategy_hover" or "strategy"
     end
 
     return layers
@@ -505,7 +500,7 @@ function targetingrules.getTopSlotBracketLayers(slotId, context)
     end
 
     if (context.selectedAttackerCardIndex or context.selectedAttackerTopSlotId) and canSelectedAttackerTargetSlot(slotId, context) then
-        layers[#layers + 1] = "strategy"
+        layers[#layers + 1] = slotId == context.hoveredTopSlotId and "strategy_hover" or "strategy"
     end
 
     return layers

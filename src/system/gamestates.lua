@@ -59,6 +59,7 @@ function gamestates.updateWorldStage(state, dt, deps)
         state.worldMapDeckModal = nil
         state.worldMapObjectivePreviewModal = nil
         state.worldMapNodePlayButtonTarget = nil
+        state.worldMapNodePlayButtonTargets = nil
         return
     end
 
@@ -89,6 +90,7 @@ function gamestates.keypressedWorldStage(state, key)
     state.worldMapDeckModal = nil
     state.worldMapObjectivePreviewModal = nil
     state.worldMapNodePlayButtonTarget = nil
+    state.worldMapNodePlayButtonTargets = nil
     state.saveSlots = fileselect.getSaveSlots()
 
     return true

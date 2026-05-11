@@ -225,6 +225,18 @@ function cardplaycontroller.resolveDestroyedTroopCard(troopCardIndex, attachedKi
         cardregistry = ctx.cardregistry,
         attachedKitCards = attachedKitCards,
         drawCardFromPlayerDeck = ctx.drawCardFromPlayerDeck,
+        spawnTokensNearCard = function(sourceCardIndex, tokenDefinition, count)
+            local sourceCard = sourceCardIndex and ctx.state.cards[sourceCardIndex] or nil
+
+            if not sourceCard or not sourceCard.location or sourceCard.location.kind ~= "grid" then
+                return 0
+            end
+
+            return ctx.spawnTokensNearCard(sourceCardIndex, tokenDefinition, count, {
+                ignoredCardIndex = sourceCardIndex,
+                preferredColumn = sourceCard.location.column,
+            })
+        end,
         spawnTokensNearPlayerCard = function(sourceCardIndex, tokenDefinition, count)
             local sourceCard = sourceCardIndex and ctx.state.cards[sourceCardIndex] or nil
 
@@ -245,6 +257,7 @@ function cardplaycontroller.resolveKilledEnemyByPlayerCard(attackerCardIndex, ta
         cards = ctx.state.cards,
         cardregistry = ctx.cardregistry,
         createOrStackPlayerCacheNearCard = ctx.createOrStackPlayerCacheNearCard,
+        spawnTokensNearCard = ctx.spawnTokensNearCard,
     })
 end
 

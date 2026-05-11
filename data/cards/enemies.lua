@@ -401,6 +401,111 @@ local enemies = {
         D6 = "ORBSMN",
     },
 
+    --- PAM Deck ---
+
+        --- Captains ---
+
+        {
+            id = "ENEXTDRVWSP",
+            name = "Exterminator",
+            artId = "ENEXT",
+            classname = "Enemy",
+            subclass = "Troop",
+            flavor = "\"None were ever lost to war's appetite. Rats, rain and rust proved to be that much hungrier.\"",
+            health = 3,
+            max = 3,
+            keyword = { "KWBULLETPROOF", "KWTIME" },
+            kwval = {
+                KWTIME = 2,
+            },
+            encounter = {
+                spawns = {
+                    { enemyId = "ENPLDRV", count = 2 },
+                    { enemyId = "ENLWSP", count = 2 },
+                },
+            },
+            preview = {
+                label = "SQUAD",
+                cards = {
+                    { "ENPLDRV", quantity = 2 },
+                },
+            },
+            rfc = 3,
+            D1 = "BDMG4",
+            D2 = "BDMG4",
+            D3 = "BDMG4",
+            D4 = "BDMG3",
+            D5 = "BDMG3",
+            D6 = "NUL",
+        },
+
+        --- Subordinates ---
+
+
+        {
+            id = "ENPLDRV",
+            name = "Pile Driver",
+            artId = "ENPLDRV",
+            classname = "Enemy",
+            subclass = "Troop",
+            flavor = "\"They probably suspected something after we had them bulldoze the bones of their ancestors.\"",
+            health = 2,
+            max = 2,
+            keyword = { "KWBULLETPROOF" },
+            rfc = 2,
+            D1 = "CQDMG3",
+            D2 = "CQDMG3",
+            D3 = "BBLK4",
+            D4 = "BBLK4",
+            D5 = "BBLK2",
+            D6 = "BBLK2",
+        },
+
+        {
+            id = "ENLWSP",
+            name = "Lance Wasp",
+            artId = "ENLWSP",
+            classname = "Enemy",
+            subclass = "Troop",
+            flavor = "\"You can probably imagine why these things caused a recruitment drought.\"",
+            textbox = "Whenever this card defeats an enemy or is defeated, it summons a Panzervore.",
+            preview = {
+                label = "SUMMON",
+                cards = {
+                    { "ENTNKVOR", quantity = 1 },
+                },
+            },
+            health = 1,
+            max = 1,
+            func = "ENLWSPFUNC",
+            keyword = { "KWFLY" },
+            rfc = 2,
+            D1 = "PDMG5",
+            D2 = "PDMG5",
+            D3 = "ARDMG2",
+            D4 = "ARDMG2",
+            D5 = "ARDMG1",
+            D6 = "ARDMG1",
+        },
+
+        {
+            id = "ENTNKVOR",
+            name = "Panzervore",
+            artId = "ENTNKVOR",
+            classname = "Enemy",
+            subclass = "Troop",
+            flavor = "\"In the early days, whole companies succumbed to the life cycle of Lance Wasps.\"",
+            health = 1,
+            max = 1,
+            rfc = 1,
+            D1 = "LWSPATKSMN",
+            D2 = "LWSPATKSMN",
+            D3 = "LWSPATKSMN",
+            D4 = "NUL",
+            D5 = "NUL",
+            D6 = "NUL",
+        },
+
 }
 
 return enemies

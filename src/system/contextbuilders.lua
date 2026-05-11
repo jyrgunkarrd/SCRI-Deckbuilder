@@ -135,6 +135,7 @@ function contextbuilders.getPhaseControllerDeps(c)
         topsloteffects = c.topsloteffects,
         turnrules = c.turnrules,
         temporaryeffects = c.temporaryeffects,
+        trooprules = c.trooprules,
         warrules = c.warrules,
         addBlockingToCard = c.addBlockingToCard,
         addObjectiveProgress = c.addObjectiveProgress,

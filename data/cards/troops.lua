@@ -412,6 +412,10 @@ local troops = {
         func = "ONIKUMAFUNC",
         textbox = "END: Sacrifice a troop.\n\nWhenever a friendly troop is defeated, this card gains Growth.",
         flavor = "Out here, every week is fat bear week.", 
+        keyword = { "KWCNTR" },
+        kwval = {
+            KWCNTR = 1,
+        },
         mcost = {
             { resource = "The Scratch", amount = 1 },
             { resource = "The Beast", amount = 1},

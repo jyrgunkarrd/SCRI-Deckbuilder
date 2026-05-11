@@ -112,13 +112,15 @@ function targetoverlays.drawTopSlotBrackets(slots, context)
             local bracketLayers = targetingrules.getTopSlotBracketLayers(slot.id, context)
 
             for _, bracketColorName in ipairs(bracketLayers) do
-                if bracketColorName == "strategy" then
+                if bracketColorName == "strategy" or bracketColorName == "strategy_hover" then
                     targetoverlays.drawBrackets(
                         slot.x,
                         slot.y,
                         slot.width,
                         slot.labelHeight + slot.height,
-                        targetoverlays.getStrategyBracketColor(),
+                        bracketColorName == "strategy_hover"
+                            and targetoverlays.getDefaultBracketColor()
+                            or targetoverlays.getStrategyBracketColor(),
                         {
                             bracketLengthScale = 0.5,
                         }

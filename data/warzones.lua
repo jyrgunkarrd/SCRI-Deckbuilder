@@ -29,7 +29,6 @@ local warzones = {
         control = -3,
         max = 6,
         type = "warzone",
-        encounter = "A1C1",
         flavor = "\"...Cause no trouble. Next.\"",
         D1 = "INF1",
         D2 = "BDMG1",

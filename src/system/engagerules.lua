@@ -169,6 +169,24 @@ local function resolveImmediateCardAction(ctx, cardIndex, action)
     return true
 end
 
+local function applyAttackSummonSideEffect(ctx, rollState, sourceCardIndex)
+    if not rollState
+        or rollState.summonOnAttack ~= true
+        or not sourceCardIndex
+        or not ctx.spawnTokensNearCard then
+        return false
+    end
+
+    local generatedCardDefinition = cardregistry.getCardById(rollState.cardgen)
+    local spawnCount = math.max(0, math.floor(tonumber(rollState.damageValue) or 0))
+
+    if not generatedCardDefinition or spawnCount <= 0 then
+        return false
+    end
+
+    return (ctx.spawnTokensNearCard(sourceCardIndex, generatedCardDefinition, spawnCount) or 0) > 0
+end
+
 local function applyAttackSideEffects(ctx, rollState, sourceCardIndex)
     if rollState and rollState.sabotageObjective == true and ctx.activePrimaryObjective then
         ctx.addObjectiveProgress(ctx.activePrimaryObjective, -(rollState.damageValue or 0), "objective")
@@ -177,6 +195,8 @@ local function applyAttackSideEffects(ctx, rollState, sourceCardIndex)
     applyRollUtilitySideEffects(ctx, rollState)
 
     local attackerCardIndex = sourceCardIndex or ctx.selectedAttackerCardIndex
+
+    applyAttackSummonSideEffect(ctx, rollState, attackerCardIndex)
 
     if rollState and rollState.selfBlock == true and attackerCardIndex then
         local attackerCard = ctx.cards[attackerCardIndex]

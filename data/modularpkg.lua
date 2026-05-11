@@ -6,7 +6,6 @@ local modularpkg = {
         id = "DEMOPKG",
         name = "Demo",
         deckId = "DEMOPKG",
-        encounter = "A1C1",
         flavor = "\"Demo text.\"",
     },
 }
