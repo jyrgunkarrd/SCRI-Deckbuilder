@@ -2519,6 +2519,7 @@ function envdraw.drawJaclDeckPreviewModal(card, preview)
         displayName = card.displayName,
         portraitPath = card.portraitPath,
         showBadgesInTextbox = true,
+        showEmphasisOnPortrait = true,
     })
 
     if previewEntries and #previewEntries > 0 then

@@ -218,6 +218,9 @@ local function getCardStyle(cardDefinition)
     }
 end
 
+local EMPHASIS_BADGE_COLOR = { 1, 0.482, 0.690, 1 } -- #ff7bb0
+local EMPHASIS_BADGE_FILL_COLOR = { 0.02, 0.02, 0.03, 0.96 }
+
 local function drawPortraitEmphasisBadge(cardDefinition, drawX, drawY, renderWidth, portraitHeight)
     if not cardDefinition or cardDefinition.emphasis == nil then
         return
@@ -225,19 +228,43 @@ local function drawPortraitEmphasisBadge(cardDefinition, drawX, drawY, renderWid
 
     local badgeSize = math.max(20, snap(renderWidth * 0.18))
     local badgeInset = math.max(4, snap(renderWidth * 0.03))
-    local badgeX = snap(drawX + renderWidth - badgeInset - badgeSize)
+
+    -- Lower-left corner of the portrait.
+    local badgeX = snap(drawX + badgeInset)
     local badgeY = snap(drawY + portraitHeight - badgeInset - badgeSize)
+
     local badgeFont = getCardFont(math.max(10, snap(badgeSize * 0.44)))
     local valueText = tostring(cardDefinition.emphasis)
     local textY = snap(badgeY + ((badgeSize - badgeFont:getHeight()) / 2))
 
-    love.graphics.setColor(HUNTER_EMPHASIS_BADGE_FILL_COLOR[1], HUNTER_EMPHASIS_BADGE_FILL_COLOR[2], HUNTER_EMPHASIS_BADGE_FILL_COLOR[3], HUNTER_EMPHASIS_BADGE_FILL_COLOR[4])
+    local previousFont = love.graphics.getFont()
+
+    love.graphics.setColor(
+        EMPHASIS_BADGE_FILL_COLOR[1],
+        EMPHASIS_BADGE_FILL_COLOR[2],
+        EMPHASIS_BADGE_FILL_COLOR[3],
+        EMPHASIS_BADGE_FILL_COLOR[4]
+    )
     love.graphics.rectangle("fill", badgeX, badgeY, badgeSize, badgeSize, 4, 4)
-    love.graphics.setColor(HUNTER_OUTLINE_COLOR[1], HUNTER_OUTLINE_COLOR[2], HUNTER_OUTLINE_COLOR[3], 0.95)
+
+    love.graphics.setColor(
+        EMPHASIS_BADGE_COLOR[1],
+        EMPHASIS_BADGE_COLOR[2],
+        EMPHASIS_BADGE_COLOR[3],
+        0.95
+    )
     love.graphics.rectangle("line", badgeX, badgeY, badgeSize, badgeSize, 4, 4)
-    love.graphics.setColor(HUNTER_EMPHASIS_BADGE_TEXT_COLOR[1], HUNTER_EMPHASIS_BADGE_TEXT_COLOR[2], HUNTER_EMPHASIS_BADGE_TEXT_COLOR[3], HUNTER_EMPHASIS_BADGE_TEXT_COLOR[4])
+
+    love.graphics.setColor(
+        EMPHASIS_BADGE_COLOR[1],
+        EMPHASIS_BADGE_COLOR[2],
+        EMPHASIS_BADGE_COLOR[3],
+        EMPHASIS_BADGE_COLOR[4]
+    )
     love.graphics.setFont(badgeFont)
     love.graphics.printf(valueText, badgeX, textY, badgeSize, "center")
+
+    love.graphics.setFont(previousFont)
 end
 
 local function getTypographyScale(renderOptions)
@@ -2594,7 +2621,7 @@ function carddraw.drawCardState(setName, cardId, x, y, expansionProgress, option
         drawCostBadges(cardDefinition, drawX, portraitY, renderWidth, portraitHeight)
     end
 
-    if metrics.showEmphasisOnPortrait and cardDefinition.type == "hunter" then
+    if metrics.showEmphasisOnPortrait then
         drawPortraitEmphasisBadge(cardDefinition, drawX, portraitY, renderWidth, portraitHeight)
     end
 
