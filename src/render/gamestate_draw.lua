@@ -47,26 +47,34 @@ function gamestatedraw.draw(ctx)
         and ctx.warrules.getObjectiveProgressPreviewSourceCount(objectiveId, ctx.isWarRollSourceActive)
         or (rawObjectivePreviewPips > 0 and 1 or 0)
 
-    if currentPhase == "Prelude" and ctx.getRetaliationPhaseObjectiveProgress then
-        local retaliationProgress = math.max(0, tonumber(ctx.getRetaliationPhaseObjectiveProgress()) or 0)
-        rawObjectivePreviewPips = rawObjectivePreviewPips + retaliationProgress
-
-        if retaliationProgress > 0 then
-            objectiveProgressSourceCount = objectiveProgressSourceCount + 1
+        if currentPhase == "Prelude" and ctx.getRetaliationPhaseObjectiveProgress then
+            local retaliationProgress = math.max(0, tonumber(ctx.getRetaliationPhaseObjectiveProgress()) or 0)
+        
+            rawObjectivePreviewPips = rawObjectivePreviewPips + retaliationProgress
+        
+            if retaliationProgress > 0 then
+                objectiveProgressSourceCount = objectiveProgressSourceCount + 1
+            end
         end
-    elseif currentPhase == "End" and ctx.getEndPhaseObjectiveProgress then
-        local endPhaseProgress = math.max(0, tonumber(ctx.getEndPhaseObjectiveProgress()) or 0)
-        rawObjectivePreviewPips = rawObjectivePreviewPips + endPhaseProgress
-
-        if endPhaseProgress > 0 then
-            objectiveProgressSourceCount = objectiveProgressSourceCount + 1
+        
+        if currentPhase ~= "Setup"
+            and currentPhase ~= "End"
+            and ctx.getEndPhaseObjectiveProgress then
+        
+            local endPhaseProgress = math.max(0, tonumber(ctx.getEndPhaseObjectiveProgress()) or 0)
+        
+            rawObjectivePreviewPips = rawObjectivePreviewPips + endPhaseProgress
+        
+            if endPhaseProgress > 0 then
+                objectiveProgressSourceCount = objectiveProgressSourceCount + 1
+            end
         end
-    end
-
-    if rawObjectivePreviewPips > 0 and ctx.getHaywireHandObjectiveProgress then
-        local haywireHandProgress = math.max(0, tonumber(ctx.getHaywireHandObjectiveProgress()) or 0)
-        rawObjectivePreviewPips = rawObjectivePreviewPips + (haywireHandProgress * objectiveProgressSourceCount)
-    end
+        
+        if objectiveProgressSourceCount > 0 and ctx.getHaywireHandObjectiveProgress then
+            local haywireHandProgress = math.max(0, tonumber(ctx.getHaywireHandObjectiveProgress()) or 0)
+        
+            rawObjectivePreviewPips = rawObjectivePreviewPips + (haywireHandProgress * objectiveProgressSourceCount)
+        end
 
     objectivePreviewPips = getPositiveObjectivePreviewPips(ctx.activePrimaryObjective, rawObjectivePreviewPips)
 
