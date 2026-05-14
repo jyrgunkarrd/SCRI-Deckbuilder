@@ -21,6 +21,7 @@ function contextbuilders.getGameActionsContext(c)
         cardlifecycle = c.cardlifecycle,
         cardregistry = c.cardregistry,
         topsloteffects = c.topsloteffects,
+        haywirerules = c.haywirerules,
         damageJitterDuration = c.damageJitterDuration,
         damageJitterMagnitude = c.damageJitterMagnitude,
         beginObjectiveEscalation = c.beginObjectiveEscalation,
@@ -30,6 +31,7 @@ function contextbuilders.getGameActionsContext(c)
         beginPoiEmergenceEffect = c.beginPoiEmergenceEffect,
         beginPoiFlipEffect = c.beginPoiFlipEffect,
         beginPoiGeneratedCardTransformation = c.beginPoiGeneratedCardTransformation,
+        addObjectiveProgress = c.addObjectiveProgress,
         getDamageJitterKeyForCard = c.getDamageJitterKeyForCard,
         resolveChampionDefeated = c.resolveChampionDefeated,
         startCardDestruction = c.startCardDestruction,
@@ -82,6 +84,7 @@ function contextbuilders.getCardPlayControllerContext(c)
         notifications = c.notifications,
         resourcerules = c.resourcerules,
         strategyrules = c.strategyrules,
+        systemrules = c.systemrules,
         tomerules = c.tomerules,
         trooprules = c.trooprules,
         turnrules = c.turnrules,
@@ -93,7 +96,10 @@ function contextbuilders.getCardPlayControllerContext(c)
         discardCardFromPlay = c.discardCardFromPlay,
         drawCardFromPlayerDeck = c.drawCardFromPlayerDeck,
         enterCurrentPhase = c.enterCurrentPhase,
+        addBlockingToCard = c.addBlockingToCard,
         getCardDrawPosition = c.getCardDrawPosition,
+        healCard = c.healCard,
+        isCardUnavailable = c.isCardUnavailable,
         normalizeHandCardSlots = c.normalizeHandCardSlots,
         removeCardFromPlay = c.removeCardFromPlay,
         spawnTokensNearCard = c.spawnTokensNearCard,
@@ -123,6 +129,7 @@ function contextbuilders.getPhaseControllerDeps(c)
     local state = c.state
 
     return {
+        state = state,
         carddraw = c.carddraw,
         cardregistry = c.cardregistry,
         championplayrules = c.championplayrules,
@@ -130,9 +137,11 @@ function contextbuilders.getPhaseControllerDeps(c)
         envdraw = c.envdraw,
         envrules = c.envrules,
         keywordrules = c.keywordrules,
+        haywirerules = c.haywirerules,
         notifications = c.notifications,
         resourcerules = c.resourcerules,
         sfxrules = c.sfxrules,
+        systemrules = c.systemrules,
         topsloteffects = c.topsloteffects,
         turnrules = c.turnrules,
         temporaryeffects = c.temporaryeffects,
@@ -145,6 +154,7 @@ function contextbuilders.getPhaseControllerDeps(c)
         addWarzoneControl = c.addWarzoneControl,
         beginInfiltrationEffect = c.beginInfiltrationEffect,
         beginEndPhaseSacrificeSelection = c.beginEndPhaseSacrificeSelection,
+        beginHaywireDeckAddAnimation = c.beginHaywireDeckAddAnimation,
         beginPoiGeneratedCardTransformation = c.beginPoiGeneratedCardTransformation,
         clearResolvedSyntacMethodReward = c.clearResolvedSyntacMethodReward,
         clearTemporaryRerollBonus = c.clearTemporaryRerollBonus,
@@ -195,11 +205,13 @@ function contextbuilders.getCardLifecycleContext(c)
     return {
         state = state,
         cardregistry = c.cardregistry,
+        haywirerules = c.haywirerules,
         sfxrules = c.sfxrules,
         trooprules = c.trooprules,
         turnrules = c.turnrules,
         warrules = c.warrules,
         addCardKeywordValue = c.addCardKeywordValue,
+        addObjectiveProgress = c.addObjectiveProgress,
         beginKitReturnAnimation = c.beginKitReturnAnimation,
         copyLocation = c.copyLocation,
         dealDamageToCard = c.dealDamageToCard,
@@ -241,6 +253,8 @@ function contextbuilders.getCardPresentationContext(c)
         getTargetingContext = c.getTargetingContext,
         drawKitReturnAnimations = c.drawKitReturnAnimations,
         drawHunterAutoPlayAnimations = c.drawHunterAutoPlayAnimations,
+        drawHunterDeckDiscardAnimations = c.drawHunterDeckDiscardAnimations,
+        drawHaywireDeckAddAnimations = c.drawHaywireDeckAddAnimations,
     }
 end
 
@@ -428,6 +442,63 @@ function contextbuilders.getTargetingContext(c)
             return c.abilityrules.isPrimedAbilityTarget(cardIndex, primedAbility, c.getModalDeps())
         end,
         isPendingStrategyTarget = function(cardIndex, pendingSelection)
+            if pendingSelection and pendingSelection.kind == "crew_button_heal" then
+                local card = cardIndex and state.cards[cardIndex] or nil
+                local currentHealth = tonumber(card and card.currentHealth)
+                local maxHealth = tonumber(card and card.maxHealth)
+
+                return card
+                    and card.location
+                    and card.location.kind == "grid"
+                    and card.location.rowId == "PlayerRow"
+                    and not card.destroyed
+                    and not card.destroying
+                    and not (c.isCardUnavailable and c.isCardUnavailable(card))
+                    and currentHealth ~= nil
+                    and maxHealth ~= nil
+                    and maxHealth > 0
+                    or false
+            end
+
+            if pendingSelection and pendingSelection.kind == "crew_button_block_2" then
+                local card = cardIndex and state.cards[cardIndex] or nil
+                local cardDefinition = card and c.cardregistry.getCard(card.setName, card.cardId) or nil
+
+                return card
+                    and card.location
+                    and card.location.kind == "grid"
+                    and card.location.rowId == "PlayerRow"
+                    and not card.destroyed
+                    and not card.destroying
+                    and not (c.isCardUnavailable and c.isCardUnavailable(card))
+                    and (
+                        card.currentHealth ~= nil
+                        or card.maxHealth ~= nil
+                        or (cardDefinition and cardDefinition.health ~= nil)
+                    )
+                    or false
+            end
+
+            if pendingSelection and pendingSelection.kind == "crew_button_defeat_2" then
+                local card = cardIndex and state.cards[cardIndex] or nil
+                local currentHealth = tonumber(card and card.currentHealth)
+
+                if currentHealth == nil and card then
+                    local cardDefinition = c.cardregistry.getCard(card.setName, card.cardId)
+                    currentHealth = tonumber(cardDefinition and cardDefinition.health)
+                end
+
+                return card
+                    and card.location
+                    and card.location.kind == "grid"
+                    and card.location.rowId == "OppRow"
+                    and not card.destroyed
+                    and not card.destroying
+                    and not (c.isCardUnavailable and c.isCardUnavailable(card))
+                    and currentHealth == 2
+                    or false
+            end
+
             if pendingSelection and pendingSelection.kind == "hand_limit_discard" then
                 local card = cardIndex and state.cards[cardIndex] or nil
 
@@ -447,6 +518,15 @@ function contextbuilders.getTargetingContext(c)
                 cards = state.cards,
                 cardregistry = c.cardregistry,
             })
+        end,
+        isPendingStrategyTopSlotTarget = function(topSlotId, pendingSelection)
+            return pendingSelection
+                and pendingSelection.kind == "crew_button_defeat_2"
+                and topSlotId == "champion"
+                and state.activeChampion
+                and state.activeChampion.hidden ~= true
+                and tonumber(state.activeChampion.health) == 2
+                or false
         end,
     }
 end
@@ -469,6 +549,7 @@ function contextbuilders.getInputControllerDeps(c)
         completeSetupPhaseIfReady = c.completeSetupPhaseIfReady,
         copyLocation = c.copyLocation,
         getCardDrawPosition = c.getCardDrawPosition,
+        getCardButtonBadgeTarget = c.getCardButtonBadgeTarget,
         getHoveredPlayerRollBadgeCardIndex = c.getHoveredPlayerRollBadgeCardIndex,
         getCardMethodBadgeTarget = c.getCardMethodBadgeTarget,
         getHoveredTopSlotId = c.getHoveredTopSlotId,
@@ -518,6 +599,7 @@ function contextbuilders.getInputControllerDeps(c)
         tryCancelSelectedEngageAttacker = c.tryCancelSelectedEngageAttacker,
         tryResolveEngageClick = c.tryResolveEngageClick,
         tryUseEngageReroll = c.tryUseEngageReroll,
+        tryUseCardButtonBadge = c.tryUseCardButtonBadge,
         updateHoveredCard = c.updateHoveredCard,
     }
 end

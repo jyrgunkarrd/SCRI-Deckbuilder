@@ -92,7 +92,19 @@ local function resolveDefeatedCard(ctx, cardIndex, card)
 
     local attachedKitCards = card.attachedKitCards
 
-    applyBoomKeywordDamage(ctx, cardIndex, card)
+    if ctx.haywirerules
+        and ctx.addObjectiveProgress
+        and state.activePrimaryObjective
+        and not card.haywireDamageDefeatProgressApplied then
+        local haywireProgress = ctx.haywirerules.getDamageDefeatProgress(ctx, card)
+
+        if haywireProgress > 0 then
+            ctx.addObjectiveProgress(state.activePrimaryObjective, haywireProgress)
+        end
+    end
+
+    card.haywireDefeatedByDamage = nil
+    card.haywireDamageDefeatProgressApplied = nil
     cardlifecycle.releaseAttachedKits(ctx, card)
     ctx.resolveDestroyedTroopCard(cardIndex, attachedKitCards)
 
@@ -262,6 +274,7 @@ function cardlifecycle.startCardDestruction(ctx, cardIndex)
     card.destroySeed = love.math.random() * 1000
     ctx.warrules.clearCardRollState(cardIndex)
     applyEnemyDefeatChampionDamage(ctx, card)
+    applyBoomKeywordDamage(ctx, cardIndex, card)
     ctx.sfxrules.playDestroy()
 
     if state.selectedAttackerCardIndex == cardIndex then
@@ -451,7 +464,9 @@ function cardlifecycle.expireCardFromPlay(ctx, cardIndex)
         return false
     end
 
+    card.destroying = true
     applyEnemyDefeatChampionDamage(ctx, card)
+    applyBoomKeywordDamage(ctx, cardIndex, card)
     resolveDefeatedCard(ctx, cardIndex, card)
     return cardlifecycle.removeCardFromPlay(ctx, cardIndex)
 end

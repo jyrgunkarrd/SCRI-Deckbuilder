@@ -89,8 +89,8 @@ local decks = {
             name = "Enemy Testbed",
             cards = {
                 {
-                    cardId = "EN0001",
-                    quantity = 1,
+                    cardId = "HWBSC",
+                    quantity = 60,
                 },
             },
         },

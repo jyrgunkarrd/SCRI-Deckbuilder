@@ -524,4 +524,183 @@ function cardanimations.drawHunterAutoPlayAnimations(ctx)
     love.graphics.setColor(1, 1, 1, 1)
 end
 
+function cardanimations.beginHunterDeckDiscardAnimation(ctx, card)
+    if not ctx or not card then
+        return false
+    end
+
+    local cardDefinition = ctx.cardregistry and ctx.cardregistry.getCard(card.setName, card.cardId) or nil
+    local screenWidth = love.graphics.getWidth()
+    local screenHeight = love.graphics.getHeight()
+    local renderOptions = {
+        width = math.max(150, math.min(210, screenWidth * 0.12)),
+        showLabelWhenCollapsed = true,
+        showHealthOnPortrait = false,
+        showBadgesInTextbox = true,
+        displayName = card.displayName,
+        portraitPath = card.portraitPath,
+        currentHealth = card.currentHealth,
+        maxHealth = card.maxHealth,
+        keywordValues = card.keywordValues,
+    }
+    local cardWidth, cardHeight = carddraw.getCardSize(renderOptions)
+
+    ctx.hunterDeckDiscardAnimations[#ctx.hunterDeckDiscardAnimations + 1] = {
+        elapsed = 0,
+        duration = ctx.destructionDuration or 0.6,
+        setName = card.setName,
+        cardId = card.cardId,
+        renderOptions = renderOptions,
+        cardWidth = cardWidth,
+        cardHeight = cardHeight,
+        x = (screenWidth - cardWidth) / 2,
+        y = (screenHeight - cardHeight) / 2,
+        destructionSeed = love.math.random() * 1000,
+    }
+
+    if ctx.sfxrules and ctx.sfxrules.playDestroy then
+        ctx.sfxrules.playDestroy()
+    end
+
+    return cardDefinition ~= nil
+end
+
+function cardanimations.updateHunterDeckDiscardAnimations(ctx, dt)
+    for animationIndex = #(ctx.hunterDeckDiscardAnimations or {}), 1, -1 do
+        local animation = ctx.hunterDeckDiscardAnimations[animationIndex]
+
+        animation.elapsed = (animation.elapsed or 0) + (dt or 0)
+
+        if animation.elapsed >= (animation.duration or 0.6) then
+            table.remove(ctx.hunterDeckDiscardAnimations, animationIndex)
+        end
+    end
+end
+
+function cardanimations.drawHunterDeckDiscardAnimations(ctx)
+    for _, animation in ipairs(ctx.hunterDeckDiscardAnimations or {}) do
+        local duration = math.max(0.01, animation.duration or 0.6)
+        local progress = math.min(1, math.max(0, (animation.elapsed or 0) / duration))
+        local alpha = 1 - math.max(0, (progress - 0.72) / 0.28)
+        local renderOptions = copyRenderOptions(animation.renderOptions)
+
+        renderOptions.destructionProgress = progress
+        renderOptions.destructionSeed = animation.destructionSeed
+        renderOptions.alpha = alpha
+
+        love.graphics.setColor(0.02, 0.02, 0.025, 0.42 * alpha)
+        love.graphics.rectangle(
+            "fill",
+            animation.x - 16,
+            animation.y - 16,
+            animation.cardWidth + 32,
+            animation.cardHeight + 32,
+            8,
+            8
+        )
+
+        carddraw.drawCardState(
+            animation.setName,
+            animation.cardId,
+            animation.x,
+            animation.y,
+            0,
+            renderOptions
+        )
+    end
+
+    love.graphics.setColor(1, 1, 1, 1)
+end
+
+function cardanimations.beginHaywireDeckAddAnimation(ctx, card)
+    if not ctx or not card then
+        return false
+    end
+
+    local cardDefinition = ctx.cardregistry and ctx.cardregistry.getCard(card.setName, card.cardId) or nil
+    local systemRect = ctx.envdraw and ctx.envdraw.getSystemBadgeColumnRect and ctx.envdraw.getSystemBadgeColumnRect() or nil
+    local screenWidth = love.graphics.getWidth()
+    local screenHeight = love.graphics.getHeight()
+    local renderOptions = {
+        width = math.max(150, math.min(210, screenWidth * 0.12)),
+        showLabelWhenCollapsed = true,
+        showHealthOnPortrait = false,
+        showBadgesInTextbox = true,
+        displayName = card.displayName,
+        portraitPath = card.portraitPath,
+        currentHealth = card.currentHealth,
+        maxHealth = card.maxHealth,
+        keywordValues = card.keywordValues,
+    }
+    local cardWidth, cardHeight = carddraw.getCardSize(renderOptions)
+    local startX = systemRect and (systemRect.x + ((systemRect.width - cardWidth) / 2)) or ((screenWidth - cardWidth) / 2)
+    local startY = systemRect and (systemRect.y + ((systemRect.height - cardHeight) / 2)) or ((screenHeight - cardHeight) / 2)
+
+    ctx.haywireDeckAddAnimations[#ctx.haywireDeckAddAnimations + 1] = {
+        elapsed = 0,
+        duration = 0.46,
+        setName = card.setName,
+        cardId = card.cardId,
+        renderOptions = renderOptions,
+        cardWidth = cardWidth,
+        cardHeight = cardHeight,
+        startX = startX,
+        startY = startY,
+        targetY = screenHeight + cardHeight + 24,
+    }
+
+    if ctx.sfxrules and ctx.sfxrules.playPlayReject then
+        ctx.sfxrules.playPlayReject()
+    end
+
+    return cardDefinition ~= nil
+end
+
+function cardanimations.updateHaywireDeckAddAnimations(ctx, dt)
+    for animationIndex = #(ctx.haywireDeckAddAnimations or {}), 1, -1 do
+        local animation = ctx.haywireDeckAddAnimations[animationIndex]
+
+        animation.elapsed = (animation.elapsed or 0) + (dt or 0)
+
+        if animation.elapsed >= (animation.duration or 0.46) then
+            table.remove(ctx.haywireDeckAddAnimations, animationIndex)
+        end
+    end
+end
+
+function cardanimations.drawHaywireDeckAddAnimations(ctx)
+    for _, animation in ipairs(ctx.haywireDeckAddAnimations or {}) do
+        local duration = math.max(0.01, animation.duration or 0.46)
+        local progress = math.min(1, math.max(0, (animation.elapsed or 0) / duration))
+        local easedProgress = progress * progress * progress
+        local drawY = ((1 - easedProgress) * animation.startY) + (easedProgress * animation.targetY)
+        local alpha = 1 - math.max(0, (progress - 0.78) / 0.22)
+        local renderOptions = copyRenderOptions(animation.renderOptions)
+
+        renderOptions.alpha = alpha
+
+        love.graphics.setColor(0.98, 0.24, 0.08, 0.28 * alpha)
+        love.graphics.rectangle(
+            "fill",
+            animation.startX - 8,
+            drawY - 8,
+            animation.cardWidth + 16,
+            animation.cardHeight + 16,
+            8,
+            8
+        )
+
+        carddraw.drawCardState(
+            animation.setName,
+            animation.cardId,
+            animation.startX,
+            drawY,
+            0,
+            renderOptions
+        )
+    end
+
+    love.graphics.setColor(1, 1, 1, 1)
+end
+
 return cardanimations

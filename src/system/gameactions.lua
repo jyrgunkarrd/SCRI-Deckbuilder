@@ -12,6 +12,7 @@ local FAIR_WEATHER_KEYWORD_ID = "KWFAIR"
 local FLYING_KEYWORD_ID = "KWFLY"
 local ENEMY_ROW_ID = "OppRow"
 local MARKER_CARD_TYPE = "marker"
+local CACHE_CARD_TYPE = "cache"
 
 local function getCardDefinition(card)
     if not card then
@@ -26,9 +27,11 @@ local function cardHasKeyword(card, keywordId)
     return keywordrules.cardHasKeyword(cardDefinition, keywordId, card)
 end
 
-local function isMarkerCard(card)
+local function isDamageImmuneCard(card)
     local cardDefinition = getCardDefinition(card)
-    return cardDefinition and cardDefinition.type == MARKER_CARD_TYPE or false
+    local cardType = cardDefinition and cardDefinition.type or nil
+
+    return cardType == MARKER_CARD_TYPE or cardType == CACHE_CARD_TYPE
 end
 
 local function buildPreventedCardEffectResult(card, amount)
@@ -135,7 +138,16 @@ end
 
 function gameactions.addObjectiveProgress(ctx, objectiveDefinition, amount, slotId)
     local state = ctx.state
-    local result = objectiveprogressrules.addProgress(objectiveDefinition, amount, {
+    local progressAmount = tonumber(amount) or 0
+
+    if progressAmount > 0
+        and (slotId == nil or slotId == "objective")
+        and objectiveDefinition == state.activePrimaryObjective
+        and ctx.haywirerules then
+        progressAmount = progressAmount + ctx.haywirerules.getObjectiveProgressBonus(ctx, progressAmount)
+    end
+
+    local result = objectiveprogressrules.addProgress(objectiveDefinition, progressAmount, {
         slotId = slotId,
         activePrimaryObjective = state.activePrimaryObjective,
         objectiveEscalationActive = ctx.topsloteffects.isObjectiveEscalationActive(),
@@ -214,8 +226,37 @@ function gameactions.initializeCardsHealthState(cardList)
     return cardinstances.initializeAllHealth(cardList)
 end
 
+local function resolveHaywireDamageDefeat(ctx, card)
+    if not ctx
+        or not card
+        or not ctx.haywirerules
+        or not ctx.haywirerules.isHaywireCard(ctx, card)
+    then
+        return false
+    end
+
+    card.haywireDefeatedByDamage = true
+
+    if card.haywireDamageDefeatProgressApplied
+        or not ctx.addObjectiveProgress
+        or not ctx.state
+        or not ctx.state.activePrimaryObjective
+    then
+        return true
+    end
+
+    local haywireProgress = ctx.haywirerules.getDamageDefeatProgress(ctx, card)
+
+    if haywireProgress > 0 then
+        card.haywireDamageDefeatProgressApplied = true
+        ctx.addObjectiveProgress(ctx.state.activePrimaryObjective, haywireProgress)
+    end
+
+    return true
+end
+
 function gameactions.dealDamageToCard(ctx, card, amount, suppressFeedback)
-    if isMarkerCard(card) then
+    if isDamageImmuneCard(card) then
         return buildPreventedCardEffectResult(card, amount)
     end
 
@@ -237,6 +278,7 @@ function gameactions.dealDamageToCard(ctx, card, amount, suppressFeedback)
             ctx.triggerDamageFeedback(ctx.getDamageJitterKeyForCard(damagedCardIndex))
 
             if damageResult.killed then
+                resolveHaywireDamageDefeat(ctx, card)
                 ctx.startCardDestruction(damagedCardIndex)
             end
         end
@@ -250,7 +292,7 @@ function gameactions.dealDamageToCard(ctx, card, amount, suppressFeedback)
 end
 
 function gameactions.dealDirectDamageToCard(ctx, card, amount, suppressFeedback)
-    if isMarkerCard(card) then
+    if isDamageImmuneCard(card) then
         return buildPreventedCardEffectResult(card, amount)
     end
 
@@ -272,6 +314,7 @@ function gameactions.dealDirectDamageToCard(ctx, card, amount, suppressFeedback)
             ctx.triggerDamageFeedback(ctx.getDamageJitterKeyForCard(damagedCardIndex))
 
             if damageResult.killed then
+                resolveHaywireDamageDefeat(ctx, card)
                 ctx.startCardDestruction(damagedCardIndex)
             end
         end

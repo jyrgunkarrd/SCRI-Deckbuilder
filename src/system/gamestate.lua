@@ -1,4 +1,5 @@
 local championplayrules = require("src.system.championplayrules")
+local systemrules = require("src.system.systemrules")
 
 local gamestate = {}
 
@@ -45,6 +46,7 @@ function gamestate.createInitialState()
         activePoi = nil,
         activePrimaryObjective = nil,
         activeIntel = nil,
+        missionSystems = systemrules.createFreshSystems(),
         playerDeck = nil,
         championDeck = nil,
         cards = {},
@@ -104,10 +106,12 @@ function gamestate.createInitialState()
         pendingStrategySelection = nil,
         pendingSacrificeSelection = nil,
         pendingHandLimitDiscardSelection = nil,
+        pendingButtonSelection = nil,
         endPhaseHandLimitDiscardHandled = false,
         endPhaseDrawHandled = false,
         endPhasePoiHandled = false,
         endPhaseSacrificeHandled = false,
+        endPhaseHaywireHandled = false,
         mulliganActive = false,
         mulliganCompleted = false,
         mulliganSelection = {},
@@ -117,6 +121,8 @@ function gamestate.createInitialState()
         kitReturnAnimations = {},
         pilotVehicleAnimations = {},
         hunterAutoPlayAnimations = {},
+        hunterDeckDiscardAnimations = {},
+        haywireDeckAddAnimations = {},
         hasRenderedFirstFrame = false,
         pendingPhaseEntry = false,
         pendingSetupCompletion = false,

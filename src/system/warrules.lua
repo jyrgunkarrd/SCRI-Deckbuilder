@@ -1004,6 +1004,7 @@ local function isAvailablePlayerAttackTarget(cards, cardIndex)
         and card.location.rowId == "PlayerRow"
         and not card.destroyed
         and not card.destroying
+        and not crewrules.isCrewCovered(cards, cardIndex)
 end
 
 local function isLegalPlayerAttackTarget(cards, cardIndex, attackerDefinition, attackerCard, attackContext)
@@ -1495,6 +1496,41 @@ function warrules.getHealthDamagePreview(card, incomingDamage)
     return math.max(0, damage - blocking)
 end
 
+local function isEnemyObjectivePressureRoll(entityKey, rollState)
+    if not rollState
+        or not hasTargetType(rollState, "AtkSab")
+        or not rollState.targetCardIndex
+        or math.max(0, tonumber(rollState.damageValue) or 0) <= 0 then
+        return false
+    end
+
+    if entityKey == "champion" then
+        return true
+    end
+
+    local sourceCard = rollState.sourceCard
+    return sourceCard
+        and sourceCard.location
+        and sourceCard.location.kind == "grid"
+        and sourceCard.location.rowId == "OppRow"
+        or false
+end
+
+local function isObjectiveProgressPreviewRoll(entityKey, rollState, objectiveId)
+    if not objectiveId then
+        return false
+    end
+
+    return (
+        hasTargetType(rollState, "Obj")
+        and rollState.targetCard
+        and rollState.targetCard.kind == "objective"
+        and rollState.targetCard.objectiveId == objectiveId
+        and math.max(0, tonumber(rollState.damageValue) or 0) > 0
+    )
+        or isEnemyObjectivePressureRoll(entityKey, rollState)
+end
+
 function warrules.getObjectiveProgressPreview(objectiveId, isSourceActive)
     local incomingProgress = 0
 
@@ -1505,16 +1541,30 @@ function warrules.getObjectiveProgressPreview(objectiveId, isSourceActive)
     for entityKey, rollState in pairs(warRollDisplayStates) do
         local sourceIsActive = isSourceActive == nil or isSourceActive(entityKey, rollState)
 
-        if sourceIsActive
-            and hasTargetType(rollState, "Obj")
-            and rollState.targetCard
-            and rollState.targetCard.kind == "objective"
-            and rollState.targetCard.objectiveId == objectiveId then
+        if sourceIsActive and isObjectiveProgressPreviewRoll(entityKey, rollState, objectiveId) then
             incomingProgress = incomingProgress + (rollState.damageValue or 0)
         end
     end
 
     return incomingProgress
+end
+
+function warrules.getObjectiveProgressPreviewSourceCount(objectiveId, isSourceActive)
+    local sourceCount = 0
+
+    if not objectiveId then
+        return sourceCount
+    end
+
+    for entityKey, rollState in pairs(warRollDisplayStates) do
+        local sourceIsActive = isSourceActive == nil or isSourceActive(entityKey, rollState)
+
+        if sourceIsActive and isObjectiveProgressPreviewRoll(entityKey, rollState, objectiveId) then
+            sourceCount = sourceCount + 1
+        end
+    end
+
+    return sourceCount
 end
 
 function warrules.getIntelProgressPreview(intelId, isSourceActive)

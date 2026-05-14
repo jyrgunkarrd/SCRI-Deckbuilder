@@ -122,6 +122,7 @@ function inputcontroller.mousepressed(gameState, deps, x, y, button)
     local clickedScratchBadge = deps.isPointInsideJaclScratchBadge(x, y)
     local clickedJaclPortrait = deps.isPointInsideJaclPortrait(x, y)
     local clickedJaclMethodBadge = deps.envdraw.getJaclMethodBadgeAt(x, y, gameState.playerJacl)
+    local clickedCardButtonBadge = deps.getCardButtonBadgeTarget and deps.getCardButtonBadgeTarget(x, y) or nil
     local clickedCardMethodBadge = deps.getCardMethodBadgeTarget and deps.getCardMethodBadgeTarget(x, y) or nil
 
     if gameState.primedSyntacAbility then
@@ -160,7 +161,7 @@ function inputcontroller.mousepressed(gameState, deps, x, y, button)
         end
 
         if button == 1 and deps.tryResolvePendingStrategySelection then
-            if deps.tryResolvePendingStrategySelection(gameState.hoveredCardIndex) then
+            if deps.tryResolvePendingStrategySelection(gameState.hoveredCardIndex, gameState.hoveredTopSlotId) then
                 clearHoverAndExpansion(gameState)
             end
 
@@ -181,6 +182,17 @@ function inputcontroller.mousepressed(gameState, deps, x, y, button)
 
     if button == 1 and deps.tryUseSyntacRewardButton and deps.tryUseSyntacRewardButton(x, y) then
         clearHoverAndExpansion(gameState)
+        return
+    end
+
+    if button == 1 and clickedCardButtonBadge then
+        if deps.tryUseCardButtonBadge(clickedCardButtonBadge.cardIndex) then
+            deps.sfxrules.playResourcePlay()
+            clearHoverAndExpansion(gameState)
+            return
+        end
+
+        deps.sfxrules.playPlayReject()
         return
     end
 

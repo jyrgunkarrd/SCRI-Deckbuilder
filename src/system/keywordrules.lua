@@ -22,19 +22,29 @@ local enemyChampionHandlers = {
 
 local keywordsById = nil
 
-local function appendKeywordIds(keywordIds, seenKeywordIds, sourceDefinition)
+local function isKeywordRemoved(card, keywordId)
+    return card
+        and keywordId
+        and card.removedKeywords
+        and card.removedKeywords[keywordId] == true
+        or false
+end
+
+local function appendKeywordIds(keywordIds, seenKeywordIds, sourceDefinition, card)
     if not sourceDefinition then
         return
     end
 
     if type(sourceDefinition.keyword) == "table" then
         for _, keywordId in ipairs(sourceDefinition.keyword) do
-            if keywordId and not seenKeywordIds[keywordId] then
+            if keywordId and not seenKeywordIds[keywordId] and not isKeywordRemoved(card, keywordId) then
                 keywordIds[#keywordIds + 1] = keywordId
                 seenKeywordIds[keywordId] = true
             end
         end
-    elseif sourceDefinition.keyword ~= nil and not seenKeywordIds[sourceDefinition.keyword] then
+    elseif sourceDefinition.keyword ~= nil
+        and not seenKeywordIds[sourceDefinition.keyword]
+        and not isKeywordRemoved(card, sourceDefinition.keyword) then
         keywordIds[#keywordIds + 1] = sourceDefinition.keyword
         seenKeywordIds[sourceDefinition.keyword] = true
     end
@@ -102,7 +112,7 @@ local function appendPassiveScriptKeywordIds(keywordIds, seenKeywordIds, cardDef
     end
 
     for _, keywordId in ipairs(handler.getPassiveKeywordIds(card, cardDefinition) or {}) do
-        if keywordId and not seenKeywordIds[keywordId] then
+        if keywordId and not seenKeywordIds[keywordId] and not isKeywordRemoved(card, keywordId) then
             keywordIds[#keywordIds + 1] = keywordId
             seenKeywordIds[keywordId] = true
         end
@@ -135,24 +145,26 @@ function keywordrules.getCardKeywordIds(cardDefinition, card)
     local keywordIds = {}
     local seenKeywordIds = {}
 
-    appendKeywordIds(keywordIds, seenKeywordIds, cardDefinition)
+    appendKeywordIds(keywordIds, seenKeywordIds, cardDefinition, card)
 
     for keywordId, keywordValue in pairs(card and card.keywordValues or {}) do
-        if (tonumber(keywordValue) or 0) > 0 and not seenKeywordIds[keywordId] then
+        if (tonumber(keywordValue) or 0) > 0 and not seenKeywordIds[keywordId] and not isKeywordRemoved(card, keywordId) then
             keywordIds[#keywordIds + 1] = keywordId
             seenKeywordIds[keywordId] = true
         end
     end
 
     for keywordId in pairs(card and card.tempKeywords or {}) do
-        if not seenKeywordIds[keywordId] and temporaryeffects.hasTemporaryKeyword(card, keywordId) then
+        if not seenKeywordIds[keywordId]
+            and not isKeywordRemoved(card, keywordId)
+            and temporaryeffects.hasTemporaryKeyword(card, keywordId) then
             keywordIds[#keywordIds + 1] = keywordId
             seenKeywordIds[keywordId] = true
         end
     end
 
     for _, attachedDefinition in ipairs(getAttachedKitDefinitions(card)) do
-        appendKeywordIds(keywordIds, seenKeywordIds, attachedDefinition)
+        appendKeywordIds(keywordIds, seenKeywordIds, attachedDefinition, card)
     end
 
     appendPassiveScriptKeywordIds(keywordIds, seenKeywordIds, cardDefinition, card)
@@ -316,6 +328,10 @@ function keywordrules.setTemporaryKeywordValue(card, keywordId, keywordValue)
         return false
     end
 
+    if card.removedKeywords then
+        card.removedKeywords[keywordId] = nil
+    end
+
     card.tempKeywords = card.tempKeywords or {}
     card.tempKeywordValues = card.tempKeywordValues or {}
     card.tempKeywords[keywordId] = 1
@@ -339,6 +355,61 @@ function keywordrules.removeTemporaryKeyword(card, keywordId)
     return true
 end
 
+function keywordrules.removeNegativeConditionKeywords(card, cardDefinition)
+    if not card then
+        return 0
+    end
+
+    local removedCount = 0
+
+    for _, keywordId in ipairs(keywordrules.getCardKeywordIds(cardDefinition, card)) do
+        local keywordDefinition = keywordrules.getKeywordDefinition(keywordId)
+
+        if keywordDefinition and keywordDefinition.negCond == true then
+            card.removedKeywords = card.removedKeywords or {}
+            card.removedKeywords[keywordId] = true
+
+            if card.keywordValues then
+                card.keywordValues[keywordId] = nil
+            end
+
+            keywordrules.removeTemporaryKeyword(card, keywordId)
+
+            if card.exhaustedKeywords then
+                card.exhaustedKeywords[keywordId] = nil
+            end
+
+            if card.instanceId and exhaustedKeywordInstances[card.instanceId] then
+                exhaustedKeywordInstances[card.instanceId][keywordId] = nil
+
+                if next(exhaustedKeywordInstances[card.instanceId]) == nil then
+                    exhaustedKeywordInstances[card.instanceId] = nil
+                end
+            end
+
+            removedCount = removedCount + 1
+        end
+    end
+
+    if card.keywordValues and next(card.keywordValues) == nil then
+        card.keywordValues = nil
+    end
+
+    if card.tempKeywords and next(card.tempKeywords) == nil then
+        card.tempKeywords = nil
+    end
+
+    if card.tempKeywordValues and next(card.tempKeywordValues) == nil then
+        card.tempKeywordValues = nil
+    end
+
+    if card.exhaustedKeywords and next(card.exhaustedKeywords) == nil then
+        card.exhaustedKeywords = nil
+    end
+
+    return removedCount
+end
+
 function keywordrules.addCardKeywordValue(card, cardDefinition, keywordId, amount)
     if not card or not keywordId then
         return nil
@@ -352,6 +423,11 @@ function keywordrules.addCardKeywordValue(card, cardDefinition, keywordId, amoun
     end
 
     keywordrules.initializeCardKeywordState(card, cardDefinition)
+
+    if card.removedKeywords then
+        card.removedKeywords[keywordId] = nil
+    end
+
     card.keywordValues = card.keywordValues or {}
 
     local currentValue = card.keywordValues[keywordId]
@@ -398,6 +474,10 @@ end
 
 function keywordrules.getCardKeywordValue(card, cardDefinition, keywordId)
     if not keywordId then
+        return nil
+    end
+
+    if isKeywordRemoved(card, keywordId) then
         return nil
     end
 

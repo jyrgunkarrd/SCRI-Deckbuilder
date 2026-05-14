@@ -315,34 +315,44 @@ local function drawResourceGrid(layout, resourceCounts)
     love.graphics.setColor(1, 1, 1, 1)
 end
 
-local function drawSystemBadgeColumn(layout)
+local function isSystemBadgeBurned(systemStates, systemIndex)
+    local systemState = systemStates and systemStates[systemIndex] or nil
+
+    return systemState == true or (type(systemState) == "table" and systemState.burned == true)
+end
+
+local function drawSystemBadgeColumn(layout, systemStates)
     if not layout then
         return
     end
 
     local boxSize = layout.iconSize
     local boxX = layout.startX - layout.columnGap - boxSize
-    local image = getMapImage("systems.png") or getMapImage("system.png")
+    local freshImage = getMapImage("systems.png") or getMapImage("system.png")
+    local burnedImage = getMapImage("systemsburn.png") or freshImage
 
     for systemIndex = 1, SYSTEM_BADGE_COUNT do
         local rowY = layout.startY + ((systemIndex - 1) * layout.rowStep)
         local cornerRadius = math.max(3, math.floor(boxSize * 0.075))
         local inset = math.max(3, math.floor(boxSize * 0.075))
+        local isBurned = isSystemBadgeBurned(systemStates, systemIndex)
+        local badgeAlpha = isBurned and 0.46 or 1
+        local image = isBurned and burnedImage or freshImage
 
-        love.graphics.setColor(0.025, 0.028, 0.035, 0.9)
+        love.graphics.setColor(0.025, 0.028, 0.035, 0.9 * badgeAlpha)
         love.graphics.rectangle("fill", boxX, rowY, boxSize, boxSize, cornerRadius, cornerRadius)
         love.graphics.setColor(
             SYSTEM_BADGE_OUTLINE_COLOR[1],
             SYSTEM_BADGE_OUTLINE_COLOR[2],
             SYSTEM_BADGE_OUTLINE_COLOR[3],
-            SYSTEM_BADGE_OUTLINE_COLOR[4]
+            SYSTEM_BADGE_OUTLINE_COLOR[4] * badgeAlpha
         )
         love.graphics.rectangle("line", boxX, rowY, boxSize, boxSize, cornerRadius, cornerRadius)
         love.graphics.setColor(
             SYSTEM_BADGE_INNER_FILL_COLOR[1],
             SYSTEM_BADGE_INNER_FILL_COLOR[2],
             SYSTEM_BADGE_INNER_FILL_COLOR[3],
-            SYSTEM_BADGE_INNER_FILL_COLOR[4]
+            SYSTEM_BADGE_INNER_FILL_COLOR[4] * badgeAlpha
         )
         love.graphics.rectangle(
             "fill",
@@ -361,7 +371,7 @@ local function drawSystemBadgeColumn(layout)
             local imageWidth = image:getWidth() * imageScale
             local imageHeight = image:getHeight() * imageScale
 
-            love.graphics.setColor(1, 1, 1, 1)
+            love.graphics.setColor(1, 1, 1, isBurned and 0.48 or 1)
             love.graphics.draw(
                 image,
                 boxX + ((boxSize - imageWidth) * 0.5),
@@ -369,6 +379,20 @@ local function drawSystemBadgeColumn(layout)
                 0,
                 imageScale,
                 imageScale
+            )
+        end
+
+        if isBurned then
+            local lineInset = math.max(4, math.floor(boxSize * 0.11))
+
+            love.graphics.setColor(0, 0, 0, 0.42)
+            love.graphics.rectangle("fill", boxX, rowY, boxSize, boxSize, cornerRadius, cornerRadius)
+            love.graphics.setColor(0.42, 0.44, 0.48, 0.86)
+            love.graphics.line(
+                boxX + lineInset,
+                rowY + boxSize - lineInset,
+                boxX + boxSize - lineInset,
+                rowY + lineInset
             )
         end
     end
@@ -2118,9 +2142,23 @@ function envdraw.getResourceTrackerLayout()
     return buildResourceTrackerLayout()
 end
 
-function envdraw.drawResourceTracker(resourceCounts)
+function envdraw.getSystemBadgeColumnRect()
     local layout = buildResourceTrackerLayout()
-    drawSystemBadgeColumn(layout)
+    local boxSize = layout.iconSize
+    local boxX = layout.startX - layout.columnGap - boxSize
+    local columnHeight = boxSize + ((SYSTEM_BADGE_COUNT - 1) * layout.rowStep)
+
+    return {
+        x = boxX,
+        y = layout.startY,
+        width = boxSize,
+        height = columnHeight,
+    }
+end
+
+function envdraw.drawResourceTracker(resourceCounts, systemStates)
+    local layout = buildResourceTrackerLayout()
+    drawSystemBadgeColumn(layout, systemStates)
     drawResourceGrid(layout, resourceCounts)
 end
 

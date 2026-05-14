@@ -146,8 +146,21 @@ end
 function cardzones.getValidJaclSpecialTargetCell(mouseX, mouseY, cards, context)
     local targetCell = cardzones.getCellAt(context.getPlayerRow(), mouseX, mouseY)
 
-    if not targetCell or cardzones.isGridRowColumnOccupied(cards, "PlayerRow", targetCell.column) then
+    if not targetCell then
         return nil
+    end
+
+    for _, card in ipairs(cards or {}) do
+        if card
+            and card.location
+            and card.location.kind == "grid"
+            and not card.destroyed
+            and not card.destroying
+            and card.location.rowId == "PlayerRow"
+            and card.location.column == targetCell.column
+            and not crewrules.isCrewCard(card) then
+            return nil
+        end
     end
 
     return targetCell

@@ -48,6 +48,7 @@ local KEYWORD_TOOLTIP_MAX_WIDTH = 260
 local KEYWORD_TOOLTIP_PADDING = 10
 local KEYWORD_TOOLTIP_OFFSET_X = 18
 local KEYWORD_TOOLTIP_OFFSET_Y = 18
+local KEYWORD_TOOLTIP_GAP = 6
 local DICE_TOOLTIP_NAME_FONT_SIZE = 14
 local DICE_TOOLTIP_TEXT_FONT_SIZE = 12
 local DICE_TOOLTIP_MAX_WIDTH = 280
@@ -854,20 +855,28 @@ local function drawRfcBadge(x, y, width, height, rfcValue, font, alpha)
     love.graphics.setFont(previousFont)
 end
 
-local function drawButtonBadge(x, y, width, height, alpha)
+local function drawButtonBadge(x, y, width, height, alpha, exhausted)
     local buttonSize = math.max(6, snap(height * 0.48))
     local buttonX = snap(x + ((width - buttonSize) / 2))
     local buttonY = snap(y + ((height - buttonSize) / 2))
     local cornerRadius = math.max(2, snap(buttonSize * 0.18))
+    local drawAlpha = exhausted and (alpha * 0.34) or alpha
 
-    love.graphics.setColor(0.14, 0.035, 0.035, alpha)
+    love.graphics.setColor(0.14, 0.035, 0.035, drawAlpha)
     love.graphics.rectangle("fill", x, y, width, height, 3, 3)
-    love.graphics.setColor(0.92, 0.58, 0.42, alpha)
+    love.graphics.setColor(0.92, 0.58, 0.42, drawAlpha)
     love.graphics.rectangle("line", x, y, width, height, 3, 3)
-    love.graphics.setColor(1, 0.78, 0.54, alpha)
+    love.graphics.setColor(1, 0.78, 0.54, drawAlpha)
     love.graphics.rectangle("fill", buttonX, buttonY, buttonSize, buttonSize, cornerRadius, cornerRadius)
-    love.graphics.setColor(0.14, 0.035, 0.035, alpha * 0.65)
+    love.graphics.setColor(0.14, 0.035, 0.035, drawAlpha * 0.65)
     love.graphics.rectangle("line", buttonX, buttonY, buttonSize, buttonSize, cornerRadius, cornerRadius)
+
+    if exhausted then
+        love.graphics.setColor(0, 0, 0, alpha * 0.42)
+        love.graphics.rectangle("fill", x, y, width, height, 3, 3)
+        love.graphics.setColor(0.42, 0.44, 0.48, alpha * 0.78)
+        love.graphics.line(x + 3, y + height - 3, x + width - 3, y + 3)
+    end
 end
 
 local function getButtonBadgeRectForFooter(cardDefinition, x, y, width, height, padding, footerHeight, footerFont, methodEntries)
@@ -921,7 +930,7 @@ local function drawHealthFooter(x, y, width, height, padding, footerHeight, foot
             buttonBadgeX = buttonBadgeX + rfcBadgeWidth + badgeGap
         end
 
-        drawButtonBadge(buttonBadgeX, footerY + badgeInset, buttonBadgeWidth, badgeSize, alpha)
+        drawButtonBadge(buttonBadgeX, footerY + badgeInset, buttonBadgeWidth, badgeSize, alpha, card and card.buttonBadgeExhausted == true)
     end
 
     if #expandedResources > 0 then
@@ -1908,6 +1917,60 @@ function carddraw.getHoveredButtonBadge(setName, cardId, drawX, drawY, expansion
     }
 end
 
+function carddraw.getButtonBadgeRect(setName, cardId, drawX, drawY, expansionProgress, options)
+    local cardDefinition = getCardDefinition(setName, cardId)
+
+    if not cardDefinition or cardDefinition.btn ~= true then
+        return nil
+    end
+
+    local metrics = getCardMetrics(options)
+    local displayedHealth = metrics.currentHealth or cardDefinition.health
+
+    if displayedHealth == nil then
+        return nil
+    end
+
+    local clampedExpansion = clamp(expansionProgress or 0, 0, 1)
+    local renderWidth = snap(metrics.width)
+    local portraitHeight = snap(metrics.portraitHeight)
+    local labelHeight = snap(metrics.labelHeight)
+    local textboxHeight = snap(metrics.textboxHeight * clampedExpansion)
+    local footerHeight = snap(metrics.footerHeight)
+    local padding = snap(metrics.padding)
+    local footerFont = getCardFont(math.max(9, math.floor(14 * (renderWidth / CARD_WIDTH) * metrics.healthFontScale)))
+    local cardX = snap(drawX)
+    local cardY = snap(drawY)
+
+    if metrics.showHealthOnPortrait then
+        return getButtonBadgeRectForFooter(
+            cardDefinition,
+            cardX,
+            cardY,
+            renderWidth,
+            portraitHeight,
+            padding,
+            footerHeight,
+            footerFont,
+            getCardMethodEntries(cardDefinition, metrics.card)
+        )
+    elseif textboxHeight > footerHeight then
+        return getButtonBadgeRectForFooter(
+            cardDefinition,
+            cardX,
+            cardY + portraitHeight + labelHeight,
+            renderWidth,
+            textboxHeight,
+            padding,
+            footerHeight,
+            footerFont,
+            getCardMethodEntries(cardDefinition, metrics.card)
+        )
+    end
+
+    return nil
+end
+
 function carddraw.getCardTargetBadgeRect(drawX, drawY, options, placeAboveHealthBar)
     local metrics = getCardMetrics(options)
     local renderWidth = snap(metrics.width)
@@ -2177,11 +2240,25 @@ function carddraw.drawKeywordTooltip(keywordHover, mouseX, mouseY)
     local nameFont = getFont(CARD_FONT_PATH, KEYWORD_TOOLTIP_NAME_FONT_SIZE)
     local textFont = getFont(CARD_FONT_PATH, KEYWORD_TOOLTIP_TEXT_FONT_SIZE)
     local textWidth = KEYWORD_TOOLTIP_MAX_WIDTH - (KEYWORD_TOOLTIP_PADDING * 2)
+    local conditionFooter = nil
+
+    if keywordDefinition.negCond == true then
+        conditionFooter = "NEGATIVE CONDITION"
+    elseif keywordDefinition.posCond == true then
+        conditionFooter = "POSITIVE CONDITION"
+    end
+
     local _, wrappedTextLines = textFont:getWrap(keywordDefinition.text or "", textWidth)
     local nameHeight = nameFont:getHeight()
     local textHeight = #wrappedTextLines * textFont:getHeight()
+    local footerHeight = conditionFooter and textFont:getHeight() or 0
     local boxWidth = KEYWORD_TOOLTIP_MAX_WIDTH
-    local boxHeight = (KEYWORD_TOOLTIP_PADDING * 2) + nameHeight + 6 + textHeight
+    local boxHeight = (KEYWORD_TOOLTIP_PADDING * 2) + nameHeight + KEYWORD_TOOLTIP_GAP + textHeight
+
+    if conditionFooter then
+        boxHeight = boxHeight + KEYWORD_TOOLTIP_GAP + footerHeight
+    end
+
     local windowWidth, windowHeight = love.graphics.getDimensions()
     local boxX = snap(math.min(mouseX + KEYWORD_TOOLTIP_OFFSET_X, windowWidth - boxWidth - 8))
     local boxY = snap(math.min(mouseY + KEYWORD_TOOLTIP_OFFSET_Y, windowHeight - boxHeight - 8))
@@ -2200,10 +2277,27 @@ function carddraw.drawKeywordTooltip(keywordHover, mouseX, mouseY)
     love.graphics.printf(
         keywordDefinition.text or "",
         boxX + KEYWORD_TOOLTIP_PADDING,
-        boxY + KEYWORD_TOOLTIP_PADDING + nameHeight + 6,
+        boxY + KEYWORD_TOOLTIP_PADDING + nameHeight + KEYWORD_TOOLTIP_GAP,
         textWidth,
         "left"
     )
+
+    if conditionFooter then
+        love.graphics.setColor(
+            keywordDefinition.negCond == true and 1 or 0.56,
+            keywordDefinition.negCond == true and 0.38 or 0.95,
+            keywordDefinition.negCond == true and 0.32 or 0.68,
+            1
+        )
+        love.graphics.setFont(textFont)
+        love.graphics.printf(
+            conditionFooter,
+            boxX + KEYWORD_TOOLTIP_PADDING,
+            boxY + KEYWORD_TOOLTIP_PADDING + nameHeight + KEYWORD_TOOLTIP_GAP + textHeight + KEYWORD_TOOLTIP_GAP,
+            textWidth,
+            "left"
+        )
+    end
 
     love.graphics.setFont(previousFont)
     love.graphics.setColor(1, 1, 1, 1)

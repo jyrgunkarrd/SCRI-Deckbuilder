@@ -120,6 +120,7 @@ local keywords = {
             id = "KWWOUND",
             name = "Wound",
             text = "Before this card acts each turn it takes damage.",
+            negCond = true,
             hasvalue = 1,
         },
 
@@ -127,6 +128,7 @@ local keywords = {
             id = "KWREGEN",
             name = "Regeneration",
             text = "At the beginning of each turn this card heals.",
+            posCond = true,
             hasvalue = 1,
         },
 

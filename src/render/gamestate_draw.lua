@@ -11,6 +11,22 @@ local function easeOutCubic(t)
     return 1 - (invT * invT * invT)
 end
 
+local function getPositiveObjectivePreviewPips(objectiveDefinition, incomingProgress)
+    local currentPlan = math.max(0, tonumber(objectiveDefinition and objectiveDefinition.plan) or 0)
+    local maxPlan = tonumber(objectiveDefinition and objectiveDefinition.max)
+    local previewProgress = math.max(0, tonumber(incomingProgress) or 0)
+
+    if previewProgress <= 0 then
+        return 0
+    end
+
+    if maxPlan then
+        return math.max(0, math.min(maxPlan, currentPlan + previewProgress) - currentPlan)
+    end
+
+    return previewProgress
+end
+
 function gamestatedraw.draw(ctx)
     local currentPhase = ctx.turnrules.getCurrentPhase()
     local drawTopStripOnTop = ctx.expandedTopSlotId ~= nil
@@ -21,14 +37,38 @@ function gamestatedraw.draw(ctx)
         ctx.activeWarzone and ctx.activeWarzone.max or nil,
         ctx.isWarRollSourceActive
     )
-    local objectivePreviewPips = ctx.warrules.getObjectiveProgressPreview(
-        ctx.activePrimaryObjective and ctx.activePrimaryObjective.id or nil,
+    local objectiveId = ctx.activePrimaryObjective and ctx.activePrimaryObjective.id or nil
+    local rawObjectivePreviewPips = ctx.warrules.getObjectiveProgressPreview(
+        objectiveId,
         ctx.isWarRollSourceActive
     )
+    local objectivePreviewPips = rawObjectivePreviewPips
+    local objectiveProgressSourceCount = ctx.warrules.getObjectiveProgressPreviewSourceCount
+        and ctx.warrules.getObjectiveProgressPreviewSourceCount(objectiveId, ctx.isWarRollSourceActive)
+        or (rawObjectivePreviewPips > 0 and 1 or 0)
 
     if currentPhase == "Prelude" and ctx.getRetaliationPhaseObjectiveProgress then
-        objectivePreviewPips = objectivePreviewPips + math.max(0, tonumber(ctx.getRetaliationPhaseObjectiveProgress()) or 0)
+        local retaliationProgress = math.max(0, tonumber(ctx.getRetaliationPhaseObjectiveProgress()) or 0)
+        rawObjectivePreviewPips = rawObjectivePreviewPips + retaliationProgress
+
+        if retaliationProgress > 0 then
+            objectiveProgressSourceCount = objectiveProgressSourceCount + 1
+        end
+    elseif currentPhase == "End" and ctx.getEndPhaseObjectiveProgress then
+        local endPhaseProgress = math.max(0, tonumber(ctx.getEndPhaseObjectiveProgress()) or 0)
+        rawObjectivePreviewPips = rawObjectivePreviewPips + endPhaseProgress
+
+        if endPhaseProgress > 0 then
+            objectiveProgressSourceCount = objectiveProgressSourceCount + 1
+        end
     end
+
+    if rawObjectivePreviewPips > 0 and ctx.getHaywireHandObjectiveProgress then
+        local haywireHandProgress = math.max(0, tonumber(ctx.getHaywireHandObjectiveProgress()) or 0)
+        rawObjectivePreviewPips = rawObjectivePreviewPips + (haywireHandProgress * objectiveProgressSourceCount)
+    end
+
+    objectivePreviewPips = getPositiveObjectivePreviewPips(ctx.activePrimaryObjective, rawObjectivePreviewPips)
 
     local intelPreviewPips = ctx.warrules.getIntelProgressPreview(
         ctx.activeIntel and ctx.activeIntel.id or nil,
@@ -68,7 +108,7 @@ function gamestatedraw.draw(ctx)
     local poiHunterTransformationRenderStates = topSlotEffectRenderStates.poiHunterTransformations
 
     ctx.envdraw.drawPhaseTracker(currentPhase)
-    ctx.envdraw.drawResourceTracker(ctx.resourcerules.getResourceCounts())
+    ctx.envdraw.drawResourceTracker(ctx.resourcerules.getResourceCounts(), ctx.missionSystems)
     ctx.envdraw.drawGrid(currentPhase)
 
     if not drawTopStripOnTop then
@@ -502,6 +542,14 @@ function gamestatedraw.draw(ctx)
     end
 
     ctx.notifications.draw(ctx.pendingSelectionPrompt)
+
+    if ctx.drawHunterDeckDiscardAnimations then
+        ctx.drawHunterDeckDiscardAnimations()
+    end
+
+    if ctx.drawHaywireDeckAddAnimations then
+        ctx.drawHaywireDeckAddAnimations()
+    end
 end
 
 return gamestatedraw

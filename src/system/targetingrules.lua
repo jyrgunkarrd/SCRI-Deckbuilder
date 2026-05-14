@@ -187,6 +187,13 @@ local function isPendingChoiceTarget(cardIndex, context)
         or false
 end
 
+local function isPendingChoiceTopSlotTarget(slotId, context)
+    return context.pendingStrategySelection
+        and context.isPendingStrategyTopSlotTarget
+        and context.isPendingStrategyTopSlotTarget(slotId, context.pendingStrategySelection)
+        or false
+end
+
 local function isPrimedAbilityTarget(cardIndex, context)
     return context.primedActivatedAbility
         and context.isPrimedAbilityTarget
@@ -338,7 +345,7 @@ function targetingrules.shouldBracketTopSlot(slotId, context)
         return false
     end
 
-    if isPrimedAbilityTopSlotTarget(slotId, context) then
+    if isPendingChoiceTopSlotTarget(slotId, context) or isPrimedAbilityTopSlotTarget(slotId, context) then
         return true
     end
 
@@ -502,6 +509,10 @@ function targetingrules.getTopSlotBracketLayers(slotId, context)
     end
 
     if isPrimedAbilityTopSlotTarget(slotId, context) then
+        layers[#layers + 1] = "strategy"
+    end
+
+    if isPendingChoiceTopSlotTarget(slotId, context) then
         layers[#layers + 1] = "strategy"
     end
 

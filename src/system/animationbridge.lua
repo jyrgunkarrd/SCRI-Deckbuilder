@@ -5,12 +5,17 @@ local animationbridge = {}
 function animationbridge.getContext(c)
     local state = c.gameState
 
+    state.hunterDeckDiscardAnimations = state.hunterDeckDiscardAnimations or {}
+    state.haywireDeckAddAnimations = state.haywireDeckAddAnimations or {}
+
     return {
         cards = state.cards,
         playerDeck = state.playerDeck,
         kitReturnAnimations = state.kitReturnAnimations,
         pilotVehicleAnimations = state.pilotVehicleAnimations,
         hunterAutoPlayAnimations = state.hunterAutoPlayAnimations,
+        hunterDeckDiscardAnimations = state.hunterDeckDiscardAnimations,
+        haywireDeckAddAnimations = state.haywireDeckAddAnimations,
         mulliganActive = state.mulliganActive,
         mulliganResolving = state.mulliganResolving,
         mulliganPromptAlpha = state.mulliganPromptAlpha,
@@ -18,6 +23,7 @@ function animationbridge.getContext(c)
         mulliganCompleted = state.mulliganCompleted,
         cardregistry = c.cardregistry,
         envdraw = c.envdraw,
+        sfxrules = c.sfxrules,
         warrules = c.warrules,
         getCardDrawPosition = c.getCardDrawPosition,
         getPlayerHandLayout = c.getPlayerHandLayout,
@@ -30,6 +36,7 @@ function animationbridge.getContext(c)
         pilotVehicleAnimationDuration = c.pilotVehicleAnimationDuration,
         hunterAutoPlayAnimationDuration = c.hunterAutoPlayAnimationDuration,
         mulliganPromptFadeDuration = c.mulliganPromptFadeDuration,
+        destructionDuration = c.destructionDuration,
     }
 end
 
@@ -70,6 +77,14 @@ function animationbridge.beginHunterAutoPlayAnimation(c, card, sourceSlotIndex, 
     )
 end
 
+function animationbridge.beginHunterDeckDiscardAnimation(c, card)
+    return cardanimations.beginHunterDeckDiscardAnimation(animationbridge.getContext(c), card)
+end
+
+function animationbridge.beginHaywireDeckAddAnimation(c, card)
+    return cardanimations.beginHaywireDeckAddAnimation(animationbridge.getContext(c), card)
+end
+
 function animationbridge.updateKitReturnAnimations(c, dt)
     cardanimations.updateKitReturnAnimations(animationbridge.getContext(c), dt)
 end
@@ -80,6 +95,14 @@ end
 
 function animationbridge.updateHunterAutoPlayAnimations(c, dt)
     cardanimations.updateHunterAutoPlayAnimations(animationbridge.getContext(c), dt)
+end
+
+function animationbridge.updateHunterDeckDiscardAnimations(c, dt)
+    cardanimations.updateHunterDeckDiscardAnimations(animationbridge.getContext(c), dt)
+end
+
+function animationbridge.updateHaywireDeckAddAnimations(c, dt)
+    cardanimations.updateHaywireDeckAddAnimations(animationbridge.getContext(c), dt)
 end
 
 function animationbridge.updateMulliganAnimations(c, dt)
@@ -99,6 +122,14 @@ end
 
 function animationbridge.drawHunterAutoPlayAnimations(c)
     cardanimations.drawHunterAutoPlayAnimations(animationbridge.getContext(c))
+end
+
+function animationbridge.drawHunterDeckDiscardAnimations(c)
+    cardanimations.drawHunterDeckDiscardAnimations(animationbridge.getContext(c))
+end
+
+function animationbridge.drawHaywireDeckAddAnimations(c)
+    cardanimations.drawHaywireDeckAddAnimations(animationbridge.getContext(c))
 end
 
 return animationbridge

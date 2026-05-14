@@ -10,9 +10,6 @@ local hunter = {
         flavor = "\"I've got a new delivery schedule now.\"",
         health = 5,
         max = 5,
-        mcost = {
-            { resource = "The Scratch", amount = 2 },
-        },
         emphasis = 3,
         rfc = 3,
         D1 = "OBJ3",
@@ -33,9 +30,6 @@ local hunter = {
         flavor = "INTRUDER ALERT!\n\nINTRUDER ALERT!",
         health = 3,
         max = 3,
-        mcost = {
-            { resource = "The Scratch", amount = 2 },
-        },
         emphasis = 2,
         rfc = 3,
         D1 = "BDMG3",

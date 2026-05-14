@@ -8,7 +8,7 @@ local jacl = {
         {
             id = "JACL001",
             name = "JACL-S3D2-VALSHAMR",
-            deckId = "DCK001",
+            deckId = "Demo",
             tomeId = "BOOKVAL",
             startRes = {
                 { type = "fuel", amount = 8 },

@@ -396,6 +396,20 @@ local function completeEndPhase(gameState, deps)
     phasecontroller.enterCurrentPhase(gameState, deps)
 end
 
+local function resolveEndPhaseHaywire(gameState, deps)
+    if gameState.endPhaseHaywireHandled then
+        return false
+    end
+
+    gameState.endPhaseHaywireHandled = true
+
+    if not deps.haywirerules or not deps.haywirerules.resolveEndPhaseSystemBurn then
+        return false
+    end
+
+    return deps.haywirerules.resolveEndPhaseSystemBurn(deps)
+end
+
 local function shouldFizzleCardRetaliation(gameState, deps, retaliation)
     if not retaliation
         or not deps.warrules.canTargetEnemyCard(retaliation)
@@ -613,6 +627,7 @@ function phasecontroller.enterCurrentPhase(gameState, deps)
         gameState.endPhaseHandLimitDiscardHandled = false
         gameState.endPhaseDrawHandled = false
         gameState.endPhasePoiHandled = false
+        gameState.endPhaseHaywireHandled = false
     end
 
     if currentPhase == deps.turnrules.getSetupPhase() then
@@ -646,6 +661,7 @@ function phasecontroller.enterCurrentPhase(gameState, deps)
         for _, card in ipairs(gameState.cards or {}) do
             if card then
                 card.usedMethodAbilities = nil
+                card.buttonBadgeExhausted = nil
             end
         end
 
@@ -688,6 +704,7 @@ function phasecontroller.enterCurrentPhase(gameState, deps)
             end
         end
         resolveEndPhaseCaches(gameState, deps)
+        resolveEndPhaseHaywire(gameState, deps)
 
         if not gameState.endPhaseDrawHandled then
             gameState.endPhaseDrawHandled = true

@@ -1,5 +1,6 @@
 local cardinstances = require("src.system.cardinstances")
 local cardzones = require("src.system.cardzones")
+local crewrules = require("src.system.crewrules")
 
 local spawnrules = {}
 local DEFAULT_REINFORCEMENT_HUNTER_ID = "HNTINFFM"
@@ -121,6 +122,78 @@ local function findLowestRfcEnemyInRow(ctx, rowId)
     return lowestCardIndex, lowestCard, lowestDefinition
 end
 
+local function isGridRowColumnOccupiedForSpawn(ctx, rowId, column, ignoredCardIndex)
+    for cardIndex, card in ipairs(getCards(ctx) or {}) do
+        if cardIndex ~= ignoredCardIndex
+            and card
+            and card.location
+            and card.location.kind == "grid"
+            and not card.destroyed
+            and card.location.rowId == rowId
+            and card.location.column == column then
+            if rowId ~= "PlayerRow" or not crewrules.isCrewCard(card) then
+                return true
+            end
+        end
+    end
+
+    return false
+end
+
+local function getCrewCardIndexAt(ctx, rowId, column, ignoredCardIndex)
+    if rowId ~= "PlayerRow" then
+        return nil
+    end
+
+    for cardIndex, card in ipairs(getCards(ctx) or {}) do
+        if cardIndex ~= ignoredCardIndex
+            and card
+            and card.location
+            and card.location.kind == "grid"
+            and not card.destroyed
+            and not card.destroying
+            and card.location.rowId == rowId
+            and card.location.column == column
+            and crewrules.isCrewCard(card) then
+            return cardIndex
+        end
+    end
+
+    return nil
+end
+
+local function redirectCrewTargetsToCover(ctx, generatedCard, generatedCardIndex)
+    if not ctx
+        or not generatedCard
+        or not generatedCardIndex
+        or not generatedCard.location
+        or generatedCard.location.kind ~= "grid"
+        or generatedCard.location.rowId ~= "PlayerRow"
+        or not ctx.warrules
+        or not ctx.warrules.redirectIncomingAttacks then
+        return 0
+    end
+
+    local crewCardIndex = getCrewCardIndexAt(
+        ctx,
+        generatedCard.location.rowId,
+        generatedCard.location.column,
+        generatedCardIndex
+    )
+
+    if not crewCardIndex then
+        return 0
+    end
+
+    local redirectedCount = ctx.warrules.redirectIncomingAttacks(ctx.cards, crewCardIndex, generatedCardIndex)
+
+    if ctx.warrules.retargetIllegalEnemyAttacks then
+        return redirectedCount + ctx.warrules.retargetIllegalEnemyAttacks(ctx.cards)
+    end
+
+    return redirectedCount
+end
+
 local function isGridRowFull(ctx, rowId)
     local row = ctx and ctx.envdraw and rowId and ctx.envdraw.getGridRow(rowId) or nil
 
@@ -205,11 +278,15 @@ local function createGeneratedGridCard(ctx, cardDefinition, rowId, column)
         and ctx.turnrules.getCurrentWarSubphase() == "Engage" then
         local generatedCardIndex = #ctx.cards
 
+        redirectCrewTargetsToCover(ctx, generatedCard, generatedCardIndex)
+
         ctx.warrules.rerollEntity(
             ctx.warrules.getCardEntityKey(generatedCardIndex),
             cardDefinition,
             rowId == "OppRow"
         )
+    elseif generatedCard then
+        redirectCrewTargetsToCover(ctx, generatedCard, #ctx.cards)
     end
 
     return generatedCard
@@ -269,7 +346,7 @@ function spawnrules.getClosestOpenGridColumns(ctx, rowId, anchorColumn, ignoredC
     for _, cell in ipairs(row.cells or {}) do
         local column = cell.column
 
-        if column and not cardzones.isGridRowColumnOccupied(getCards(ctx), rowId, column, ignoredCardIndex) then
+        if column and not isGridRowColumnOccupiedForSpawn(ctx, rowId, column, ignoredCardIndex) then
             if preferredColumn and column == preferredColumn then
                 preferredIsOpen = true
             else

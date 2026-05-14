@@ -159,6 +159,40 @@ function boardquery.getCardMethodBadgeTarget(ctx, mouseX, mouseY)
     return nil
 end
 
+function boardquery.getCardButtonBadgeTarget(ctx, mouseX, mouseY)
+    local cardIndex = boardquery.getGridCardAt(ctx, mouseX, mouseY)
+    local card = cardIndex and ctx.state.cards[cardIndex] or nil
+
+    if not card
+        or not card.location
+        or card.location.kind ~= "grid"
+        or card.location.rowId ~= "PlayerRow" then
+        return nil
+    end
+
+    local drawX, drawY, expansionProgress, renderOptions = ctx.getCardDrawPosition(card, cardIndex)
+    local badgeRect = ctx.carddraw.getButtonBadgeRect(
+        card.setName,
+        card.cardId,
+        drawX,
+        drawY,
+        expansionProgress,
+        renderOptions
+    )
+
+    if badgeRect
+        and mouseX >= badgeRect.x
+        and mouseX <= badgeRect.x + badgeRect.width
+        and mouseY >= badgeRect.y
+        and mouseY <= badgeRect.y + badgeRect.height then
+        return {
+            cardIndex = cardIndex,
+        }
+    end
+
+    return nil
+end
+
 function boardquery.getHoveredPlayerRollBadgeCardIndex(mouseX, mouseY, engageContext)
     return engagerules.getHoveredPlayerRollBadgeCardIndex(mouseX, mouseY, engageContext)
 end

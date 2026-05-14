@@ -174,7 +174,7 @@ function syntacrules.isBlockTarget(card, ctx)
     local cardDefinition = ctx.cardregistry.getCard(card.setName, card.cardId)
     local cardType = cardDefinition and cardDefinition.type or nil
 
-    return cardType == "troop" or cardType == "agent" or cardType == "token"
+    return cardType == "troop" or cardType == "agent" or cardType == "token" or cardType == "crew"
 end
 
 function syntacrules.tryResolvePrimedAbility(cardIndex, topSlotId, ctx)

@@ -562,3 +562,9 @@ The Red Dot Gang:
     Tactician
     Engineer        
  - Need system integrity
+
+ - Need definitions files for the Munitions and Tithes systems
+ - Need to add the UI for these systems to the MissionStage
+
+
+ - I'm thinking about how FTL handles Scrap, Drone, Fuel and Missile rewards - where basically the player is guaranteed a large lump of scrap for defeating an enemy, but almost all fights can proc a surrender option where some amount of scrap is given up in favor of other rewards, and the player has to decide what ratio is worth it. 

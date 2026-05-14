@@ -102,6 +102,7 @@ function targetoverlays.drawTopSlotBrackets(slots, context)
             not context.hoveredCardIndex
             and not context.hoveredTopSlotId
             and not context.selectedAttackerCardIndex
+            and not context.pendingStrategySelection
             and not context.primedActivatedAbility
         ) then
         return

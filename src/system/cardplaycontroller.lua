@@ -96,6 +96,100 @@ local function beginPendingStrategySelection(ctx, pendingSelection)
     return true
 end
 
+local function isValidCrewButtonHealTarget(cardIndex, pendingSelection, ctx)
+    local card = cardIndex and ctx.state.cards[cardIndex] or nil
+
+    if not pendingSelection
+        or pendingSelection.kind ~= "crew_button_heal"
+        or not card
+        or not card.location
+        or card.location.kind ~= "grid"
+        or card.location.rowId ~= "PlayerRow"
+        or card.destroyed
+        or card.destroying
+        or (ctx.isCardUnavailable and ctx.isCardUnavailable(card)) then
+        return false
+    end
+
+    local currentHealth = tonumber(card.currentHealth)
+    local maxHealth = tonumber(card.maxHealth)
+
+    return currentHealth ~= nil and maxHealth ~= nil and maxHealth > 0
+end
+
+local function cardHasHealthBar(ctx, card)
+    if not card then
+        return false
+    end
+
+    if card.currentHealth ~= nil or card.maxHealth ~= nil then
+        return true
+    end
+
+    local cardDefinition = ctx.cardregistry and ctx.cardregistry.getCard(card.setName, card.cardId) or nil
+    return cardDefinition and cardDefinition.health ~= nil or false
+end
+
+local function isValidCrewButtonBlockTarget(cardIndex, pendingSelection, ctx)
+    local card = cardIndex and ctx.state.cards[cardIndex] or nil
+
+    return pendingSelection
+        and pendingSelection.kind == "crew_button_block_2"
+        and card
+        and card.location
+        and card.location.kind == "grid"
+        and card.location.rowId == "PlayerRow"
+        and not card.destroyed
+        and not card.destroying
+        and not (ctx.isCardUnavailable and ctx.isCardUnavailable(card))
+        and cardHasHealthBar(ctx, card)
+        or false
+end
+
+local function getCardCurrentHealth(ctx, card)
+    if not card then
+        return nil
+    end
+
+    if card.currentHealth == nil then
+        local cardDefinition = ctx.cardregistry and ctx.cardregistry.getCard(card.setName, card.cardId) or nil
+        card.currentHealth = tonumber(cardDefinition and cardDefinition.health)
+        card.maxHealth = tonumber(cardDefinition and (cardDefinition.max or cardDefinition.health))
+    end
+
+    return tonumber(card.currentHealth)
+end
+
+local function isValidCrewButtonDefeatTarget(cardIndex, pendingSelection, ctx)
+    local card = cardIndex and ctx.state.cards[cardIndex] or nil
+
+    if not pendingSelection
+        or pendingSelection.kind ~= "crew_button_defeat_2"
+        or not card
+        or not card.location
+        or card.location.kind ~= "grid"
+        or card.location.rowId ~= "OppRow"
+        or card.destroyed
+        or card.destroying
+        or (ctx.isCardUnavailable and ctx.isCardUnavailable(card)) then
+        return false
+    end
+
+    return getCardCurrentHealth(ctx, card) == 2
+end
+
+local function isValidCrewButtonDefeatTopSlotTarget(topSlotId, pendingSelection, ctx)
+    local champion = ctx.state and ctx.state.activeChampion or nil
+
+    return pendingSelection
+        and pendingSelection.kind == "crew_button_defeat_2"
+        and topSlotId == "champion"
+        and champion
+        and champion.hidden ~= true
+        and tonumber(champion.health) == 2
+        or false
+end
+
 function cardplaycontroller.tryPlayStrategyCard(strategyCardIndex, targetCardIndex, ctx)
     return ctx.strategyrules.playStrategy(strategyCardIndex, targetCardIndex, {
         cards = ctx.state.cards,
@@ -131,13 +225,14 @@ function cardplaycontroller.getPendingSelection(state)
     return state.pendingStrategySelection
         or state.pendingSacrificeSelection
         or state.pendingHandLimitDiscardSelection
+        or state.pendingButtonSelection
 end
 
 function cardplaycontroller.hasPendingStrategySelection(state)
     return cardplaycontroller.getPendingSelection(state) ~= nil
 end
 
-function cardplaycontroller.tryResolvePendingStrategySelection(cardIndex, ctx)
+function cardplaycontroller.tryResolvePendingStrategySelection(cardIndex, ctx, topSlotId)
     local state = ctx.state
     local pendingSelection = cardplaycontroller.getPendingSelection(state)
 
@@ -184,6 +279,67 @@ function cardplaycontroller.tryResolvePendingStrategySelection(cardIndex, ctx)
         return false
     end
 
+    if pendingSelection.kind == "crew_button_heal" then
+        if not isValidCrewButtonHealTarget(cardIndex, pendingSelection, ctx) then
+            return false
+        end
+
+        local card = state.cards[cardIndex]
+        local currentHealth = math.max(0, tonumber(card.currentHealth) or 0)
+        local maxHealth = math.max(currentHealth, tonumber(card.maxHealth) or 0)
+
+        if ctx.healCard then
+            ctx.healCard(card, maxHealth - currentHealth)
+        else
+            card.currentHealth = maxHealth
+        end
+
+        if ctx.keywordrules and ctx.keywordrules.removeNegativeConditionKeywords then
+            local cardDefinition = ctx.cardregistry and ctx.cardregistry.getCard(card.setName, card.cardId) or nil
+            ctx.keywordrules.removeNegativeConditionKeywords(card, cardDefinition)
+        end
+
+        state.pendingButtonSelection = nil
+        return true
+    end
+
+    if pendingSelection.kind == "crew_button_block_2" then
+        if not isValidCrewButtonBlockTarget(cardIndex, pendingSelection, ctx) then
+            return false
+        end
+
+        if ctx.addBlockingToCard then
+            ctx.addBlockingToCard(state.cards[cardIndex], 2)
+        end
+
+        state.pendingButtonSelection = nil
+        return true
+    end
+
+    if pendingSelection.kind == "crew_button_defeat_2" then
+        if isValidCrewButtonDefeatTopSlotTarget(topSlotId, pendingSelection, ctx) then
+            if ctx.dealDamageToChampion then
+                ctx.dealDamageToChampion(math.max(0, tonumber(state.activeChampion.health) or 0))
+            end
+
+            state.pendingButtonSelection = nil
+            return true
+        end
+
+        if not isValidCrewButtonDefeatTarget(cardIndex, pendingSelection, ctx) then
+            return false
+        end
+
+        if ctx.startCardDestruction then
+            ctx.startCardDestruction(cardIndex)
+        elseif ctx.dealDamageToCard then
+            ctx.dealDamageToCard(state.cards[cardIndex], math.max(0, tonumber(state.cards[cardIndex].currentHealth) or 0))
+        end
+
+        state.pendingButtonSelection = nil
+        return true
+    end
+
     local resolved = ctx.strategyrules.resolvePendingSelection(cardIndex, pendingSelection, {
         cards = state.cards,
         cardregistry = ctx.cardregistry,
@@ -202,6 +358,30 @@ function cardplaycontroller.tryResolvePendingStrategySelection(cardIndex, ctx)
 end
 
 function cardplaycontroller.cancelPendingStrategySelection(ctx)
+    if ctx.state.pendingButtonSelection then
+        local pendingSelection = ctx.state.pendingButtonSelection
+
+        if pendingSelection.burnedSystemIndex
+            and ctx.systemrules
+            and ctx.state.missionSystems then
+            ctx.systemrules.restoreSystem(ctx.state.missionSystems, pendingSelection.burnedSystemIndex)
+        end
+
+        local sourceCard = pendingSelection.sourceCardIndex and ctx.state.cards[pendingSelection.sourceCardIndex] or nil
+
+        if sourceCard then
+            sourceCard.buttonBadgeExhausted = nil
+        end
+
+        ctx.state.pendingButtonSelection = nil
+
+        if ctx.notifications then
+            ctx.notifications.push("Ability cancelled")
+        end
+
+        return true
+    end
+
     if not ctx.state.pendingStrategySelection then
         return false
     end
@@ -209,6 +389,30 @@ function cardplaycontroller.cancelPendingStrategySelection(ctx)
     ctx.state.pendingStrategySelection = nil
     ctx.notifications.push("Strategy fizzled")
     return true
+end
+
+function cardplaycontroller.isPendingSelectionTarget(cardIndex, pendingSelection, ctx)
+    if pendingSelection and pendingSelection.kind == "crew_button_heal" then
+        return isValidCrewButtonHealTarget(cardIndex, pendingSelection, ctx)
+    end
+
+    if pendingSelection and pendingSelection.kind == "crew_button_block_2" then
+        return isValidCrewButtonBlockTarget(cardIndex, pendingSelection, ctx)
+    end
+
+    if pendingSelection and pendingSelection.kind == "crew_button_defeat_2" then
+        return isValidCrewButtonDefeatTarget(cardIndex, pendingSelection, ctx)
+    end
+
+    return nil
+end
+
+function cardplaycontroller.isPendingSelectionTopSlotTarget(topSlotId, pendingSelection, ctx)
+    if pendingSelection and pendingSelection.kind == "crew_button_defeat_2" then
+        return isValidCrewButtonDefeatTopSlotTarget(topSlotId, pendingSelection, ctx)
+    end
+
+    return nil
 end
 
 function cardplaycontroller.resolvePlayedTroopCard(troopCardIndex, ctx)

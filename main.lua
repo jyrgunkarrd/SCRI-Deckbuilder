@@ -11,6 +11,7 @@ abilityrules = appmodules.abilityrules
 animationbridge = appmodules.animationbridge
 appconfig = appmodules.appconfig
 boardquery = appmodules.boardquery
+buttonrules = appmodules.buttonrules
 cardinstances = appmodules.cardinstances
 cardlifecycle = appmodules.cardlifecycle
 cardplaycontroller = appmodules.cardplaycontroller
@@ -27,6 +28,7 @@ envrules = appmodules.envrules
 gameactions = appmodules.gameactions
 gamestate = appmodules.gamestate
 gamestates = appmodules.gamestates
+haywirerules = appmodules.haywirerules
 huntercontroller = appmodules.huntercontroller
 infiltrationrules = appmodules.infiltrationrules
 jaclrules = appmodules.jaclrules
@@ -40,6 +42,7 @@ previewrules = appmodules.previewrules
 resourcerules = appmodules.resourcerules
 spawnbridge = appmodules.spawnbridge
 strategyrules = appmodules.strategyrules
+systemrules = appmodules.systemrules
 syntacrules = appmodules.syntacrules
 temporaryeffects = appmodules.temporaryeffects
 tomerules = appmodules.tomerules
@@ -345,6 +348,7 @@ animationbridgeState = {
     gameState = gameState,
     cardregistry = cardregistry,
     envdraw = envdraw,
+    sfxrules = sfxrules,
     warrules = warrules,
     getCardDrawPosition = function(card, cardIndex)
         return getCardDrawPosition(card, cardIndex)
@@ -359,6 +363,7 @@ animationbridgeState = {
     pilotVehicleAnimationDuration = appconfig.PILOT_VEHICLE_ANIMATION_DURATION,
     hunterAutoPlayAnimationDuration = appconfig.HUNTER_AUTO_PLAY_ANIMATION_DURATION,
     mulliganPromptFadeDuration = appconfig.MULLIGAN_PROMPT_FADE_DURATION,
+    destructionDuration = appconfig.DESTRUCTION_DURATION,
 }
 
 spawnbridgeState = {
@@ -572,6 +577,14 @@ beginHunterAutoPlayAnimation = function(card, sourceSlotIndex, rowId, column)
     return animationbridge.beginHunterAutoPlayAnimation(animationbridgeState, card, sourceSlotIndex, rowId, column)
 end
 
+beginHunterDeckDiscardAnimation = function(card)
+    return animationbridge.beginHunterDeckDiscardAnimation(animationbridgeState, card)
+end
+
+beginHaywireDeckAddAnimation = function(card)
+    return animationbridge.beginHaywireDeckAddAnimation(animationbridgeState, card)
+end
+
 updateKitReturnAnimations = function(dt)
     animationbridge.updateKitReturnAnimations(animationbridgeState, dt)
 end
@@ -588,6 +601,14 @@ updateHunterAutoPlayAnimations = function(dt)
     animationbridge.updateHunterAutoPlayAnimations(animationbridgeState, dt)
 end
 
+updateHunterDeckDiscardAnimations = function(dt)
+    animationbridge.updateHunterDeckDiscardAnimations(animationbridgeState, dt)
+end
+
+updateHaywireDeckAddAnimations = function(dt)
+    animationbridge.updateHaywireDeckAddAnimations(animationbridgeState, dt)
+end
+
 updateMulliganAnimations = function(dt)
     animationbridge.updateMulliganAnimations(animationbridgeState, dt)
 end
@@ -598,6 +619,14 @@ end
 
 drawHunterAutoPlayAnimations = function()
     animationbridge.drawHunterAutoPlayAnimations(animationbridgeState)
+end
+
+drawHunterDeckDiscardAnimations = function()
+    animationbridge.drawHunterDeckDiscardAnimations(animationbridgeState)
+end
+
+drawHaywireDeckAddAnimations = function()
+    animationbridge.drawHaywireDeckAddAnimations(animationbridgeState)
 end
 
 releaseAttachedKits = function(card)
@@ -659,6 +688,13 @@ end
 
 local function getRetaliationPhaseObjectiveProgress()
     return huntercontroller.getRetaliationPhaseObjectiveProgress(getHunterControllerContext())
+end
+
+local function getHaywireHandObjectiveProgress()
+    return haywirerules.getHandEmphasis({
+        state = gameState,
+        cardregistry = cardregistry,
+    })
 end
 
 initializeCardHealthState = function(card)
@@ -809,8 +845,8 @@ local function hasPendingStrategySelection()
     return cardplaycontroller.hasPendingStrategySelection(gameState)
 end
 
-local function tryResolvePendingStrategySelection(cardIndex)
-    return cardplaycontroller.tryResolvePendingStrategySelection(cardIndex, getCardPlayControllerContext())
+local function tryResolvePendingStrategySelection(cardIndex, topSlotId)
+    return cardplaycontroller.tryResolvePendingStrategySelection(cardIndex, getCardPlayControllerContext(), topSlotId)
 end
 
 local function cancelPendingStrategySelection()
@@ -918,6 +954,10 @@ local function getCardMethodBadgeTarget(mouseX, mouseY)
     return boardquery.getCardMethodBadgeTarget(getBoardQueryContext(), mouseX, mouseY)
 end
 
+local function getCardButtonBadgeTarget(mouseX, mouseY)
+    return boardquery.getCardButtonBadgeTarget(getBoardQueryContext(), mouseX, mouseY)
+end
+
 isWarRollSourceActive = function(entityKey)
     if entityKey == "champion" then
         return gameState.activeChampion and not gameState.activeChampion.hidden and not topsloteffects.isChampionDestructionActive()
@@ -1022,6 +1062,26 @@ primeCardMethodAbility = function(cardIndex, resourceName)
     return uibridge.primeCardMethodAbility(uibridgeState, cardIndex, resourceName)
 end
 
+local function getButtonRulesContext()
+    return {
+        state = gameState,
+        cards = gameState.cards,
+        cardregistry = cardregistry,
+        buttonrules = buttonrules,
+        systemrules = systemrules,
+        turnrules = turnrules,
+        notifications = notifications,
+        deckrules = deckrules,
+        beginHunterDeckDiscardAnimation = beginHunterDeckDiscardAnimation,
+        drawCardFromPlayerDeck = drawCardFromPlayerDeck,
+        isCardUnavailable = isCardUnavailable,
+    }
+end
+
+local function tryUseCardButtonBadge(cardIndex)
+    return buttonrules.useButton(cardIndex, getButtonRulesContext())
+end
+
 tryUseEngageReroll = function(mouseX, mouseY)
     return uibridge.tryUseEngageReroll(uibridgeState, mouseX, mouseY)
 end
@@ -1090,6 +1150,7 @@ contextassemblyState = {
         deckrules = deckrules,
         envdraw = envdraw,
         envrules = envrules,
+        haywirerules = haywirerules,
         keywordrules = keywordrules,
         previewrules = previewrules,
         kitrules = kitrules,
@@ -1100,6 +1161,7 @@ contextassemblyState = {
         resourcerules = resourcerules,
         sfxrules = sfxrules,
         strategyrules = strategyrules,
+        systemrules = systemrules,
         temporaryeffects = temporaryeffects,
         tomerules = tomerules,
         topsloteffects = topsloteffects,
@@ -1117,6 +1179,7 @@ contextassemblyState = {
         addWarzoneControl = addWarzoneControl,
         applyModalState = applyModalState,
         beginEndPhaseSacrificeSelection = beginEndPhaseSacrificeSelection,
+        beginHaywireDeckAddAnimation = beginHaywireDeckAddAnimation,
         beginInfiltrationEffect = beginInfiltrationEffect,
         beginKitReturnAnimation = beginKitReturnAnimation,
         beginObjectiveEscalation = beginObjectiveEscalation,
@@ -1149,6 +1212,8 @@ contextassemblyState = {
         drawCardFromPlayerDeck = drawCardFromPlayerDeck,
         drawKitReturnAnimations = drawKitReturnAnimations,
         drawHunterAutoPlayAnimations = drawHunterAutoPlayAnimations,
+        drawHunterDeckDiscardAnimations = drawHunterDeckDiscardAnimations,
+        drawHaywireDeckAddAnimations = drawHaywireDeckAddAnimations,
         enterCurrentPhase = enterCurrentPhase,
         expireCardFromPlay = expireCardFromPlay,
         healCard = healCard,
@@ -1172,12 +1237,14 @@ contextassemblyState = {
         transformCardAtIndex = transformCardAtIndex,
         updateInfiltrationEffect = updateInfiltrationEffect,
         getCardDrawPosition = getCardDrawPosition,
+        getCardButtonBadgeTarget = getCardButtonBadgeTarget,
         getCardMethodBadgeTarget = getCardMethodBadgeTarget,
         getChampionPlayContext = getChampionPlayContext,
         getCardPresentationContext = getCardPresentationContext,
         getDamageJitterKeyForCard = getDamageJitterKeyForCard,
         getDamageJitterOffset = getDamageJitterOffset,
         getEndPhaseObjectiveProgress = getEndPhaseObjectiveProgress,
+        getHaywireHandObjectiveProgress = getHaywireHandObjectiveProgress,
         getEntitySourceRect = getEntitySourceRect,
         getGridCardAt = getGridCardAt,
         getHoveredPlayerRollBadgeCardIndex = getHoveredPlayerRollBadgeCardIndex,
@@ -1230,6 +1297,7 @@ contextassemblyState = {
         tryResolveEngageClick = tryResolveEngageClick,
         tryResolvePendingStrategySelection = tryResolvePendingStrategySelection,
         tryResolvePrimedSyntacAbility = tryResolvePrimedSyntacAbility,
+        tryUseCardButtonBadge = tryUseCardButtonBadge,
         tryUseEngageReroll = tryUseEngageReroll,
         tryUseSyntacRewardButton = tryUseSyntacRewardButton,
         tryUseTomeCard = tryUseTomeCard,
@@ -1654,6 +1722,8 @@ function love.update(dt)
     updateKitReturnAnimations(dt)
     updatePilotVehicleAnimations(dt)
     updateHunterAutoPlayAnimations(dt)
+    updateHunterDeckDiscardAnimations(dt)
+    updateHaywireDeckAddAnimations(dt)
     updateMulliganAnimations(dt)
 
     cardlifecycle.updateDestroyedCards(getCardLifecycleContext(), dt)
@@ -1817,6 +1887,7 @@ function drawMissionStage()
         activePoi = gameState.activePoi,
         activePrimaryObjective = gameState.activePrimaryObjective,
         activeIntel = gameState.activeIntel,
+        missionSystems = gameState.missionSystems,
         expandedTopSlotId = gameState.expandedTopSlotId,
         topSlotExpansion = gameState.topSlotExpansion,
         playerJacl = gameState.playerJacl,
@@ -1824,6 +1895,8 @@ function drawMissionStage()
         syntacCount = gameState.syntacCount,
         syntacRewardButtons = gameState.syntacRewardButtons,
         getRetaliationPhaseObjectiveProgress = getRetaliationPhaseObjectiveProgress,
+        getEndPhaseObjectiveProgress = getEndPhaseObjectiveProgress,
+        getHaywireHandObjectiveProgress = getHaywireHandObjectiveProgress,
         cards = gameState.cards,
         hoveredCardIndex = gameState.hoveredCardIndex,
         draggedCardIndex = gameState.draggedCardIndex,
@@ -1835,6 +1908,10 @@ function drawMissionStage()
             or (
                 gameState.pendingHandLimitDiscardSelection
                 and (gameState.pendingHandLimitDiscardSelection.prompt or "Hand limit exceeded. Choose one card in hand to discard.")
+            )
+            or (
+                gameState.pendingButtonSelection
+                and (gameState.pendingButtonSelection.prompt or "Choose a target")
             )
             or nil,
         hoverPreview = getHoverPreviewState(),
@@ -1884,6 +1961,8 @@ function drawMissionStage()
         drawInfiltrationEffect = drawInfiltrationEffect,
         drawKitReturnAnimations = drawKitReturnAnimations,
         drawHunterAutoPlayAnimations = drawHunterAutoPlayAnimations,
+        drawHunterDeckDiscardAnimations = drawHunterDeckDiscardAnimations,
+        drawHaywireDeckAddAnimations = drawHaywireDeckAddAnimations,
         drawPilotVehicleAnimations = drawPilotVehicleAnimations,
     })
 end

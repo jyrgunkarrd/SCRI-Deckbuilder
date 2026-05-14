@@ -17,6 +17,11 @@ end
 
 function temporaryeffects.addCardKeyword(card, keywordId, keywordValue)
     if not card then return end
+
+    if card.removedKeywords then
+        card.removedKeywords[keywordId] = nil
+    end
+
     card.tempKeywords = card.tempKeywords or {}
     card.tempKeywords[keywordId] = (tonumber(card.tempKeywords[keywordId]) or 0) + 1
 
