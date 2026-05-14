@@ -6,6 +6,7 @@ local nodeencounters = require("data.nodeencounters")
 local champions = require("data.champions")
 local stdpkg = require("data.stdpkg")
 local modularpkg = require("data.modularpkg")
+local decks = require("data.decks")
 local warzones = require("data.warzones")
 
 local nodeDefinitionsById = nil
@@ -31,12 +32,14 @@ local ENCOUNTER_CATEGORY_ORDER = {
         sourceLabel = "Standard Package",
         sourceKind = "stdpkg",
         definitions = stdpkg,
+        fallbackDefinitions = decks,
     },
     {
         field = "modularPackages",
         sourceLabel = "Modular Package",
         sourceKind = "modularpkg",
         definitions = modularpkg,
+        fallbackDefinitions = decks,
     },
 }
 
@@ -95,24 +98,51 @@ local function getDefinitionIndex(category)
         end
     end
 
+    for _, definition in ipairs(category.fallbackDefinitions or {}) do
+        if definition.id
+            and definitionsById[definition.id] == nil
+            and (not category.definitionType or definition.type == category.definitionType) then
+            definitionsById[definition.id] = definition
+        end
+    end
+
     definitionIndexes[key] = definitionsById
     return definitionsById
 end
 
-local function addPoolCategoryEntries(entries, poolDefinition, category)
+local function getRandomIndex(count)
+    if count <= 0 then
+        return nil
+    end
+
+    if love and love.math and love.math.random then
+        return love.math.random(count)
+    end
+
+    return math.random(count)
+end
+
+local function addRandomPoolCategoryEntry(entries, poolDefinition, category)
     local definitionsById = getDefinitionIndex(category)
+    local choices = {}
 
     for _, definitionId in ipairs(poolDefinition[category.field] or {}) do
         local definition = definitionsById[definitionId]
 
         if definition then
-            entries[#entries + 1] = {
+            choices[#choices + 1] = {
                 poolId = poolDefinition.id,
                 sourceLabel = category.sourceLabel,
                 sourceKind = category.sourceKind,
                 definition = definition,
             }
         end
+    end
+
+    local choiceIndex = getRandomIndex(#choices)
+
+    if choiceIndex then
+        entries[#entries + 1] = choices[choiceIndex]
     end
 end
 
@@ -161,7 +191,7 @@ function worldmaprules.getEncounterPoolEntries(poolId)
     end
 
     for _, category in ipairs(ENCOUNTER_CATEGORY_ORDER) do
-        addPoolCategoryEntries(poolEntries, poolDefinition, category)
+        addRandomPoolCategoryEntry(poolEntries, poolDefinition, category)
     end
 
     return poolEntries

@@ -2,6 +2,7 @@ local warrules = {}
 local carddraw = require("src.render.carddraw")
 local cardregistry = require("src.system.cardregistry")
 local cardinstances = require("src.system.cardinstances")
+local crewrules = require("src.system.crewrules")
 local keywordrules = require("src.system.keywordrules")
 local sfxrules = require("src.audio.sfxrules")
 
@@ -88,20 +89,7 @@ local function getCardIndexFromEntityKey(entityKey)
 end
 
 local function findGridCardIndexAt(cards, rowId, column, ignoredCardIndex)
-    for cardIndex, card in ipairs(cards or {}) do
-        if cardIndex ~= ignoredCardIndex
-            and card
-            and not card.destroyed
-            and not card.destroying
-            and card.location
-            and card.location.kind == "grid"
-            and card.location.rowId == rowId
-            and card.location.column == column then
-            return cardIndex
-        end
-    end
-
-    return nil
+    return crewrules.getTopCardIndexAt(cards, rowId, column, ignoredCardIndex)
 end
 
 local function isHeavyComparableTarget(definition)
@@ -117,13 +105,14 @@ end
 local function getHighestCurrentHeavyTargetHealthInRow(cards, rowId)
     local highestHealth = nil
 
-    for _, card in ipairs(cards or {}) do
+    for cardIndex, card in ipairs(cards or {}) do
         if card
             and card.location
             and card.location.kind == "grid"
             and card.location.rowId == rowId
             and not card.destroyed
-            and not card.destroying then
+            and not card.destroying
+            and not crewrules.isCrewCovered(cards, cardIndex) then
             local definition = cardregistry.getCard(card.setName, card.cardId)
 
             if isHeavyComparableTarget(definition) then
@@ -1483,8 +1472,7 @@ function warrules.getIncomingBlockPreview(cardIndex, isSourceActive)
                 incomingBlock = incomingBlock + (rollState.damageValue or 0)
             elseif rollState.selfBlock == true
                 and entityKey == cardKey
-                and canTargetEnemyCard(rollState)
-                and rollState.targetCardIndex then
+                and rollStateHasResolvableRetaliation(rollState) then
                 incomingBlock = incomingBlock + (rollState.damageValue or 0)
             end
         end
@@ -1821,7 +1809,8 @@ function warrules.beginPhase(topSlotTargets, cards, primaryObjectiveDefinition, 
                 and card.location.kind == "grid"
                 and card.location.rowId == rowId
                 and not card.destroyed
-                and not card.destroying then
+                and not card.destroying
+                and not crewrules.isCrewCovered(cards, cardIndex) then
                 local definition = cardregistry.getCard(card.setName, card.cardId)
 
                 if definition then

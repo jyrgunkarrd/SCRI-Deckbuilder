@@ -41,6 +41,7 @@ function cardinstances.initializeHealth(card)
 
     card.maxHealth = card.maxHealth or cardDefinition.max or cardDefinition.health
     card.currentHealth = card.currentHealth or cardDefinition.health
+    keywordrules.syncPassiveGrowthHealth(card, cardDefinition)
 end
 
 function cardinstances.initializeAllHealth(cardList)

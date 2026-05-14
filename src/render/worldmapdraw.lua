@@ -18,12 +18,14 @@ local CHAMP_IMAGE_DIRECTORY = "assets/images/champ/"
 local STDPKG_IMAGE_DIRECTORY = "assets/images/stdpkg/"
 local MODULARPKG_IMAGE_DIRECTORY = "assets/images/modularpkg/"
 local WARZONE_IMAGE_DIRECTORY = "assets/images/warzone/"
+local CREW_IMAGE_DIRECTORY = "assets/images/crew/"
 
 local jaclImageCache = {}
 local nodePreviewIconCache = {}
 local encounterPreviewImageCache = {}
 local objectivePreviewImageCache = {}
 local warzonePreviewImageCache = {}
+local crewImageCache = {}
 local fontCache = {}
 local PLAYER_POSITION_COLOR = { 0.1, 1, 0.94, 1 }
 local PLAYER_POSITION_PULSE_SPEED = 4.5
@@ -66,8 +68,62 @@ local OBJECTIVE_CARD_PREVIEW_PLAN_COLOR = { 1, 0.72, 0.18, 1 }
 local OBJECTIVE_CARD_PREVIEW_INTEL_COLOR = { 0.3, 0.72, 1, 1 }
 local OBJECTIVE_CARD_PREVIEW_WARZONE_COLOR = { 0.75, 0.86, 0.42, 1 }
 local OBJECTIVE_CARD_PREVIEW_HOSTILE_INFLUENCE_COLOR = { 0.906, 0.102, 0.176, 1 }
+local WORLD_RESOURCE_TRACKER_OUTLINE_COLOR = { 0.549, 1, 0.871, 1 }
+local WORLD_RESOURCE_TRACKER_FILL_COLOR = { 0.025, 0.032, 0.04, 0.88 }
+local WORLD_RESOURCE_TRACKER_TEXT_COLOR = { 0.9, 0.98, 0.96, 1 }
+local WORLD_RESOURCE_TRACKER_LABEL_COLOR = { 0.58, 0.74, 0.72, 1 }
+local WORLD_ALMS_TRACKER_COLOR = { 0.976, 0.761, 0.169, 1 }
+local WORLD_ROLE_PORTRAIT_LABEL_COLOR = { 1, 0.725, 0.337, 1 }
+local WORLD_ROLE_PORTRAIT_OUTLINE_COLOR = { 1, 0.725, 0.337, 1 }
+local WORLD_ROLE_PORTRAIT_FILL_COLOR = { 0.075, 0.082, 0.095, 0.92 }
+local WORLD_SYSTEMS_LABEL_COLOR = { 0.549, 1, 0.871, 1 }
+local WORLD_SYSTEMS_OUTLINE_COLOR = { 0.549, 1, 0.871, 1 }
+local WORLD_SYSTEMS_BOX_FILL_COLOR = { 0.075, 0.082, 0.095, 0.92 }
+local NODE_LOADING_FLASH_INTERVAL = 0.06
+local WORLD_ROLE_PORTRAITS = {
+    {
+        label = "Captain",
+        image = "captain.png",
+    },
+    {
+        label = "Surgeon",
+        image = "surgeon.png",
+    },
+    {
+        label = "Sheriff",
+        image = "sheriff.png",
+    },
+    {
+        label = "Tactician",
+        image = "tactician.png",
+    },
+    {
+        label = "Engineer",
+        image = "engineer.png",
+    },
+}
+local WORLD_RESOURCE_TRACKERS = {
+    {
+        key = "fuel",
+        label = "FUEL",
+        icon = "fuel.png",
+    },
+    {
+        key = "munitions",
+        label = "MUNITIONS",
+        icon = "munitions.png",
+    },
+    {
+        key = "tithes",
+        label = "TITHES",
+        icon = "tithes.png",
+    },
+}
 
 local drawDiceSummonPreviewLeft
+local getSelectedRunLoadoutLayout
+local getWorldResourceTrackerLayout
+local isLoadingWorldMapNode
 
 local function getFont(size)
     local key = tostring(size)
@@ -78,6 +134,61 @@ local function getFont(size)
 
     fontCache[key] = love.graphics.newFont(CARD_FONT_PATH, size)
     return fontCache[key]
+end
+
+local function getMapImage(fileName)
+    if not fileName then
+        return nil
+    end
+
+    if nodePreviewIconCache[fileName] ~= nil then
+        return nodePreviewIconCache[fileName] or nil
+    end
+
+    local imagePath = MAP_IMAGE_DIRECTORY .. fileName
+
+    if not love.filesystem.getInfo(imagePath) then
+        nodePreviewIconCache[fileName] = false
+        return nil
+    end
+
+    local image = love.graphics.newImage(imagePath, {
+        mipmaps = true,
+    })
+    image:setFilter("linear", "linear")
+    image:setMipmapFilter("linear")
+    nodePreviewIconCache[fileName] = image
+    return image
+end
+
+local function getCrewImage(fileName)
+    if not fileName then
+        return nil
+    end
+
+    if crewImageCache[fileName] ~= nil then
+        return crewImageCache[fileName] or nil
+    end
+
+    local imagePath = CREW_IMAGE_DIRECTORY .. fileName
+
+    if not love.filesystem.getInfo(imagePath) then
+        crewImageCache[fileName] = false
+        return nil
+    end
+
+    local image = carddraw.preloadPortraitPath and carddraw.preloadPortraitPath(imagePath) or nil
+
+    if not image then
+        image = love.graphics.newImage(imagePath, {
+            mipmaps = true,
+        })
+        image:setFilter("linear", "linear")
+    end
+
+    image:setMipmapFilter("linear")
+    crewImageCache[fileName] = image
+    return image
 end
 
 local function isPointInsideRect(x, y, rect)
@@ -451,6 +562,26 @@ local function getRouteNodeDefinitionIds(state, clusterIndex, nodeIndex)
     return nodeDefinitionIds
 end
 
+local function getCachedNodeEncounterPreview(state, nodeDefinition)
+    if not nodeDefinition then
+        return nil
+    end
+
+    if not state then
+        return worldmaprules.getNodeEncounterPreview(nodeDefinition)
+    end
+
+    state.worldMapEncounterPreviewCache = state.worldMapEncounterPreviewCache or {}
+
+    local cacheKey = nodeDefinition.id or tostring(nodeDefinition)
+
+    if state.worldMapEncounterPreviewCache[cacheKey] == nil then
+        state.worldMapEncounterPreviewCache[cacheKey] = worldmaprules.getNodeEncounterPreview(nodeDefinition) or false
+    end
+
+    return state.worldMapEncounterPreviewCache[cacheKey] or nil
+end
+
 local function getRouteNodePreviewGroup(state, clusterIndex, nodeIndex)
     local layout = getMapLayout()
     local x = getClusterNodeX(layout, clusterIndex, nodeIndex)
@@ -475,7 +606,7 @@ local function getRouteNodePreviewGroup(state, clusterIndex, nodeIndex)
                     width = nodeRadius * 2,
                     height = nodeRadius * 2,
                 },
-                preview = worldmaprules.getNodeEncounterPreview(nodeDefinition),
+                preview = getCachedNodeEncounterPreview(state, nodeDefinition),
             }
         end
     end
@@ -1125,12 +1256,23 @@ local function drawNodeEncounterPreview(state, hoveredNode, panelIndexOnEdge)
     local contentX = panelX + NODE_PREVIEW_PADDING + rightColumnXOffset
     local showPlayButton = shouldDrawNodePreviewPlayButton(state, hoveredNode)
     local y = panelY + NODE_PREVIEW_PADDING
+    local isLoadingPreview = isLoadingWorldMapNode(state, hoveredNode.clusterIndex, hoveredNode.nodeIndex)
 
     love.graphics.setColor(0.02, 0.025, 0.03, 0.58)
     love.graphics.rectangle("fill", panelX - 6, panelY - 6, panelWidth + 12, panelHeight + 12, 8, 8)
     love.graphics.setColor(0.06, 0.07, 0.09, 0.97)
     love.graphics.rectangle("fill", panelX, panelY, panelWidth, panelHeight, 6, 6)
-    love.graphics.setColor(accentColor[1], accentColor[2], accentColor[3], 0.95)
+    if isLoadingPreview then
+        local pendingElapsed = state.pendingMissionSetup and state.pendingMissionSetup.elapsed or 0
+
+        if math.floor(pendingElapsed / NODE_LOADING_FLASH_INTERVAL) % 2 == 0 then
+            love.graphics.setColor(1, 0.73, 0.08, 1)
+        else
+            love.graphics.setColor(0, 0, 0, 1)
+        end
+    else
+        love.graphics.setColor(accentColor[1], accentColor[2], accentColor[3], 0.95)
+    end
     love.graphics.rectangle("line", panelX, panelY, panelWidth, panelHeight, 6, 6)
 
     drawNodePreviewCornerIcon(hoveredNode, panelX, panelY)
@@ -1255,6 +1397,166 @@ local function drawNodeEncounterPreviewGroup(state, previewGroup)
     end
 end
 
+getWorldResourceTrackerLayout = function(state)
+    local screenWidth = love.graphics.getWidth()
+    local screenHeight = love.graphics.getHeight()
+    local margin = math.max(18, math.floor(math.min(screenWidth, screenHeight) * 0.025))
+    local baseIconSize = math.max(28, math.floor(math.min(screenWidth, screenHeight) * 0.038))
+    local baseTrackerWidth = math.max(170, math.floor(screenWidth * 0.15))
+    local baseTrackerHeight = math.max(42, math.floor(baseIconSize * 1.15))
+    local baseGap = math.max(8, math.floor(baseTrackerHeight * 0.24))
+    local baseIconGap = math.max(10, math.floor(baseIconSize * 0.32))
+    local scale = 1
+    local iconSize = baseIconSize
+    local trackerWidth = baseTrackerWidth
+    local trackerHeight = baseTrackerHeight
+    local gap = baseGap
+    local iconGap = baseIconGap
+    local totalHeight = (#WORLD_RESOURCE_TRACKERS * trackerHeight) + ((#WORLD_RESOURCE_TRACKERS - 1) * gap)
+    local y = math.max(margin, math.floor((screenHeight - totalHeight) * 0.5))
+    local loadoutLayout = getSelectedRunLoadoutLayout(state)
+    local x = margin
+
+    if loadoutLayout then
+        local agentTopY = loadoutLayout.y + loadoutLayout.jaclHeight - loadoutLayout.agentHeight
+        local agentGap = math.max(6, math.floor(loadoutLayout.gap * 0.5))
+        local availableHeight = math.max(1, agentTopY - agentGap - loadoutLayout.y)
+
+        scale = math.min(1, availableHeight / totalHeight)
+        iconSize = math.max(18, math.floor(baseIconSize * scale))
+        trackerWidth = math.max(110, math.floor(baseTrackerWidth * scale))
+        trackerHeight = math.max(28, math.floor(baseTrackerHeight * scale))
+        gap = math.max(5, math.floor(baseGap * scale))
+        iconGap = math.max(6, math.floor(baseIconGap * scale))
+        totalHeight = (#WORLD_RESOURCE_TRACKERS * trackerHeight) + ((#WORLD_RESOURCE_TRACKERS - 1) * gap)
+        x = loadoutLayout.x + loadoutLayout.jaclWidth + loadoutLayout.gap
+        trackerWidth = math.max(
+            90,
+            math.floor(
+                loadoutLayout.x
+                    + loadoutLayout.jaclWidth
+                    + loadoutLayout.gap
+                    + (loadoutLayout.agentWidth * 2)
+                    + loadoutLayout.gap
+                    - (x + iconSize + iconGap)
+            )
+        )
+        y = math.floor(loadoutLayout.y)
+    end
+
+    return {
+        x = x,
+        y = y,
+        iconSize = iconSize,
+        iconGap = iconGap,
+        trackerWidth = trackerWidth,
+        trackerHeight = trackerHeight,
+        gap = gap,
+        labelFontSize = math.max(7, math.floor(10 * scale)),
+        valueFontSize = math.max(11, math.floor(18 * scale)),
+        paddingX = math.max(7, math.floor(12 * scale)),
+        labelOffsetY = math.max(4, math.floor(7 * scale)),
+        valueOffsetY = math.max(12, math.floor(17 * scale)),
+        cornerRadius = math.max(2, math.floor(4 * scale)),
+        lineWidth = math.max(1, math.floor(2 * scale)),
+    }
+end
+
+local function drawWorldResourceTrackers(state)
+    if state and state.runSetupModal and state.runSetupModal.isOpen then
+        return
+    end
+
+    local layout = getWorldResourceTrackerLayout(state)
+    local labelFont = getFont(layout.labelFontSize)
+    local valueFont = getFont(layout.valueFontSize)
+    local resources = state and state.worldResources or {}
+
+    for trackerIndex, tracker in ipairs(WORLD_RESOURCE_TRACKERS) do
+        local rowY = layout.y + ((trackerIndex - 1) * (layout.trackerHeight + layout.gap))
+        local iconX = layout.x
+        local iconY = rowY + math.floor((layout.trackerHeight - layout.iconSize) * 0.5)
+        local trackerX = iconX + layout.iconSize + layout.iconGap
+        local value = math.max(0, math.floor(tonumber(resources[tracker.key]) or 0))
+        local image = getMapImage(tracker.icon)
+
+        if image then
+            local imageScale = math.min(layout.iconSize / image:getWidth(), layout.iconSize / image:getHeight())
+            local imageWidth = image:getWidth() * imageScale
+            local imageHeight = image:getHeight() * imageScale
+
+            love.graphics.setColor(1, 1, 1, 1)
+            love.graphics.draw(
+                image,
+                iconX + ((layout.iconSize - imageWidth) * 0.5),
+                iconY + ((layout.iconSize - imageHeight) * 0.5),
+                0,
+                imageScale,
+                imageScale
+            )
+        end
+
+        love.graphics.setColor(
+            WORLD_RESOURCE_TRACKER_FILL_COLOR[1],
+            WORLD_RESOURCE_TRACKER_FILL_COLOR[2],
+            WORLD_RESOURCE_TRACKER_FILL_COLOR[3],
+            WORLD_RESOURCE_TRACKER_FILL_COLOR[4]
+        )
+        love.graphics.rectangle(
+            "fill",
+            trackerX,
+            rowY,
+            layout.trackerWidth,
+            layout.trackerHeight,
+            layout.cornerRadius,
+            layout.cornerRadius
+        )
+        love.graphics.setColor(
+            WORLD_RESOURCE_TRACKER_OUTLINE_COLOR[1],
+            WORLD_RESOURCE_TRACKER_OUTLINE_COLOR[2],
+            WORLD_RESOURCE_TRACKER_OUTLINE_COLOR[3],
+            WORLD_RESOURCE_TRACKER_OUTLINE_COLOR[4]
+        )
+        love.graphics.setLineWidth(layout.lineWidth)
+        love.graphics.rectangle(
+            "line",
+            trackerX,
+            rowY,
+            layout.trackerWidth,
+            layout.trackerHeight,
+            layout.cornerRadius,
+            layout.cornerRadius
+        )
+        love.graphics.setLineWidth(1)
+
+        love.graphics.setFont(labelFont)
+        love.graphics.setColor(
+            WORLD_RESOURCE_TRACKER_LABEL_COLOR[1],
+            WORLD_RESOURCE_TRACKER_LABEL_COLOR[2],
+            WORLD_RESOURCE_TRACKER_LABEL_COLOR[3],
+            WORLD_RESOURCE_TRACKER_LABEL_COLOR[4]
+        )
+        love.graphics.print(tracker.label, trackerX + layout.paddingX, rowY + layout.labelOffsetY)
+
+        love.graphics.setFont(valueFont)
+        love.graphics.setColor(
+            WORLD_RESOURCE_TRACKER_TEXT_COLOR[1],
+            WORLD_RESOURCE_TRACKER_TEXT_COLOR[2],
+            WORLD_RESOURCE_TRACKER_TEXT_COLOR[3],
+            WORLD_RESOURCE_TRACKER_TEXT_COLOR[4]
+        )
+        love.graphics.printf(
+            tostring(value),
+            trackerX + layout.paddingX,
+            rowY + layout.valueOffsetY,
+            layout.trackerWidth - (layout.paddingX * 2),
+            "right"
+        )
+    end
+
+    love.graphics.setColor(1, 1, 1, 1)
+end
+
 local function getDeckSourceAt(state, x, y)
     for _, target in ipairs(state and state.worldMapPreviewDeckTargets or {}) do
         if isPointInsideRect(x, y, target) then
@@ -1275,7 +1577,7 @@ local function getObjectivePreviewSourceAt(state, x, y)
     return nil
 end
 
-local function getSelectedRunLoadoutLayout(state)
+getSelectedRunLoadoutLayout = function(state)
     if not state or not state.selectedRunJaclId then
         return nil
     end
@@ -1491,6 +1793,8 @@ local function tryLaunchMissionFromNodePreview(state, x, y, deps)
     end
 
     if deps.startMissionFromWorldNode(payload) then
+        state.loadingWorldMapNode = target.hoveredNode
+
         if deps.sfxrules and deps.sfxrules.playMissionStart then
             deps.sfxrules.playMissionStart()
         elseif deps.sfxrules and deps.sfxrules.playGo then
@@ -2255,6 +2559,10 @@ function worldmapdraw.wheelmoved(state, _, y)
     return true
 end
 
+function worldmapdraw.getNextMapPosition(playerMapPosition)
+    return getNextMapPosition(playerMapPosition)
+end
+
 local function drawPanelFrame(x, y, width, height, cornerRadius)
     cornerRadius = cornerRadius or 8
 
@@ -2312,6 +2620,333 @@ local function drawEmptyAgentLoadoutCard(x, y, width, height)
     love.graphics.rectangle("fill", x + 6, y + 6, width - 12, height - 12, 6, 6)
 end
 
+local function drawAgentLoadoutNameLabel(agentDefinition, x, y, width, height)
+    local nameText = agentDefinition and (agentDefinition.name or agentDefinition.id) or nil
+
+    if not nameText then
+        return
+    end
+
+    local previousFont = love.graphics.getFont()
+    local labelHeight = math.max(16, math.floor(height * 0.18))
+    local labelY = y + height - labelHeight
+    local labelFont = getFont(math.max(8, math.floor(width * 0.105)))
+
+    love.graphics.setColor(0.02, 0.02, 0.025, 0.88)
+    love.graphics.rectangle("fill", x, labelY, width, labelHeight, 0, 0)
+    love.graphics.setFont(labelFont)
+    love.graphics.setColor(0.93, 0.93, 0.95, 1)
+    love.graphics.printf(
+        nameText,
+        x + 4,
+        labelY + ((labelHeight - labelFont:getHeight()) * 0.5),
+        width - 8,
+        "center"
+    )
+    love.graphics.setFont(previousFont)
+end
+
+local function drawWorldRolePortraits(state)
+    if state and state.runSetupModal and state.runSetupModal.isOpen then
+        return
+    end
+
+    local layout = getSelectedRunLoadoutLayout(state)
+
+    if not layout then
+        return
+    end
+
+    local roleCount = #WORLD_ROLE_PORTRAITS
+    local gap = math.max(6, math.floor(layout.gap * 0.65))
+    local resourceLayout = getWorldResourceTrackerLayout(state)
+    local resourceTrackerRight = resourceLayout.x
+        + resourceLayout.iconSize
+        + resourceLayout.iconGap
+        + resourceLayout.trackerWidth
+    local totalWidth = math.max(1, resourceTrackerRight - layout.x)
+    local boxWidth = (totalWidth - (gap * (roleCount - 1))) / roleCount
+    local boxHeight = math.max(56, boxWidth * 1.12)
+    local y = math.floor(layout.y - gap - boxHeight)
+    local labelHeight = math.max(18, boxHeight * 0.24)
+    local portraitHeight = boxHeight - labelHeight
+    local previousFont = love.graphics.getFont()
+    local labelFont = getFont(math.max(8, math.floor(boxWidth * 0.12)))
+
+    for roleIndex, rolePortrait in ipairs(WORLD_ROLE_PORTRAITS) do
+        local roleLabel = rolePortrait.label
+        local x = layout.x + ((roleIndex - 1) * (boxWidth + gap))
+        local image = getCrewImage(rolePortrait.image)
+
+        love.graphics.setColor(0.025, 0.028, 0.035, 0.9)
+        love.graphics.rectangle("fill", x, y, boxWidth, boxHeight, 5, 5)
+        love.graphics.setColor(
+            WORLD_ROLE_PORTRAIT_OUTLINE_COLOR[1],
+            WORLD_ROLE_PORTRAIT_OUTLINE_COLOR[2],
+            WORLD_ROLE_PORTRAIT_OUTLINE_COLOR[3],
+            WORLD_ROLE_PORTRAIT_OUTLINE_COLOR[4]
+        )
+        love.graphics.rectangle("line", x, y, boxWidth, boxHeight, 5, 5)
+
+        love.graphics.setColor(
+            WORLD_ROLE_PORTRAIT_FILL_COLOR[1],
+            WORLD_ROLE_PORTRAIT_FILL_COLOR[2],
+            WORLD_ROLE_PORTRAIT_FILL_COLOR[3],
+            WORLD_ROLE_PORTRAIT_FILL_COLOR[4]
+        )
+        love.graphics.rectangle("fill", x + 5, y + 5, boxWidth - 10, portraitHeight - 8, 4, 4)
+
+        if image then
+            local imagePadding = 5
+            local imageX = x + imagePadding
+            local imageY = y + imagePadding
+            local imageWidth = boxWidth - (imagePadding * 2)
+            local imageHeight = portraitHeight - (imagePadding + 3)
+            local imageScale = math.max(imageWidth / image:getWidth(), imageHeight / image:getHeight())
+            local scaledWidth = image:getWidth() * imageScale
+            local scaledHeight = image:getHeight() * imageScale
+            local previousScissorX, previousScissorY, previousScissorWidth, previousScissorHeight = love.graphics.getScissor()
+
+            love.graphics.setScissor(imageX, imageY, imageWidth, imageHeight)
+            love.graphics.setColor(1, 1, 1, 1)
+            love.graphics.draw(
+                image,
+                imageX + ((imageWidth - scaledWidth) * 0.5),
+                imageY + ((imageHeight - scaledHeight) * 0.5),
+                0,
+                imageScale,
+                imageScale
+            )
+
+            if previousScissorX then
+                love.graphics.setScissor(previousScissorX, previousScissorY, previousScissorWidth, previousScissorHeight)
+            else
+                love.graphics.setScissor()
+            end
+        end
+
+        love.graphics.setFont(labelFont)
+        love.graphics.setColor(
+            WORLD_ROLE_PORTRAIT_LABEL_COLOR[1],
+            WORLD_ROLE_PORTRAIT_LABEL_COLOR[2],
+            WORLD_ROLE_PORTRAIT_LABEL_COLOR[3],
+            WORLD_ROLE_PORTRAIT_LABEL_COLOR[4]
+        )
+        love.graphics.printf(
+            roleLabel,
+            x + 4,
+            y + portraitHeight + ((labelHeight - labelFont:getHeight()) * 0.5),
+            boxWidth - 8,
+            "center"
+        )
+    end
+
+    love.graphics.setFont(previousFont)
+    love.graphics.setColor(1, 1, 1, 1)
+end
+
+local function getWorldRolePortraitBounds(state, layout)
+    local roleCount = #WORLD_ROLE_PORTRAITS
+    local gap = math.max(6, math.floor(layout.gap * 0.65))
+    local resourceLayout = getWorldResourceTrackerLayout(state)
+    local resourceTrackerRight = resourceLayout.x
+        + resourceLayout.iconSize
+        + resourceLayout.iconGap
+        + resourceLayout.trackerWidth
+    local totalWidth = math.max(1, resourceTrackerRight - layout.x)
+    local boxWidth = (totalWidth - (gap * (roleCount - 1))) / roleCount
+    local boxHeight = math.max(56, boxWidth * 1.12)
+
+    return {
+        x = layout.x,
+        y = math.floor(layout.y - gap - boxHeight),
+        right = resourceTrackerRight,
+        bottom = layout.y + layout.jaclHeight,
+        gap = gap,
+    }
+end
+
+local function drawWorldAlmsTracker(state)
+    if state and state.runSetupModal and state.runSetupModal.isOpen then
+        return
+    end
+
+    local layout = getSelectedRunLoadoutLayout(state)
+
+    if not layout then
+        return
+    end
+
+    local bounds = getWorldRolePortraitBounds(state, layout)
+    local resourceLayout = getWorldResourceTrackerLayout(state)
+    local iconSize = resourceLayout.iconSize
+    local iconGap = resourceLayout.iconGap
+    local trackerHeight = resourceLayout.trackerHeight
+    local gap = bounds.gap
+    local iconX = bounds.x
+    local rowY = bounds.y - gap - trackerHeight
+    local iconY = rowY + math.floor((trackerHeight - iconSize) * 0.5)
+    local trackerX = iconX + iconSize + iconGap
+    local trackerWidth = math.max(80, bounds.right - trackerX)
+    local labelFont = getFont(resourceLayout.labelFontSize)
+    local valueFont = getFont(resourceLayout.valueFontSize)
+    local resources = state and state.worldResources or {}
+    local value = math.max(0, math.floor(tonumber(resources.alms) or 0))
+    local image = getMapImage("alms.png")
+
+    if image then
+        local imageScale = math.min(iconSize / image:getWidth(), iconSize / image:getHeight())
+        local imageWidth = image:getWidth() * imageScale
+        local imageHeight = image:getHeight() * imageScale
+
+        love.graphics.setColor(1, 1, 1, 1)
+        love.graphics.draw(
+            image,
+            iconX + ((iconSize - imageWidth) * 0.5),
+            iconY + ((iconSize - imageHeight) * 0.5),
+            0,
+            imageScale,
+            imageScale
+        )
+    end
+
+    love.graphics.setColor(
+        WORLD_RESOURCE_TRACKER_FILL_COLOR[1],
+        WORLD_RESOURCE_TRACKER_FILL_COLOR[2],
+        WORLD_RESOURCE_TRACKER_FILL_COLOR[3],
+        WORLD_RESOURCE_TRACKER_FILL_COLOR[4]
+    )
+    love.graphics.rectangle(
+        "fill",
+        trackerX,
+        rowY,
+        trackerWidth,
+        trackerHeight,
+        resourceLayout.cornerRadius,
+        resourceLayout.cornerRadius
+    )
+    love.graphics.setColor(
+        WORLD_ALMS_TRACKER_COLOR[1],
+        WORLD_ALMS_TRACKER_COLOR[2],
+        WORLD_ALMS_TRACKER_COLOR[3],
+        WORLD_ALMS_TRACKER_COLOR[4]
+    )
+    love.graphics.setLineWidth(resourceLayout.lineWidth)
+    love.graphics.rectangle(
+        "line",
+        trackerX,
+        rowY,
+        trackerWidth,
+        trackerHeight,
+        resourceLayout.cornerRadius,
+        resourceLayout.cornerRadius
+    )
+    love.graphics.setLineWidth(1)
+
+    love.graphics.setFont(labelFont)
+    love.graphics.setColor(
+        WORLD_ALMS_TRACKER_COLOR[1],
+        WORLD_ALMS_TRACKER_COLOR[2],
+        WORLD_ALMS_TRACKER_COLOR[3],
+        WORLD_ALMS_TRACKER_COLOR[4]
+    )
+    love.graphics.print("Alms", trackerX + resourceLayout.paddingX, rowY + resourceLayout.labelOffsetY)
+
+    love.graphics.setFont(valueFont)
+    love.graphics.setColor(
+        WORLD_RESOURCE_TRACKER_TEXT_COLOR[1],
+        WORLD_RESOURCE_TRACKER_TEXT_COLOR[2],
+        WORLD_RESOURCE_TRACKER_TEXT_COLOR[3],
+        WORLD_RESOURCE_TRACKER_TEXT_COLOR[4]
+    )
+    love.graphics.printf(
+        tostring(value),
+        trackerX + resourceLayout.paddingX,
+        rowY + resourceLayout.valueOffsetY,
+        trackerWidth - (resourceLayout.paddingX * 2),
+        "right"
+    )
+
+    love.graphics.setColor(1, 1, 1, 1)
+end
+
+local function drawWorldSystemsColumn(state)
+    if state and state.runSetupModal and state.runSetupModal.isOpen then
+        return
+    end
+
+    local layout = getSelectedRunLoadoutLayout(state)
+
+    if not layout then
+        return
+    end
+
+    local bounds = getWorldRolePortraitBounds(state, layout)
+    local gap = bounds.gap
+    local labelFont = getFont(12)
+    local labelHeight = math.max(18, labelFont:getHeight())
+    local boxGap = math.max(5, math.floor(gap * 0.75))
+    local availableHeight = math.max(1, bounds.bottom - bounds.y - labelHeight - boxGap)
+    local boxSize = math.max(30, math.floor((availableHeight - (boxGap * 4)) / 5))
+    local x = bounds.right + layout.gap
+    local y = bounds.y
+    local boxX = x
+    local boxY = y + labelHeight + boxGap
+    local image = getMapImage("systems.png") or getMapImage("system.png")
+    local previousFont = love.graphics.getFont()
+
+    love.graphics.setFont(labelFont)
+    love.graphics.setColor(
+        WORLD_SYSTEMS_LABEL_COLOR[1],
+        WORLD_SYSTEMS_LABEL_COLOR[2],
+        WORLD_SYSTEMS_LABEL_COLOR[3],
+        WORLD_SYSTEMS_LABEL_COLOR[4]
+    )
+    love.graphics.printf("Systems", x, y, boxSize, "center")
+
+    for systemIndex = 1, 5 do
+        local rowY = boxY + ((systemIndex - 1) * (boxSize + boxGap))
+
+        love.graphics.setColor(0.025, 0.028, 0.035, 0.9)
+        love.graphics.rectangle("fill", boxX, rowY, boxSize, boxSize, 5, 5)
+        love.graphics.setColor(
+            WORLD_SYSTEMS_OUTLINE_COLOR[1],
+            WORLD_SYSTEMS_OUTLINE_COLOR[2],
+            WORLD_SYSTEMS_OUTLINE_COLOR[3],
+            WORLD_SYSTEMS_OUTLINE_COLOR[4]
+        )
+        love.graphics.rectangle("line", boxX, rowY, boxSize, boxSize, 5, 5)
+        love.graphics.setColor(
+            WORLD_SYSTEMS_BOX_FILL_COLOR[1],
+            WORLD_SYSTEMS_BOX_FILL_COLOR[2],
+            WORLD_SYSTEMS_BOX_FILL_COLOR[3],
+            WORLD_SYSTEMS_BOX_FILL_COLOR[4]
+        )
+        love.graphics.rectangle("fill", boxX + 5, rowY + 5, boxSize - 10, boxSize - 10, 4, 4)
+
+        if image then
+            local imagePadding = math.max(6, math.floor(boxSize * 0.14))
+            local imageSize = boxSize - (imagePadding * 2)
+            local imageScale = math.min(imageSize / image:getWidth(), imageSize / image:getHeight())
+            local imageWidth = image:getWidth() * imageScale
+            local imageHeight = image:getHeight() * imageScale
+
+            love.graphics.setColor(1, 1, 1, 1)
+            love.graphics.draw(
+                image,
+                boxX + ((boxSize - imageWidth) * 0.5),
+                rowY + ((boxSize - imageHeight) * 0.5),
+                0,
+                imageScale,
+                imageScale
+            )
+        end
+    end
+
+    love.graphics.setFont(previousFont)
+    love.graphics.setColor(1, 1, 1, 1)
+end
+
 local function drawSelectedRunLoadout(state)
     if not state or not state.selectedRunJaclId then
         return
@@ -2362,6 +2997,7 @@ local function drawSelectedRunLoadout(state)
                 width = agentWidth,
                 showLabelWhenCollapsed = false,
             })
+            drawAgentLoadoutNameLabel(agentDefinition, agentX, agentY, agentWidth, agentHeight)
             addWorldMapPreviewDeckTarget(state, agentX, agentY, agentWidth, agentHeight, {
                 definition = agentDefinition,
                 name = agentDefinition.name or agentDefinition.id,
@@ -2396,6 +3032,14 @@ local function drawCenteredSquare(mode, x, y, radius)
     local size = radius * 2
 
     love.graphics.rectangle(mode, x - radius, y - radius, size, size)
+end
+
+isLoadingWorldMapNode = function(state, clusterIndex, nodeIndex)
+    local loadingNode = state and state.pendingMissionSetup and state.loadingWorldMapNode or nil
+
+    return loadingNode
+        and loadingNode.clusterIndex == clusterIndex
+        and loadingNode.nodeIndex == nodeIndex
 end
 
 function worldmapdraw.draw(state)
@@ -2562,6 +3206,10 @@ function worldmapdraw.draw(state)
         state.worldMapNodePlayButtonTargets = {}
     end
 
+    drawWorldAlmsTracker(state)
+    drawWorldRolePortraits(state)
+    drawWorldResourceTrackers(state)
+    drawWorldSystemsColumn(state)
     drawSelectedRunLoadout(state)
     drawNodeEncounterPreviewGroup(
         state,

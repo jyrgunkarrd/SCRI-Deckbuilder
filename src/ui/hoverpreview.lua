@@ -1,4 +1,5 @@
 local hoverpreview = {}
+local crewrules = require("src.system.crewrules")
 
 local function copyRenderOptions(renderOptions)
     local copiedOptions = {}
@@ -255,6 +256,7 @@ local function updateHoveredCardDetails(state, deps, card, cardIndex, drawX, dra
         "SUMMON"
     ) or state.hoveredDiceFace
     state.hoveredKeyword = deps.carddraw.getHoveredKeyword(card.setName, card.cardId, drawX, drawY, renderOptions, mouseX, mouseY)
+    state.hoveredButtonBadge = deps.carddraw.getHoveredButtonBadge(card.setName, card.cardId, drawX, drawY, expansionProgress, renderOptions, mouseX, mouseY)
     hoverpreview.updateCardAbilityPreview(state, deps, mouseX, mouseY)
     hoverpreview.updateSpawnPreview(state, deps, card, cardIndex)
 end
@@ -263,6 +265,7 @@ function hoverpreview.updateHoveredCard(state, deps)
     local previousHoveredCardIndex = state.hoveredCardIndex
     state.hoveredKeyword = nil
     state.hoveredDiceFace = nil
+    state.hoveredButtonBadge = nil
 
     if state.draggedCardIndex or state.isResourceExchangeModalOpen or state.isSyntacMethodModalOpen or state.isJaclDeckModalOpen then
         state.hoveredCardIndex = nil
@@ -272,6 +275,7 @@ function hoverpreview.updateHoveredCard(state, deps)
         hoverpreview.clearSpawnPreview(state)
         hoverpreview.clearCardAbilityPreview(state)
         state.hoveredDiceFace = nil
+        state.hoveredButtonBadge = nil
         return
     end
 
@@ -282,6 +286,7 @@ function hoverpreview.updateHoveredCard(state, deps)
     hoverpreview.clearSpawnPreview(state)
     hoverpreview.clearCardAbilityPreview(state)
     state.hoveredDiceFace = nil
+    state.hoveredButtonBadge = nil
 
     state.hoveredDiceFace = hoverpreview.attachDefinitionPreview(deps, deps.envdraw.getHoveredTopSlotDiceFace(
         mouseX,
@@ -300,7 +305,10 @@ function hoverpreview.updateHoveredCard(state, deps)
     if state.hoveredCardIndex then
         local activeCard = state.cards[state.hoveredCardIndex]
 
-        if activeCard and not activeCard.returningToHandAnimation and not deps.isCardUnavailable(activeCard) then
+        if activeCard
+            and not activeCard.returningToHandAnimation
+            and not deps.isCardUnavailable(activeCard)
+            and not crewrules.isCrewCovered(state.cards, state.hoveredCardIndex) then
             local drawX, drawY, expansionProgress, renderOptions = deps.getCardDrawPosition(activeCard, state.hoveredCardIndex)
 
             if deps.carddraw.isPointInsideDrawnCard(mouseX, mouseY, drawX, drawY, expansionProgress, nil, renderOptions) then
@@ -313,7 +321,9 @@ function hoverpreview.updateHoveredCard(state, deps)
     state.hoveredCardIndex = nil
 
     for cardIndex = #state.cards, 1, -1 do
-        if not state.cards[cardIndex].returningToHandAnimation and not deps.isCardUnavailable(state.cards[cardIndex]) then
+        if not state.cards[cardIndex].returningToHandAnimation
+            and not deps.isCardUnavailable(state.cards[cardIndex])
+            and not crewrules.isCrewCovered(state.cards, cardIndex) then
             local drawX, drawY, expansionProgress, renderOptions = deps.getCardDrawPosition(state.cards[cardIndex], cardIndex)
 
             if deps.carddraw.isPointInsideDrawnCard(mouseX, mouseY, drawX, drawY, expansionProgress, nil, renderOptions) then

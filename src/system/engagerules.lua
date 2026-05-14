@@ -187,6 +187,18 @@ local function applyAttackSummonSideEffect(ctx, rollState, sourceCardIndex)
     return (ctx.spawnTokensNearCard(sourceCardIndex, generatedCardDefinition, spawnCount) or 0) > 0
 end
 
+local function applySelfBlockSideEffect(ctx, rollState, sourceCardIndex)
+    local attackerCardIndex = sourceCardIndex or ctx.selectedAttackerCardIndex
+
+    if rollState and rollState.selfBlock == true and attackerCardIndex then
+        local attackerCard = ctx.cards[attackerCardIndex]
+
+        if attackerCard and (not ctx.isCardUnavailable or not ctx.isCardUnavailable(attackerCard)) then
+            ctx.addBlockingToCard(attackerCard, rollState.damageValue or 0)
+        end
+    end
+end
+
 local function applyAttackSideEffects(ctx, rollState, sourceCardIndex)
     if rollState and rollState.sabotageObjective == true and ctx.activePrimaryObjective then
         ctx.addObjectiveProgress(ctx.activePrimaryObjective, -(rollState.damageValue or 0), "objective")
@@ -197,14 +209,7 @@ local function applyAttackSideEffects(ctx, rollState, sourceCardIndex)
     local attackerCardIndex = sourceCardIndex or ctx.selectedAttackerCardIndex
 
     applyAttackSummonSideEffect(ctx, rollState, attackerCardIndex)
-
-    if rollState and rollState.selfBlock == true and attackerCardIndex then
-        local attackerCard = ctx.cards[attackerCardIndex]
-
-        if attackerCard and (not ctx.isCardUnavailable or not ctx.isCardUnavailable(attackerCard)) then
-            ctx.addBlockingToCard(attackerCard, rollState.damageValue or 0)
-        end
-    end
+    applySelfBlockSideEffect(ctx, rollState, attackerCardIndex)
 
     if rollState and rollState.selfHeal == true and attackerCardIndex and ctx.healCard then
         local attackerCard = ctx.cards[attackerCardIndex]
@@ -267,6 +272,7 @@ end
 
 local function applyPlayerWarzoneSideEffects(ctx, rollState)
     applyRollUtilitySideEffects(ctx, rollState)
+    applySelfBlockSideEffect(ctx, rollState)
 end
 
 local function canTargetEnemyWarzone(ctx, rollState)
@@ -293,6 +299,7 @@ end
 
 local function applySabotageSideEffects(ctx, rollState)
     applyRollUtilitySideEffects(ctx, rollState)
+    applySelfBlockSideEffect(ctx, rollState)
 end
 
 local function canApplySabotageToProgressTrack(ctx, objectiveDefinition, rollState)

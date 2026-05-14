@@ -1,3 +1,5 @@
+local crewrules = require("src.system.crewrules")
+
 local targetingrules = {}
 
 local function hasTargetType(rollState, targetType)
@@ -72,6 +74,10 @@ local function isSelectedAttackerCardTarget(cardIndex, context)
     local candidateCard = cardIndex and context.cards and context.cards[cardIndex] or nil
 
     if not selectedRollState or not candidateCard then
+        return false
+    end
+
+    if crewrules.isCrewCovered(context.cards, cardIndex) then
         return false
     end
 

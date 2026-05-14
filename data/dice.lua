@@ -266,6 +266,19 @@ local dice = {
         },
 
         {
+            id = "HCQDMG6",
+            type = "Black",
+            over = "CQHvAtk",
+            value = 6,
+            action = "attack",
+            target = "enemy_card",
+            selfBlock = true,
+            heavy = true,
+            facename = "Heavy Close Quarters Attack",
+            facedesc = "Deal damage to a target troop with the highest health or Champion. This card gains block.",
+        },
+
+        {
             id = "MLDMG3",
             type = "Black",
             over = "MlAtk",
@@ -304,6 +317,61 @@ local dice = {
             type = "Black",
             over = "BscRngAtk",
             value = 1,
+            targ = "Atk",
+            facename = "Long Range Attack",
+            facedesc = "Deal damage to a target troop or Champion. May attack Flying targets.",
+            lrange = true,
+        },
+
+        {
+            id = "RNGDMG2",
+            type = "Black",
+            over = "BscRngAtk",
+            value = 2,
+            targ = "Atk",
+            facename = "Long Range Attack",
+            facedesc = "Deal damage to a target troop or Champion. May attack Flying targets.",
+            lrange = true,
+        },
+
+        {
+            id = "RNGDMG3",
+            type = "Black",
+            over = "BscRngAtk",
+            value = 3,
+            targ = "Atk",
+            facename = "Long Range Attack",
+            facedesc = "Deal damage to a target troop or Champion. May attack Flying targets.",
+            lrange = true,
+        },
+
+        {
+            id = "RNGDMG4",
+            type = "Black",
+            over = "BscRngAtk",
+            value = 4,
+            targ = "Atk",
+            facename = "Long Range Attack",
+            facedesc = "Deal damage to a target troop or Champion. May attack Flying targets.",
+            lrange = true,
+        },
+
+        {
+            id = "RNGDMG5",
+            type = "Black",
+            over = "BscRngAtk",
+            value = 5,
+            targ = "Atk",
+            facename = "Long Range Attack",
+            facedesc = "Deal damage to a target troop or Champion. May attack Flying targets.",
+            lrange = true,
+        },
+
+        {
+            id = "RNGDMG6",
+            type = "Black",
+            over = "BscRngAtk",
+            value = 6,
             targ = "Atk",
             facename = "Long Range Attack",
             facedesc = "Deal damage to a target troop or Champion. May attack Flying targets.",
@@ -1000,6 +1068,17 @@ local dice = {
         facedesc = "Decrease the player's influence over a warzone.",
     },
 
+    {
+        id = "THRBLK2",
+        type = "Ifl",
+        over = "BscBlk",
+        value = 2,
+        targ = "WZOpp",
+        selfBlock = true,
+        facename = "Threaten and Block",
+        facedesc = "Decrease the player's influence over a warzone. This card gains block.",
+    },
+
     --- Objective ---
 
     {
@@ -1032,12 +1111,23 @@ local dice = {
         facedesc = "Increase the progress on an objective.",
     },
 
+    {
+        id = "OBJBLK2",
+        type = "Cvt",
+        over = "BscBlk",
+        value = 2,
+        targ = "Obj",
+        selfBlock = true,
+        facename = "Red Switch and Block",
+        facedesc = "Increase the progress on an objective. This card gains block.",
+    },
+
     --- Summoning
 
     {
         id = "FREYSMN",
-        type = "Black",
-        over = "SuiSmn",
+        type = "Sui",
+        over = "BscSmn",
         value = 2,
         targ = "smn",
         facename = "Suicide Summon",
@@ -1048,6 +1138,23 @@ local dice = {
         preview = {
             label = "SUMMON",
             cardId = "TK0001",
+        },
+    },
+
+    {
+        id = "ADVSMN",
+        type = "Sui",
+        over = "BscSmn",
+        value = 1,
+        targ = "smn",
+        facename = "Suicide Summon",
+        facedesc = "Summon the shown token. Deal damage to this card.",
+        target = { "ENADV" },
+        func = "Spawn",
+        pain = true,
+        preview = {
+            label = "SUMMON",
+            cardId = "ENADV",
         },
     },
 
@@ -1085,6 +1192,38 @@ local dice = {
     },
 
     {
+        id = "CLKATKSMN",
+        type = "SmnBg",
+        over = "BscAtk",
+        value = 1,
+        targ = "AtkSmn",
+        facename = "Attack and Summon",
+        facedesc = "Deal damage to a target troop or Champion. Summon the shown token.",
+        target = { "ENCLK" },
+        func = "Spawn",
+        preview = {
+            label = "SUMMON",
+            cardId = "ENCLK",
+        },
+    },
+
+    {
+        id = "CLKATKSMN2",
+        type = "SmnBg",
+        over = "BscAtk",
+        value = 2,
+        targ = "AtkSmn",
+        facename = "Attack and Summon",
+        facedesc = "Deal damage to a target troop or Champion. Summon the shown token.",
+        target = { "ENCLK" },
+        func = "Spawn",
+        preview = {
+            label = "SUMMON",
+            cardId = "ENCLK",
+        },
+    },
+
+    {
         id = "TMINGOSMN",
         type = "Black",
         over = "BscSmn",
@@ -1118,8 +1257,8 @@ local dice = {
 
     {
         id = "ORBSMN",
-        type = "Black",
-        over = "SuiSmn",
+        type = "Sui",
+        over = "BscSmn",
         value = 1,
         targ = "smn",
         facename = "Suicide Summon",

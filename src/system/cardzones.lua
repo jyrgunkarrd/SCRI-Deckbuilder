@@ -1,3 +1,5 @@
+local crewrules = require("src.system.crewrules")
+
 local cardzones = {}
 
 local function isDestroyed(card, isCardDestroyed)
@@ -121,7 +123,8 @@ function cardzones.getValidDropColumn(mouseX, mouseY, cards, ignoredCardIndex, d
 
     local targetRowId = context.isHunterCard(draggedCard) and "OppRow" or "PlayerRow"
 
-    if cardzones.isGridRowColumnOccupied(cards, targetRowId, dropColumn, ignoredCardIndex) then
+    if cardzones.isGridRowColumnOccupied(cards, targetRowId, dropColumn, ignoredCardIndex)
+        and not crewrules.canCardCoverCrew(cards, targetRowId, dropColumn, ignoredCardIndex, draggedCard) then
         return nil
     end
 

@@ -162,6 +162,7 @@ function deckrules.resetDeckToInitialState(deck)
     end
 
     local owner = deck.owner
+    local shuffleOnReset = deck.shuffleOnReset == true
     local resetDeck = deckrules.buildDeckWithAdditionalDecks(deck.id, deck.additionalDeckIds or {})
 
     if not resetDeck then
@@ -175,9 +176,14 @@ function deckrules.resetDeckToInitialState(deck)
     deck.createdCardCount = resetDeck.createdCardCount or 0
     deck.additionalDeckIds = resetDeck.additionalDeckIds or {}
     deck.owner = owner
+    deck.shuffleOnReset = shuffleOnReset
 
     for _, card in ipairs(deck.cards or {}) do
         card.deckOwner = owner
+    end
+
+    if shuffleOnReset then
+        deckrules.shuffleDeck(deck)
     end
 
     return true

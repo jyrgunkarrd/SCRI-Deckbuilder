@@ -3,6 +3,7 @@ local damagerules = require("src.system.damagerules")
 local objectiveprogressrules = require("src.system.objectiveprogressrules")
 local warzonecontrolrules = require("src.system.warzonecontrolrules")
 local cardregistry = require("src.system.cardregistry")
+local crewrules = require("src.system.crewrules")
 local keywordrules = require("src.system.keywordrules")
 local temporaryeffects = require("src.system.temporaryeffects")
 
@@ -28,6 +29,20 @@ end
 local function isMarkerCard(card)
     local cardDefinition = getCardDefinition(card)
     return cardDefinition and cardDefinition.type == MARKER_CARD_TYPE or false
+end
+
+local function buildPreventedCardEffectResult(card, amount)
+    return {
+        previousHealth = card and card.currentHealth or nil,
+        currentHealth = card and card.currentHealth or nil,
+        previousBlocking = card and math.max(0, tonumber(card.blocking) or 0) or 0,
+        currentBlocking = card and math.max(0, tonumber(card.blocking) or 0) or 0,
+        blockedDamage = 0,
+        preventedByKeywordDamage = math.max(0, tonumber(amount) or 0),
+        healthDamage = 0,
+        killed = false,
+        changed = false,
+    }
 end
 
 local function isLiveGridCard(card)
@@ -201,17 +216,11 @@ end
 
 function gameactions.dealDamageToCard(ctx, card, amount, suppressFeedback)
     if isMarkerCard(card) then
-        return {
-            previousHealth = card and card.currentHealth or nil,
-            currentHealth = card and card.currentHealth or nil,
-            previousBlocking = card and math.max(0, tonumber(card.blocking) or 0) or 0,
-            currentBlocking = card and math.max(0, tonumber(card.blocking) or 0) or 0,
-            blockedDamage = 0,
-            preventedByKeywordDamage = math.max(0, tonumber(amount) or 0),
-            healthDamage = 0,
-            killed = false,
-            changed = false,
-        }
+        return buildPreventedCardEffectResult(card, amount)
+    end
+
+    if crewrules.isCardProtectedByCover(ctx and ctx.state and ctx.state.cards or nil, card) then
+        return buildPreventedCardEffectResult(card, amount)
     end
 
     local damageResult = damagerules.dealDamageToCard(card, amount)
@@ -242,17 +251,11 @@ end
 
 function gameactions.dealDirectDamageToCard(ctx, card, amount, suppressFeedback)
     if isMarkerCard(card) then
-        return {
-            previousHealth = card and card.currentHealth or nil,
-            currentHealth = card and card.currentHealth or nil,
-            previousBlocking = card and math.max(0, tonumber(card.blocking) or 0) or 0,
-            currentBlocking = card and math.max(0, tonumber(card.blocking) or 0) or 0,
-            blockedDamage = 0,
-            preventedByKeywordDamage = math.max(0, tonumber(amount) or 0),
-            healthDamage = 0,
-            killed = false,
-            changed = false,
-        }
+        return buildPreventedCardEffectResult(card, amount)
+    end
+
+    if crewrules.isCardProtectedByCover(ctx and ctx.state and ctx.state.cards or nil, card) then
+        return buildPreventedCardEffectResult(card, amount)
     end
 
     local damageResult = damagerules.dealDirectDamageToCard(card, amount)
@@ -286,6 +289,15 @@ end
 function gameactions.healCard(ctx, card, amount)
     if not card or amount == nil then
         return nil
+    end
+
+    if crewrules.isCardProtectedByCover(ctx and ctx.state and ctx.state.cards or nil, card) then
+        return {
+            previousHealth = card.currentHealth,
+            currentHealth = card.currentHealth,
+            healed = 0,
+            changed = false,
+        }
     end
 
     gameactions.initializeCardHealthState(card)
@@ -327,11 +339,18 @@ end
 function gameactions.dealDamageToChampion(ctx, amount, suppressFeedback)
     local damageResult = damagerules.dealDamageToChampion(ctx.state.activeChampion, amount)
 
-    if damageResult and damageResult.changed and not suppressFeedback then
-        ctx.triggerDamageFeedback("champion")
+    if damageResult and damageResult.changed then
+        if not suppressFeedback then
+            ctx.triggerDamageFeedback("champion")
+        end
 
         if damageResult.killed then
-            ctx.startChampionDestruction()
+            local resolvedMissionVictory = ctx.resolveChampionDefeated
+                and ctx.resolveChampionDefeated(damageResult)
+
+            if not resolvedMissionVictory and not suppressFeedback then
+                ctx.startChampionDestruction()
+            end
         end
     end
 

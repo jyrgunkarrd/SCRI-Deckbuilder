@@ -10,6 +10,11 @@ local jacl = {
             name = "JACL-S3D2-VALSHAMR",
             deckId = "DCK001",
             tomeId = "BOOKVAL",
+            startRes = {
+                { type = "fuel", amount = 8 },
+                { type = "munitions", amount = 8 },
+                { type = "tithes", amount = 4 },
+            },
             method = {
                 { resource = "The Gate", amount = 1 },
             },

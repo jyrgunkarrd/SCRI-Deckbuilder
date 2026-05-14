@@ -20,6 +20,7 @@ championplayrules = appmodules.championplayrules
 championrules = appmodules.championrules
 contextassembly = appmodules.contextassembly
 contextbuilders = appmodules.contextbuilders
+crewrules = appmodules.crewrules
 deckrules = appmodules.deckrules
 engagerules = appmodules.engagerules
 envrules = appmodules.envrules
@@ -67,6 +68,7 @@ local beginEndPhaseSacrificeSelection
 local getNextOpenHandSlot
 local preloadWarzoneFamily
 local updateInfiltrationEffect
+local resolveChampionDefeated
 local playHunterAddedSfxForCard
 local playHunterAddedSfxForCardDefinition
 local playHunterAddedSfxForCards
@@ -110,6 +112,60 @@ end
 
 local function getObjectiveProgressEffectSlotId()
     return topsloteffects.getObjectiveProgressEffectSlotId()
+end
+
+resolveChampionDefeated = function()
+    if not gamestates.isMissionStage(appState) then
+        return appState.victoryTransition ~= nil
+    end
+
+    if appState.victoryTransition then
+        return true
+    end
+
+    appState.victoryTransition = {
+        elapsed = 0,
+        duration = appconfig.VICTORY_TRANSITION_DURATION,
+        coverDuration = appconfig.VICTORY_TRANSITION_COVER_DURATION,
+        seed = love.math.random(1, 1000000),
+        nextMapPosition = gamestates.getNextPlayerMapPosition(appState),
+        switchedToWorld = false,
+    }
+
+    if gameState.activeChampion and gameState.activeChampion.defeat then
+        sfxrules.playChampionDefeat(gameState.activeChampion.defeat)
+    end
+
+    appState.hoveredWorldMapNode = nil
+    appState.pinnedWorldMapNode = nil
+    appState.worldMapDeckModal = nil
+    appState.worldMapObjectivePreviewModal = nil
+    appState.worldMapNodePlayButtonTarget = nil
+    appState.worldMapNodePlayButtonTargets = nil
+    appState.worldToMissionTransition = nil
+
+    return true
+end
+
+local function completeVictoryTransitionToWorld(transition)
+    if transition.switchedToWorld then
+        return
+    end
+
+    if transition.nextMapPosition then
+        appState.playerMapPosition = transition.nextMapPosition
+    else
+        gamestates.advancePlayerMapPosition(appState)
+    end
+
+    appState.current = "WorldStage"
+    appState.hoveredWorldMapNode = nil
+    appState.pinnedWorldMapNode = nil
+    appState.worldMapDeckModal = nil
+    appState.worldMapObjectivePreviewModal = nil
+    appState.worldMapNodePlayButtonTarget = nil
+    appState.worldMapNodePlayButtonTargets = nil
+    transition.switchedToWorld = true
 end
 
 local function beginObjectiveEscalation(objectiveDefinition, escalationId)
@@ -244,6 +300,24 @@ local function addSetupAgents()
     end
 end
 
+local function addStartingCrewCards()
+    return crewrules.addStartingCrewCards({
+        cards = gameState.cards,
+        cardinstances = cardinstances,
+        cardregistry = cardregistry,
+        initializeCardHealthState = initializeCardHealthState,
+    })
+end
+
+local function finishMissionSetup()
+    gameState.pendingPhaseEntry = false
+
+    for cardIndex = 1, #gameState.cards do
+        gameState.cardExpansion[cardIndex] = 0
+        gameState.cardEntranceProgress[cardIndex] = 0
+    end
+end
+
 function getSetupAgentDeckIds()
     local deckIds = {}
 
@@ -361,6 +435,7 @@ function resolveOpeningMulligan()
         gameState.hoveredCardIndex = nil
         gameState.hoveredKeyword = nil
         gameState.hoveredDiceFace = nil
+        gameState.hoveredButtonBadge = nil
         gameState.draggedCardIndex = nil
         gameState.draggedCardOrigin = nil
         return true
@@ -405,6 +480,7 @@ function resolveOpeningMulligan()
     gameState.hoveredCardIndex = nil
     gameState.hoveredKeyword = nil
     gameState.hoveredDiceFace = nil
+    gameState.hoveredButtonBadge = nil
     gameState.draggedCardIndex = nil
     gameState.draggedCardOrigin = nil
     return true
@@ -618,7 +694,16 @@ clearEnemyGuardCarryBlocking = function()
 end
 
 dealDamageToChampion = function(amount, suppressFeedback)
-    return lifecyclebridge.dealDamageToChampion(lifecyclebridgeState, amount, suppressFeedback)
+    local damageResult = lifecyclebridge.dealDamageToChampion(lifecyclebridgeState, amount, suppressFeedback)
+    local championHealth = gameState.activeChampion and tonumber(gameState.activeChampion.health) or nil
+
+    if gamestates.isMissionStage(appState)
+        and championHealth
+        and championHealth <= 0 then
+        resolveChampionDefeated(damageResult)
+    end
+
+    return damageResult
 end
 
 local function getChampionPlayContext()
@@ -1028,6 +1113,7 @@ contextassemblyState = {
         addCardKeywordValue = addCardKeywordValue,
         addObjectiveProgress = addObjectiveProgress,
         addSetupAgents = addSetupAgents,
+        addStartingCrewCards = addStartingCrewCards,
         addWarzoneControl = addWarzoneControl,
         applyModalState = applyModalState,
         beginEndPhaseSacrificeSelection = beginEndPhaseSacrificeSelection,
@@ -1133,6 +1219,7 @@ contextassemblyState = {
         playHunterAddedSfxForCards = playHunterAddedSfxForCards,
         primeCardMethodAbility = primeCardMethodAbility,
         primeJaclSpecial = primeJaclSpecial,
+        resolveChampionDefeated = resolveChampionDefeated,
         refundPendingSyntacMethodChoice = refundPendingSyntacMethodChoice,
         refundPrimedSyntacAbility = refundPrimedSyntacAbility,
         tryCancelSelectedEngageAttacker = tryCancelSelectedEngageAttacker,
@@ -1198,30 +1285,22 @@ startNewRun = function(saveSlotId, saveTimestamp)
 
     if gameState.championDeck then
         gameState.championDeck.owner = "champion"
+        gameState.championDeck.shuffleOnReset = #(setupScenario.championAdditionalDeckIds or {}) > 0
 
         for _, deckCard in ipairs(gameState.championDeck.cards) do
             deckCard.deckOwner = "champion"
         end
 
-        if #(setupScenario.championAdditionalDeckIds or {}) > 0 then
+        if gameState.championDeck.shuffleOnReset then
             deckrules.shuffleDeck(gameState.championDeck)
         end
     end
 
     enterCurrentPhase()
-    gameState.pendingPhaseEntry = false
-
-    for cardIndex = 1, #gameState.cards do
-        gameState.cardExpansion[cardIndex] = 0
-        gameState.cardEntranceProgress[cardIndex] = 0
-    end
+    finishMissionSetup()
 end
 
-startMissionFromWorldNode = function(payload)
-    if not payload or not payload.jaclId or not payload.championId or not payload.warzoneId then
-        return false
-    end
-
+local function applyWorldMissionPayload(payload)
     setupScenario.playerJaclId = payload.jaclId
     setupScenario.setupAgentIds = {}
 
@@ -1237,17 +1316,245 @@ startMissionFromWorldNode = function(payload)
     for _, deckId in ipairs(payload.championAdditionalDeckIds or {}) do
         setupScenario.championAdditionalDeckIds[#setupScenario.championAdditionalDeckIds + 1] = deckId
     end
+end
 
-    startNewRun(appState.selectedSaveSlot, appState.selectedSaveTimestamp)
-    appState.current = "MissionStage"
-    appState.worldMapDeckModal = nil
-    appState.worldMapObjectivePreviewModal = nil
-    appState.worldMapNodePlayButtonTarget = nil
-    appState.worldMapNodePlayButtonTargets = nil
+local function buildMissionSetupQueue(saveSlotId, saveTimestamp)
+    return {
+        {
+            id = "reset",
+            action = function()
+                gamestate.resetForNewRun(gameState)
+                gameState.saveSlotId = saveSlotId
+                gameState.saveTimestamp = saveTimestamp
+                turnrules.reset()
+                resourcerules.reset()
+                warrules.reset()
+                notifications.reset()
+                cardinstances.reset()
+                warzonecontrolrules.reset()
+                topsloteffects.reset()
+                infiltrationrules.reset()
+            end,
+        },
+        {
+            id = "definitions",
+            action = function()
+                gameState.playerJacl = jaclrules.getJacl(setupScenario.playerJaclId)
+                gameState.activeChampion = championrules.getChampion(setupScenario.activeChampionId)
+                if gameState.activeChampion then
+                    gameState.activeChampion.hidden = false
+                end
+                gameState.activeWarzone = warzonerules.getRandomWarzoneByIdSuffix(setupScenario.randomWarzoneSuffix)
+                    or warzonerules.getWarzone(setupScenario.activeWarzoneId)
+                gameState.activePoi = nil
+                gameState.activePrimaryObjective = getChampionPrimaryObjective(gameState.activeChampion)
+                gameState.activeIntel = getRandomChampionIntel(gameState.activeChampion)
+                if gameState.activeIntel then
+                    gameState.activeIntel.hidden = false
+                end
+            end,
+        },
+        {
+            id = "preload-champion",
+            action = function()
+                envdraw.preloadTopStripAssets(gameState.activeChampion, nil, nil, nil, nil)
+            end,
+        },
+        {
+            id = "preload-warzone",
+            action = function()
+                envdraw.preloadTopStripAssets(nil, gameState.activeWarzone, nil, nil, nil)
+            end,
+        },
+        {
+            id = "preload-objective",
+            action = function()
+                envdraw.preloadTopStripAssets(nil, nil, nil, gameState.activePrimaryObjective, nil)
+            end,
+        },
+        {
+            id = "preload-intel",
+            action = function()
+                envdraw.preloadTopStripAssets(nil, nil, nil, nil, gameState.activeIntel)
+            end,
+        },
+        {
+            id = "preload-warzone-family",
+            action = function()
+                preloadWarzoneFamily(gameState.activeWarzone)
+            end,
+        },
+        {
+            id = "player-deck",
+            action = function()
+                gameState.playerDeck = gameState.playerJacl
+                    and deckrules.buildDeckWithAdditionalDecks(gameState.playerJacl.deckId, getSetupAgentDeckIds())
+                    or nil
+            end,
+        },
+        {
+            id = "champion-deck",
+            action = function()
+                gameState.championDeck = gameState.activeChampion
+                    and gameState.activeChampion.deckId
+                    and deckrules.buildDeckWithAdditionalDecks(gameState.activeChampion.deckId, setupScenario.championAdditionalDeckIds or {})
+                    or nil
+            end,
+        },
+        {
+            id = "deck-owners",
+            action = function()
+                if gameState.playerDeck then
+                    gameState.playerDeck.owner = "player"
+
+                    for _, deckCard in ipairs(gameState.playerDeck.cards) do
+                        deckCard.deckOwner = "player"
+                    end
+                end
+
+                if gameState.championDeck then
+                    gameState.championDeck.owner = "champion"
+                    gameState.championDeck.shuffleOnReset = #(setupScenario.championAdditionalDeckIds or {}) > 0
+
+                    for _, deckCard in ipairs(gameState.championDeck.cards) do
+                        deckCard.deckOwner = "champion"
+                    end
+
+                    if gameState.championDeck.shuffleOnReset then
+                        deckrules.shuffleDeck(gameState.championDeck)
+                    end
+                end
+            end,
+        },
+        {
+            id = "opening-hand",
+            action = function()
+                local firstCardId = gameState.playerJacl and gameState.playerJacl.tomeId or nil
+                local openingHandSize = firstCardId and 7 or 6
+
+                gameState.cards = deckrules.assignCardsToHand(gameState.playerDeck, openingHandSize, {
+                    firstCardId = firstCardId,
+                })
+                gameState.mulliganSelection = {}
+                gameState.mulliganActive = gameState.mulliganCompleted ~= true
+                gameState.mulliganResolving = false
+                gameState.mulliganReturnedCards = nil
+                gameState.mulliganPromptAlpha = 0
+                initializeCardsHealthState(gameState.cards)
+            end,
+        },
+        {
+            id = "hunters",
+            action = function()
+                resolveHuntersInHand()
+            end,
+        },
+        {
+            id = "crew",
+            action = function()
+                addStartingCrewCards()
+            end,
+        },
+        {
+            id = "agents",
+            action = function()
+                addSetupAgents()
+                normalizeSetupCardSlots()
+            end,
+        },
+        {
+            id = "prewarm-card-render-assets",
+            cursor = 1,
+            process = function(step)
+                local cards = gameState.cards or {}
+                local card = cards[step.cursor]
+
+                if not card then
+                    return true
+                end
+
+                if carddraw.preloadCardRenderAssets then
+                    carddraw.preloadCardRenderAssets(card.setName, card.cardId, {
+                        card = card,
+                        portraitPath = card.portraitPath,
+                    })
+                end
+
+                step.cursor = step.cursor + 1
+                return false
+            end,
+        },
+        {
+            id = "finalize",
+            action = function()
+                finishMissionSetup()
+                appState.current = "MissionStage"
+            end,
+        },
+    }
+end
+
+local function beginQueuedMissionSetup(saveSlotId, saveTimestamp)
+    return {
+        steps = buildMissionSetupQueue(saveSlotId, saveTimestamp),
+        index = 1,
+        complete = false,
+    }
+end
+
+local function processMissionSetupQueue(queue)
+    if not queue or queue.complete then
+        return true
+    end
+
+    local step = queue.steps and queue.steps[queue.index] or nil
+
+    if not step then
+        queue.complete = true
+        return true
+    end
+
+    if step.process then
+        queue.lastStepId = step.id
+
+        if not step.process(step, queue) then
+            return false
+        end
+    elseif step.action then
+        step.action()
+    end
+
+    queue.lastStepId = step.id
+    queue.index = queue.index + 1
+    queue.complete = queue.index > #(queue.steps or {})
+    return queue.complete
+end
+
+local function beginWorldToMissionTransition()
     appState.worldToMissionTransition = {
         elapsed = 0,
         duration = appconfig.WORLD_TO_MISSION_TRANSITION_DURATION,
         seed = love.math.random(1, 1000000),
+        missionReady = true,
+    }
+end
+
+startMissionFromWorldNode = function(payload)
+    if not payload or not payload.jaclId or not payload.championId or not payload.warzoneId then
+        return false
+    end
+
+    applyWorldMissionPayload(payload)
+    appState.worldMapDeckModal = nil
+    appState.worldMapObjectivePreviewModal = nil
+    appState.worldMapNodePlayButtonTarget = nil
+    appState.worldMapNodePlayButtonTargets = nil
+    appState.victoryTransition = nil
+    appState.worldToMissionTransition = nil
+    appState.pendingMissionSetup = {
+        setupQueue = beginQueuedMissionSetup(appState.selectedSaveSlot, appState.selectedSaveTimestamp),
+        complete = false,
+        elapsed = 0,
     }
 
     return true
@@ -1270,6 +1577,27 @@ end
 contextassemblyState.updateInfiltrationEffect = updateInfiltrationEffect
 
 function love.update(dt)
+    if appState.victoryTransition then
+        local transition = appState.victoryTransition
+        local coverDuration = math.max(0.01, transition.coverDuration or transition.duration or 1)
+
+        transition.elapsed = transition.elapsed + (dt or 0)
+
+        if not transition.switchedToWorld and transition.elapsed >= coverDuration then
+            completeVictoryTransitionToWorld(transition)
+        end
+
+        if transition.elapsed >= math.max(coverDuration, transition.duration or coverDuration) then
+            if not transition.switchedToWorld then
+                completeVictoryTransitionToWorld(transition)
+            end
+
+            appState.victoryTransition = nil
+        end
+
+        return
+    end
+
     if appState.worldToMissionTransition then
         local transition = appState.worldToMissionTransition
 
@@ -1279,6 +1607,21 @@ function love.update(dt)
             appState.worldToMissionTransition = nil
             appState.hoveredWorldMapNode = nil
             appState.pinnedWorldMapNode = nil
+        end
+
+        return
+    end
+
+    if appState.pendingMissionSetup then
+        local pendingSetup = appState.pendingMissionSetup
+
+        pendingSetup.elapsed = pendingSetup.elapsed + (dt or 0)
+        pendingSetup.complete = processMissionSetupQueue(pendingSetup.setupQueue)
+
+        if pendingSetup.complete then
+            appState.pendingMissionSetup = nil
+            appState.loadingWorldMapNode = nil
+            beginWorldToMissionTransition()
         end
 
         return
@@ -1298,6 +1641,12 @@ function love.update(dt)
         return
     end
 
+    if gameState.activeChampion
+        and (tonumber(gameState.activeChampion.health) or 0) <= 0
+        and resolveChampionDefeated() then
+        return
+    end
+
     local entranceDt = math.min(dt, appconfig.CARD_ENTRANCE_MAX_DT)
 
     gameState.cardEntranceTimer = gameState.cardEntranceTimer + entranceDt
@@ -1308,6 +1657,11 @@ function love.update(dt)
     updateMulliganAnimations(dt)
 
     cardlifecycle.updateDestroyedCards(getCardLifecycleContext(), dt)
+
+    if gamestates.isWorldStage(appState) then
+        return
+    end
+
     cardlifecycle.updateIncapRecoveryAnimations(getCardLifecycleContext(), dt)
 
     for entityKey, jitter in pairs(gameState.damageJitters) do
@@ -1376,7 +1730,7 @@ function love.update(dt)
 end
 
 function love.mousepressed(x, y, button)
-    if appState.worldToMissionTransition then
+    if appState.victoryTransition or appState.worldToMissionTransition or appState.pendingMissionSetup then
         return
     end
 
@@ -1399,7 +1753,7 @@ function love.mousepressed(x, y, button)
 end
 
 function love.wheelmoved(_, y)
-    if appState.worldToMissionTransition then
+    if appState.victoryTransition or appState.worldToMissionTransition or appState.pendingMissionSetup then
         return
     end
 
@@ -1416,7 +1770,7 @@ function love.wheelmoved(_, y)
 end
 
 function love.mousereleased(x, y, button)
-    if appState.worldToMissionTransition then
+    if appState.victoryTransition or appState.worldToMissionTransition or appState.pendingMissionSetup then
         return
     end
 
@@ -1428,7 +1782,7 @@ function love.mousereleased(x, y, button)
 end
 
 function love.keypressed(key)
-    if appState.worldToMissionTransition then
+    if appState.victoryTransition or appState.worldToMissionTransition or appState.pendingMissionSetup then
         return
     end
 
@@ -1452,6 +1806,7 @@ function drawMissionStage()
         warrules = warrules,
         resourcerules = resourcerules,
         cardregistry = cardregistry,
+        crewrules = crewrules,
         previewrules = previewrules,
         envdraw = envdraw,
         carddraw = carddraw,
@@ -1493,6 +1848,7 @@ function drawMissionStage()
         primedSyntacAbility = gameState.primedSyntacAbility,
         hoveredKeyword = gameState.hoveredKeyword,
         hoveredDiceFace = gameState.hoveredDiceFace,
+        hoveredButtonBadge = gameState.hoveredButtonBadge,
         hoveredJaclSpecialDefinition = gameState.hoveredJaclSpecialDefinition,
         hoveredJaclSpecialPreviewCard = gameState.hoveredJaclSpecialPreviewCard,
         hoveredTomeSpawnPreviewCard = gameState.hoveredTomeSpawnPreviewCard,
@@ -1543,7 +1899,7 @@ function drawWorldToMissionTransition(transition)
 
     gamestates.drawWorldStage(appState)
 
-    if scanlineY > 0 then
+    if transition.missionReady and scanlineY > 0 then
         love.graphics.setScissor(0, 0, windowWidth, scanlineY)
         drawMissionStage()
         love.graphics.setScissor()
@@ -1585,7 +1941,93 @@ function drawWorldToMissionTransition(transition)
     love.graphics.setColor(1, 1, 1, 1)
 end
 
+function drawVictoryTransition(transition)
+    local windowWidth, windowHeight = love.graphics.getDimensions()
+    local elapsed = transition.elapsed or 0
+    local coverDuration = math.max(0.01, transition.coverDuration or appconfig.VICTORY_TRANSITION_COVER_DURATION)
+    local totalDuration = math.max(coverDuration, transition.duration or appconfig.VICTORY_TRANSITION_DURATION)
+    local coverProgress = math.max(0, math.min(1, elapsed / coverDuration))
+    local easedCoverProgress = coverProgress * coverProgress * (3 - (2 * coverProgress))
+    local fadeProgress = transition.switchedToWorld
+        and math.max(0, math.min(1, (elapsed - coverDuration) / math.max(0.01, totalDuration - coverDuration)))
+        or 0
+    local overlayAlpha = transition.switchedToWorld and (1 - fadeProgress) or 1
+    local fireEdgeX = math.floor(windowWidth * easedCoverProgress)
+    local fireBandWidth = appconfig.VICTORY_TRANSITION_FIRE_BAND_WIDTH
+    local fireBandLeft = math.max(0, fireEdgeX - fireBandWidth)
+    local smokeAlpha = 0.82 * overlayAlpha
+    local noiseSeed = (transition.seed or 1) + math.floor(elapsed * 72)
+
+    if transition.switchedToWorld then
+        gamestates.drawWorldStage(appState)
+    else
+        drawMissionStage()
+    end
+
+    local function noiseValue(index)
+        return (math.sin((noiseSeed + index) * 12.9898) * 43758.5453) % 1
+    end
+
+    local function noiseRange(index, minValue, maxValue)
+        return minValue + ((maxValue - minValue) * noiseValue(index))
+    end
+
+    if fireEdgeX > 0 then
+        love.graphics.setColor(0.025, 0.02, 0.018, smokeAlpha)
+        love.graphics.rectangle("fill", 0, 0, fireEdgeX, windowHeight)
+    end
+
+    for stripIndex = 1, appconfig.VICTORY_TRANSITION_SMOKE_STRIP_COUNT do
+        local stripX = math.floor(noiseRange(stripIndex * 6, -80, math.max(1, fireEdgeX)))
+        local stripY = math.floor(noiseRange((stripIndex * 6) + 1, -40, windowHeight))
+        local stripWidth = math.floor(noiseRange((stripIndex * 6) + 2, 80, 260))
+        local stripHeight = math.floor(noiseRange((stripIndex * 6) + 3, 24, 96))
+        local alpha = noiseRange((stripIndex * 6) + 4, 0.08, 0.26) * overlayAlpha
+
+        love.graphics.setColor(0.07, 0.065, 0.06, alpha)
+        love.graphics.rectangle("fill", stripX, stripY, stripWidth, stripHeight, 10, 10)
+    end
+
+    if not transition.switchedToWorld then
+        love.graphics.setColor(1, 0.18, 0.04, 0.82)
+        love.graphics.rectangle("fill", fireBandLeft, 0, math.max(1, fireEdgeX - fireBandLeft), windowHeight)
+        love.graphics.setColor(1, 0.74, 0.26, 0.58)
+        love.graphics.rectangle("fill", math.max(0, fireEdgeX - 14), 0, 14, windowHeight)
+    end
+
+    for emberIndex = 1, appconfig.VICTORY_TRANSITION_EMBER_COUNT do
+        local baseX = noiseRange(emberIndex * 7, fireBandLeft - 40, math.min(windowWidth + 40, fireEdgeX + 90))
+        local rise = (elapsed * noiseRange((emberIndex * 7) + 1, 42, 154)) % (windowHeight + 80)
+        local emberX = math.floor(baseX + math.sin(elapsed * noiseRange((emberIndex * 7) + 2, 1.2, 4.2)) * 18)
+        local emberY = math.floor(windowHeight - rise + noiseRange((emberIndex * 7) + 3, -24, 24))
+        local emberSize = math.floor(noiseRange((emberIndex * 7) + 4, 2, 6))
+        local alpha = noiseRange((emberIndex * 7) + 5, 0.22, 0.9) * overlayAlpha
+
+        if emberX >= -12 and emberX <= windowWidth + 12 and emberY >= -12 and emberY <= windowHeight + 12 then
+            if noiseValue((emberIndex * 7) + 6) < 0.7 then
+                love.graphics.setColor(1, 0.33, 0.06, alpha)
+            else
+                love.graphics.setColor(1, 0.84, 0.35, alpha)
+            end
+
+            love.graphics.rectangle("fill", emberX, emberY, emberSize, emberSize)
+        end
+    end
+
+    if transition.switchedToWorld then
+        love.graphics.setColor(0.02, 0.018, 0.016, 0.48 * overlayAlpha)
+        love.graphics.rectangle("fill", 0, 0, windowWidth, windowHeight)
+    end
+
+    love.graphics.setColor(1, 1, 1, 1)
+end
+
 function love.draw()
+    if appState.victoryTransition then
+        drawVictoryTransition(appState.victoryTransition)
+        return
+    end
+
     if appState.worldToMissionTransition then
         drawWorldToMissionTransition(appState.worldToMissionTransition)
         return

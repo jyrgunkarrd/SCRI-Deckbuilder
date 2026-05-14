@@ -76,6 +76,8 @@ local HUNTER_EMPHASIS_BADGE_TEXT_COLOR = { 0.92, 0.24, 0.24, 1 }
 local ALLY_OUTLINE_COLOR = { 0, 0.9176, 0.7647, 1 }
 local ALLY_LABEL_FILL_COLOR = { 0.02, 0.02, 0.03, 1 }
 local ALLY_LABEL_TEXT_COLOR = { 0, 0.9176, 0.7647, 1 }
+local CREW_OUTLINE_COLOR = { 1, 0.725, 0.337, 1 }
+local CREW_PLACEMENT_BRACKET_ALPHA = 0.62
 local KIA_BADGE_PULSE_SPEED = 4.5
 local KIA_BADGE_PULSE_MIN = 0.92
 local KIA_BADGE_PULSE_MAX = 1.06
@@ -197,6 +199,14 @@ local function getCardStyle(cardDefinition)
             outlineColor = ALLY_OUTLINE_COLOR,
             labelFillColor = ALLY_LABEL_FILL_COLOR,
             labelTextColor = ALLY_LABEL_TEXT_COLOR,
+        }
+    end
+
+    if cardDefinition and cardDefinition.type == "crew" then
+        return {
+            outlineColor = CREW_OUTLINE_COLOR,
+            labelFillColor = { 0.02, 0.02, 0.03, 1 },
+            labelTextColor = CREW_OUTLINE_COLOR,
         }
     end
 
@@ -365,15 +375,28 @@ local function appendAttachedKitKeywordIds(keywordIds, seenKeywordIds, card)
     end
 end
 
-local function getCardKeywordIds(cardDefinition, card)
+local function appendKeywordValueOverrideIds(keywordIds, seenKeywordIds, keywordValuesOverride)
+    for keywordId, keywordValue in pairs(keywordValuesOverride or {}) do
+        if (tonumber(keywordValue) or 0) > 0 and not seenKeywordIds[keywordId] then
+            keywordIds[#keywordIds + 1] = keywordId
+            seenKeywordIds[keywordId] = true
+        end
+    end
+end
+
+local function getCardKeywordIds(cardDefinition, card, keywordValuesOverride)
     if not cardDefinition then
         local temporaryKeywordIds = {}
+        local seenKeywordIds = {}
 
         for keywordId in pairs(card and card.tempKeywords or {}) do
             if temporaryeffects.hasTemporaryKeyword(card, keywordId) then
                 temporaryKeywordIds[#temporaryKeywordIds + 1] = keywordId
+                seenKeywordIds[keywordId] = true
             end
         end
+
+        appendKeywordValueOverrideIds(temporaryKeywordIds, seenKeywordIds, keywordValuesOverride)
 
         return temporaryKeywordIds
     end
@@ -389,6 +412,8 @@ local function getCardKeywordIds(cardDefinition, card)
             seenKeywordIds[keywordId] = true
         end
     end
+
+    appendKeywordValueOverrideIds(keywordIds, seenKeywordIds, keywordValuesOverride)
 
     if cardDefinition.type == "strategy" then
         local hasStrategistKeyword = false
@@ -829,15 +854,55 @@ local function drawRfcBadge(x, y, width, height, rfcValue, font, alpha)
     love.graphics.setFont(previousFont)
 end
 
-local function drawHealthFooter(x, y, width, height, padding, footerHeight, footerFont, healthValue, maxHealthValue, damagePreviewCount, blockedDamagePreviewCount, blockPreviewCount, healPreviewCount, blockingValue, alpha, methodEntries, pipColor, pipShape, card, rfcValue)
+local function drawButtonBadge(x, y, width, height, alpha)
+    local buttonSize = math.max(6, snap(height * 0.48))
+    local buttonX = snap(x + ((width - buttonSize) / 2))
+    local buttonY = snap(y + ((height - buttonSize) / 2))
+    local cornerRadius = math.max(2, snap(buttonSize * 0.18))
+
+    love.graphics.setColor(0.14, 0.035, 0.035, alpha)
+    love.graphics.rectangle("fill", x, y, width, height, 3, 3)
+    love.graphics.setColor(0.92, 0.58, 0.42, alpha)
+    love.graphics.rectangle("line", x, y, width, height, 3, 3)
+    love.graphics.setColor(1, 0.78, 0.54, alpha)
+    love.graphics.rectangle("fill", buttonX, buttonY, buttonSize, buttonSize, cornerRadius, cornerRadius)
+    love.graphics.setColor(0.14, 0.035, 0.035, alpha * 0.65)
+    love.graphics.rectangle("line", buttonX, buttonY, buttonSize, buttonSize, cornerRadius, cornerRadius)
+end
+
+local function getButtonBadgeRectForFooter(cardDefinition, x, y, width, height, padding, footerHeight, footerFont, methodEntries)
+    if not cardDefinition or cardDefinition.btn ~= true then
+        return nil
+    end
+
+    local _, badgeInset, badgeSize, badgeGap = getMethodBadgeLayout(width, footerHeight, padding, methodEntries)
+    local footerY = y + height - footerHeight
+    local buttonBadgeX = x + padding
+
+    if cardDefinition.rfc ~= nil then
+        buttonBadgeX = buttonBadgeX + getRfcBadgeWidth(badgeSize, cardDefinition.rfc, footerFont) + badgeGap
+    end
+
+    return {
+        x = buttonBadgeX,
+        y = footerY + badgeInset,
+        width = badgeSize,
+        height = badgeSize,
+    }
+end
+
+local function drawHealthFooter(x, y, width, height, padding, footerHeight, footerFont, healthValue, maxHealthValue, damagePreviewCount, blockedDamagePreviewCount, blockPreviewCount, healPreviewCount, blockingValue, alpha, methodEntries, pipColor, pipShape, card, rfcValue, hasButtonBadge)
     local footerY = y + height - footerHeight
     local expandedResources, badgeInset, badgeSize, badgeGap, totalBadgeWidth = getMethodBadgeLayout(width, footerHeight, padding, methodEntries)
     local badgesStartX = x + width - padding - totalBadgeWidth
     local hasRfcBadge = rfcValue ~= nil
+    local buttonBadgeWidth = hasButtonBadge and badgeSize or 0
     local rfcBadgeWidth = hasRfcBadge and getRfcBadgeWidth(badgeSize, rfcValue, footerFont) or 0
-    local rfcReservedWidth = hasRfcBadge and (rfcBadgeWidth + (badgeInset * 2)) or 0
-    local contentStartX = x + padding + rfcReservedWidth
-    local textWidth = width - (padding * 2) - rfcReservedWidth
+    local leftBadgeCount = (hasRfcBadge and 1 or 0) + (hasButtonBadge and 1 or 0)
+    local leftBadgeWidth = rfcBadgeWidth + buttonBadgeWidth + (math.max(0, leftBadgeCount - 1) * badgeGap)
+    local leftReservedWidth = leftBadgeCount > 0 and (leftBadgeWidth + (badgeInset * 2)) or 0
+    local contentStartX = x + padding + leftReservedWidth
+    local textWidth = width - (padding * 2) - leftReservedWidth
     local footerPipColor = pipColor or TROOP_HEALTH_PIP_COLOR
 
     love.graphics.setColor(0, 0, 0, alpha)
@@ -849,8 +914,18 @@ local function drawHealthFooter(x, y, width, height, padding, footerHeight, foot
         drawRfcBadge(x + padding, footerY + badgeInset, rfcBadgeWidth, badgeSize, rfcValue, footerFont, alpha)
     end
 
+    if hasButtonBadge then
+        local buttonBadgeX = x + padding
+
+        if hasRfcBadge then
+            buttonBadgeX = buttonBadgeX + rfcBadgeWidth + badgeGap
+        end
+
+        drawButtonBadge(buttonBadgeX, footerY + badgeInset, buttonBadgeWidth, badgeSize, alpha)
+    end
+
     if #expandedResources > 0 then
-        textWidth = width - (padding * 2) - rfcReservedWidth - totalBadgeWidth - badgeInset
+        textWidth = width - (padding * 2) - leftReservedWidth - totalBadgeWidth - badgeInset
 
         for resourceIndex, resourceName in ipairs(expandedResources) do
             local methodImage = getMethodImage(resourceName)
@@ -900,7 +975,7 @@ local function drawHealthFooter(x, y, width, height, padding, footerHeight, foot
 
     local maxColumnCount = HEALTH_PIP_COLUMNS
 
-    if hasRfcBadge then
+    if leftBadgeCount > 0 then
         maxColumnCount = math.min(maxColumnCount, math.max(1, math.ceil(maxTrackPipCount / 2)))
     end
 
@@ -1150,8 +1225,8 @@ local function drawCostBadges(cardDefinition, x, y, width, height)
     end
 end
 
-local function getKeywordBadgeRects(cardDefinition, x, y, width, reservedLeftWidth, card)
-    local keywordIds = getCardKeywordIds(cardDefinition, card)
+local function getKeywordBadgeRects(cardDefinition, x, y, width, reservedLeftWidth, card, keywordValuesOverride)
+    local keywordIds = getCardKeywordIds(cardDefinition, card, keywordValuesOverride)
     local badgeSize = math.max(18, snap(width * 0.18))
     local badgeInset = math.max(4, snap(width * 0.03))
     local badgeGap = math.max(4, snap(width * 0.02))
@@ -1207,7 +1282,7 @@ function carddraw.getKeywordBadgeRect(setName, cardId, drawX, drawY, options, ke
         or nil
     local reservedLeftWidth = costBadgeLayout and costBadgeLayout.occupiedWidth or 0
 
-    for _, badgeRect in ipairs(getKeywordBadgeRects(cardDefinition, snap(drawX), snap(drawY), snap(metrics.width), reservedLeftWidth, metrics.card)) do
+    for _, badgeRect in ipairs(getKeywordBadgeRects(cardDefinition, snap(drawX), snap(drawY), snap(metrics.width), reservedLeftWidth, metrics.card, metrics.keywordValues)) do
         if badgeRect.keywordId == keywordId then
             return badgeRect
         end
@@ -1313,7 +1388,7 @@ local function drawKeywordBadge(keywordId, badgeX, badgeY, badgeSize, keywordVal
 end
 
 local function drawKeywordBadges(cardDefinition, x, y, width, keywordValuesOverride, reservedLeftWidth, card)
-    for _, badgeRect in ipairs(getKeywordBadgeRects(cardDefinition, x, y, width, reservedLeftWidth, card)) do
+    for _, badgeRect in ipairs(getKeywordBadgeRects(cardDefinition, x, y, width, reservedLeftWidth, card, keywordValuesOverride)) do
         local keywordValue = getCardKeywordDefaultValue(cardDefinition, badgeRect.keywordId)
 
         if keywordValuesOverride and keywordValuesOverride[badgeRect.keywordId] ~= nil then
@@ -1756,6 +1831,83 @@ function carddraw.getHoveredDiceFace(setName, cardId, drawX, drawY, expansionPro
     return nil
 end
 
+function carddraw.getHoveredButtonBadge(setName, cardId, drawX, drawY, expansionProgress, options, mouseX, mouseY)
+    local cardDefinition = getCardDefinition(setName, cardId)
+
+    if not cardDefinition
+        or cardDefinition.btn ~= true
+        or (cardDefinition.btnheader == nil and cardDefinition.btntext == nil) then
+        return nil
+    end
+
+    local metrics = getCardMetrics(options)
+    local displayedHealth = metrics.currentHealth or cardDefinition.health
+
+    if displayedHealth == nil then
+        return nil
+    end
+
+    local clampedExpansion = clamp(expansionProgress or 0, 0, 1)
+    local renderWidth = snap(metrics.width)
+    local portraitHeight = snap(metrics.portraitHeight)
+    local labelHeight = snap(metrics.labelHeight)
+    local textboxHeight = snap(metrics.textboxHeight * clampedExpansion)
+    local footerHeight = snap(metrics.footerHeight)
+    local padding = snap(metrics.padding)
+    local footerFont = getCardFont(math.max(9, math.floor(14 * (renderWidth / CARD_WIDTH) * metrics.healthFontScale)))
+    local cardX = snap(drawX)
+    local cardY = snap(drawY)
+    local cardHeight = snap(lerp(metrics.collapsedHeight, metrics.expandedHeight, clampedExpansion))
+    local rect = nil
+
+    if metrics.showHealthOnPortrait then
+        rect = getButtonBadgeRectForFooter(
+            cardDefinition,
+            cardX,
+            cardY,
+            renderWidth,
+            portraitHeight,
+            padding,
+            footerHeight,
+            footerFont,
+            getCardMethodEntries(cardDefinition, metrics.card)
+        )
+    elseif textboxHeight > footerHeight then
+        rect = getButtonBadgeRectForFooter(
+            cardDefinition,
+            cardX,
+            cardY + portraitHeight + labelHeight,
+            renderWidth,
+            textboxHeight,
+            padding,
+            footerHeight,
+            footerFont,
+            getCardMethodEntries(cardDefinition, metrics.card)
+        )
+    end
+
+    if not rect
+        or mouseX < rect.x
+        or mouseX > rect.x + rect.width
+        or mouseY < rect.y
+        or mouseY > rect.y + rect.height then
+        return nil
+    end
+
+    return {
+        name = cardDefinition.btnheader or "",
+        text = cardDefinition.btntext or "",
+        cardX = cardX,
+        cardY = cardY,
+        cardWidth = renderWidth,
+        cardHeight = cardHeight,
+        badgeX = rect.x,
+        badgeY = rect.y,
+        badgeWidth = rect.width,
+        badgeHeight = rect.height,
+    }
+end
+
 function carddraw.getCardTargetBadgeRect(drawX, drawY, options, placeAboveHealthBar)
     local metrics = getCardMetrics(options)
     local renderWidth = snap(metrics.width)
@@ -1981,7 +2133,7 @@ function carddraw.getHoveredKeyword(setName, cardId, drawX, drawY, options, mous
         or nil
     local reservedLeftWidth = costBadgeLayout and costBadgeLayout.occupiedWidth or 0
 
-    for _, badgeRect in ipairs(getKeywordBadgeRects(cardDefinition, snap(drawX), snap(drawY), snap(metrics.width), reservedLeftWidth, metrics.card)) do
+    for _, badgeRect in ipairs(getKeywordBadgeRects(cardDefinition, snap(drawX), snap(drawY), snap(metrics.width), reservedLeftWidth, metrics.card, metrics.keywordValues)) do
         if mouseX >= badgeRect.x
             and mouseX <= badgeRect.x + badgeRect.size
             and mouseY >= badgeRect.y
@@ -2110,6 +2262,10 @@ function carddraw.drawDiceFaceTooltip(tooltip)
     love.graphics.setColor(1, 1, 1, 1)
 end
 
+function carddraw.drawButtonBadgeTooltip(tooltip)
+    carddraw.drawDiceFaceTooltip(tooltip)
+end
+
 function carddraw.drawCard(setName, cardId, x, y, options)
     return carddraw.drawCardState(setName, cardId, x, y, 0, options)
 end
@@ -2122,6 +2278,46 @@ function carddraw.preloadPortrait(setName, cardId)
     end
 
     return getPortrait(cardDefinition, setName)
+end
+
+function carddraw.preloadPortraitPath(portraitPath)
+    return getPortraitByPath(portraitPath)
+end
+
+function carddraw.preloadCardRenderAssets(setName, cardId, options)
+    local cardDefinition = getCardDefinition(setName, cardId)
+
+    if not cardDefinition then
+        return false
+    end
+
+    options = options or {}
+    getPortraitByPath(options.portraitPath)
+    getPortrait(cardDefinition, setName)
+
+    for _, badgeDefinition in ipairs(getBadgeDefinitions(cardDefinition, options.card)) do
+        getDiceImage(badgeDefinition)
+
+        if badgeDefinition and badgeDefinition.over then
+            getDiceOverlayImage(badgeDefinition.over)
+        end
+    end
+
+    for _, keywordId in ipairs(getCardKeywordIds(cardDefinition, options.card, options.keywordValues)) do
+        getKeywordImage(keywordId)
+    end
+
+    for _, methodName in ipairs(expandMethodEntries(getCardMethodEntries(cardDefinition, options.card))) do
+        getMethodImage(methodName)
+    end
+
+    if cardDefinition.mcost then
+        for _, costGroup in ipairs(cardDefinition.mcost) do
+            getMethodImage(costGroup.resource)
+        end
+    end
+
+    return true
 end
 
 function carddraw.getPortraitImage(setName, cardId, options)
@@ -2160,6 +2356,33 @@ function carddraw.drawPortraitPreview(setName, cardId, x, y, width, height, alph
     love.graphics.setColor(0.87, 0.87, 0.9, alpha)
     love.graphics.rectangle("line", x, y, width, height)
     love.graphics.setColor(1, 1, 1, 1)
+end
+
+local function drawCrewPlacementBrackets(drawX, drawY, width, height)
+    local inset = snap(math.max(7, width * 0.055))
+    local bracketLength = snap(math.max(18, math.min(width, height) * 0.18))
+    local x1 = snap(drawX + inset)
+    local y1 = snap(drawY + inset)
+    local x2 = snap(drawX + width - inset)
+    local y2 = snap(drawY + height - inset)
+    local previousLineWidth = love.graphics.getLineWidth()
+
+    love.graphics.setLineWidth(math.max(1, snap(width * 0.012)))
+    love.graphics.setColor(
+        CREW_OUTLINE_COLOR[1],
+        CREW_OUTLINE_COLOR[2],
+        CREW_OUTLINE_COLOR[3],
+        CREW_PLACEMENT_BRACKET_ALPHA
+    )
+    love.graphics.line(x1, y1, x1 + bracketLength, y1)
+    love.graphics.line(x1, y1, x1, y1 + bracketLength)
+    love.graphics.line(x2, y1, x2 - bracketLength, y1)
+    love.graphics.line(x2, y1, x2, y1 + bracketLength)
+    love.graphics.line(x1, y2, x1 + bracketLength, y2)
+    love.graphics.line(x1, y2, x1, y2 - bracketLength)
+    love.graphics.line(x2, y2, x2 - bracketLength, y2)
+    love.graphics.line(x2, y2, x2, y2 - bracketLength)
+    love.graphics.setLineWidth(previousLineWidth)
 end
 
 function carddraw.drawCardState(setName, cardId, x, y, expansionProgress, options)
@@ -2257,12 +2480,22 @@ function carddraw.drawCardState(setName, cardId, x, y, expansionProgress, option
     love.graphics.setColor(style.outlineColor[1], style.outlineColor[2], style.outlineColor[3], 1)
     love.graphics.rectangle("line", drawX, portraitY, renderWidth, portraitHeight)
 
+    if cardDefinition.type == "crew" then
+        local bracketHeight = portraitHeight
+
+        if displayedHealth ~= nil and metrics.showHealthOnPortrait then
+            bracketHeight = math.max(1, portraitHeight - snap(metrics.footerHeight))
+        end
+
+        drawCrewPlacementBrackets(drawX, portraitY, renderWidth, bracketHeight)
+    end
+
     if displayedHealth ~= nil and metrics.showHealthOnPortrait then
         if not metrics.showBadgesInTextbox then
             drawPortraitBadges(cardDefinition, metrics.card, drawX, portraitY, renderWidth, portraitHeight, snap(metrics.footerHeight))
         end
 
-        drawHealthFooter(drawX, portraitY, renderWidth, portraitHeight, snap(metrics.padding), snap(metrics.footerHeight), footerFont, displayedHealth, displayedMaxHealth, metrics.damagePreviewCount, metrics.blockedDamagePreviewCount, metrics.blockPreviewCount, metrics.healPreviewCount, metrics.blocking, 1, getCardMethodEntries(cardDefinition, metrics.card), footerPipColor, footerPipShape, metrics.card, cardDefinition.rfc)
+        drawHealthFooter(drawX, portraitY, renderWidth, portraitHeight, snap(metrics.padding), snap(metrics.footerHeight), footerFont, displayedHealth, displayedMaxHealth, metrics.damagePreviewCount, metrics.blockedDamagePreviewCount, metrics.blockPreviewCount, metrics.healPreviewCount, metrics.blocking, 1, getCardMethodEntries(cardDefinition, metrics.card), footerPipColor, footerPipShape, metrics.card, cardDefinition.rfc, cardDefinition.btn == true)
     elseif cardDefinition.mcost and not metrics.showHealthOnPortrait then
         drawCostBadges(cardDefinition, drawX, portraitY, renderWidth, portraitHeight)
     end
@@ -2361,7 +2594,7 @@ function carddraw.drawCardState(setName, cardId, x, y, expansionProgress, option
             end
 
             if displayedHealth ~= nil and textboxHeight > snap(metrics.footerHeight) and not metrics.showHealthOnPortrait then
-                drawHealthFooter(drawX, textY, renderWidth, textboxHeight, snap(metrics.padding), snap(metrics.footerHeight), footerFont, displayedHealth, displayedMaxHealth, metrics.damagePreviewCount, metrics.blockedDamagePreviewCount, metrics.blockPreviewCount, metrics.healPreviewCount, metrics.blocking, expansionProgress, getCardMethodEntries(cardDefinition, metrics.card), footerPipColor, footerPipShape, metrics.card, cardDefinition.rfc)
+                drawHealthFooter(drawX, textY, renderWidth, textboxHeight, snap(metrics.padding), snap(metrics.footerHeight), footerFont, displayedHealth, displayedMaxHealth, metrics.damagePreviewCount, metrics.blockedDamagePreviewCount, metrics.blockPreviewCount, metrics.healPreviewCount, metrics.blocking, expansionProgress, getCardMethodEntries(cardDefinition, metrics.card), footerPipColor, footerPipShape, metrics.card, cardDefinition.rfc, cardDefinition.btn == true)
             elseif cardDefinition.type == "strategy" and textboxHeight > snap(metrics.footerHeight) then
                 drawStrategyFooter(drawX, textY, renderWidth, textboxHeight, snap(metrics.footerHeight), footerFont, expansionProgress)
             end

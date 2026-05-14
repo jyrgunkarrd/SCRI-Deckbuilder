@@ -55,6 +55,7 @@ function gamestate.createInitialState()
         hoveredTopSlotId = nil,
         hoveredKeyword = nil,
         hoveredDiceFace = nil,
+        hoveredButtonBadge = nil,
         expandedGridCardIndex = nil,
         expandedTopSlotId = nil,
         selectedAttackerCardIndex = nil,
@@ -119,6 +120,7 @@ function gamestate.createInitialState()
         hasRenderedFirstFrame = false,
         pendingPhaseEntry = false,
         pendingSetupCompletion = false,
+        worldMapEncounterPreviewCache = {},
     }
 end
 

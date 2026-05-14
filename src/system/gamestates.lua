@@ -18,6 +18,12 @@ function gamestates.create()
         selectedRunJaclId = nil,
         selectedRunAgentIds = {},
         selectedRunPackage = nil,
+        worldResources = {
+            alms = 0,
+            fuel = 0,
+            munitions = 0,
+            tithes = 0,
+        },
     }
 end
 
@@ -31,6 +37,28 @@ end
 
 function gamestates.isWorldStage(state)
     return state and state.current == "WorldStage"
+end
+
+function gamestates.advancePlayerMapPosition(state)
+    if not state then
+        return nil
+    end
+
+    local nextMapPosition = gamestates.getNextPlayerMapPosition(state)
+
+    if nextMapPosition then
+        state.playerMapPosition = nextMapPosition
+    end
+
+    return nextMapPosition
+end
+
+function gamestates.getNextPlayerMapPosition(state)
+    if not state then
+        return nil
+    end
+
+    return worldmapdraw.getNextMapPosition(state.playerMapPosition)
 end
 
 function gamestates.updateFileSelect(state, dt, deps)

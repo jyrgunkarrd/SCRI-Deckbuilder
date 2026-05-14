@@ -112,6 +112,7 @@ function gamestatedraw.draw(ctx)
 
     for cardIndex, card in ipairs(ctx.cards) do
         if not ctx.isCardDestroyed(card)
+            and not (ctx.crewrules and ctx.crewrules.isCrewCovered(ctx.cards, cardIndex))
             and not card.returningToHandAnimation
             and not card.mulliganInAnimation
             and not card.mulliganOutAnimation
@@ -128,6 +129,7 @@ function gamestatedraw.draw(ctx)
 
     if ctx.hoveredCardIndex
         and ctx.hoveredCardIndex ~= ctx.expandedGridCardIndex
+        and not (ctx.crewrules and ctx.crewrules.isCrewCovered(ctx.cards, ctx.hoveredCardIndex))
         and not ctx.cards[ctx.hoveredCardIndex].returningToHandAnimation
         and not ctx.cards[ctx.hoveredCardIndex].pilotVehicleAnimation
         and not ctx.cards[ctx.hoveredCardIndex].hunterAutoPlayAnimation
@@ -140,6 +142,7 @@ function gamestatedraw.draw(ctx)
 
     if ctx.expandedGridCardIndex
         and ctx.expandedGridCardIndex ~= ctx.draggedCardIndex
+        and not (ctx.crewrules and ctx.crewrules.isCrewCovered(ctx.cards, ctx.expandedGridCardIndex))
         and not ctx.cards[ctx.expandedGridCardIndex].returningToHandAnimation
         and not ctx.cards[ctx.expandedGridCardIndex].pilotVehicleAnimation
         and not ctx.cards[ctx.expandedGridCardIndex].hunterAutoPlayAnimation
@@ -406,6 +409,8 @@ function gamestatedraw.draw(ctx)
         end
 
         ctx.carddraw.drawDiceFaceTooltip(ctx.hoveredDiceFace)
+    elseif ctx.hoveredButtonBadge then
+        ctx.carddraw.drawButtonBadgeTooltip(ctx.hoveredButtonBadge)
     elseif (ctx.hoveredTomeSpawnPreviewCardEntries and #ctx.hoveredTomeSpawnPreviewCardEntries > 0)
         or (ctx.hoveredTomeSpawnPreviewCards and #ctx.hoveredTomeSpawnPreviewCards > 0) then
         local sourceCardIndex = ctx.hoveredTomeSpawnPreviewCardIndex or ctx.hoveredCardIndex

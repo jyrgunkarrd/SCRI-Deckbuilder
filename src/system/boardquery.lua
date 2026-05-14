@@ -1,4 +1,5 @@
 local engagerules = require("src.system.engagerules")
+local crewrules = require("src.system.crewrules")
 
 local boardquery = {}
 
@@ -24,7 +25,8 @@ function boardquery.getGridCardAt(ctx, mouseX, mouseY, ignoredCardIndex)
         if cardIndex ~= ignoredCardIndex
             and not ctx.isCardUnavailable(card)
             and card.location
-            and card.location.kind == "grid" then
+            and card.location.kind == "grid"
+            and not crewrules.isCrewCovered(ctx.state.cards, cardIndex) then
             local drawX, drawY, expansionProgress, renderOptions = ctx.getCardDrawPosition(card, cardIndex)
 
             if ctx.carddraw.isPointInsideDrawnCard(mouseX, mouseY, drawX, drawY, expansionProgress, nil, renderOptions) then
@@ -40,7 +42,9 @@ function boardquery.getCardAt(ctx, mouseX, mouseY, ignoredCardIndex)
     for cardIndex = #ctx.state.cards, 1, -1 do
         local card = ctx.state.cards[cardIndex]
 
-        if cardIndex ~= ignoredCardIndex and not ctx.isCardUnavailable(card) then
+        if cardIndex ~= ignoredCardIndex
+            and not ctx.isCardUnavailable(card)
+            and not crewrules.isCrewCovered(ctx.state.cards, cardIndex) then
             local drawX, drawY, expansionProgress, renderOptions = ctx.getCardDrawPosition(card, cardIndex)
 
             if ctx.carddraw.isPointInsideDrawnCard(mouseX, mouseY, drawX, drawY, expansionProgress, nil, renderOptions) then

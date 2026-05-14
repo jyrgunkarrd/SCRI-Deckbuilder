@@ -8,10 +8,11 @@ local nodeencounters = {
             "WZ0001B",
         },
         standardPackages = {
-            "STANDARDDEMOPKG",
+            "BSCPKG",
         },
         modularPackages = {
-            "DEMOPKG",
+            "ZEKPKG",
+            "DOTPKG",
         },
     },
 }

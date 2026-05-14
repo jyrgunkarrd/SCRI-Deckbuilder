@@ -82,11 +82,128 @@ local decks = {
         },
     },
 
-    --- Champion decks ---
+    --- Testbed decks ---
+
+        {
+            id = "Demo",
+            name = "Enemy Testbed",
+            cards = {
+                {
+                    cardId = "EN0001",
+                    quantity = 1,
+                },
+            },
+        },
+
+        --- Champion Decks ---
+
+
+        {
+            id = "PAMDCK",
+            name = "PAM",
+            cards = {
+                {
+                    cardId = "ENEXTDRVWSP",
+                    quantity = 2,
+                },
+
+                {
+                    cardId = "ENJNGLWSP",
+                    quantity = 2,
+                },
+
+                {
+                    cardId = "ENCLKMKR",
+                    quantity = 1,
+                },
+            },
+        },
+
+        --- Modular Packages ---
+
+        {
+            id = "DEMOPKG",
+            name = "Demo package",
+            cards = {
+                {
+                    cardId = "ENBISH",
+                    quantity = 1,
+                },
+
+            },
+        },
+
+        {
+            id = "ZEKDCK",
+            name = "Airship Ezekiel",
+            cards = {
+                {
+                    cardId = "ENZEK",
+                    quantity = 1,
+                },
+
+                {
+                    cardId = "ENFOG",
+                    quantity = 1,
+                },
+
+                {
+                    cardId = "ENADVACE",
+                    quantity = 1,
+                },
+            },
+        },
+
+        {
+            id = "DOTDCK",
+            name = "Red Dot's Gang",
+            cards = {
+                {
+                    cardId = "ENDOT",
+                    quantity = 1,
+                },
+
+                {
+                    cardId = "ENFID",
+                    quantity = 1,
+                },
+
+                {
+                    cardId = "ENFDOH",
+                    quantity = 1,
+                },
+
+                {
+                    cardId = "ENOCTO",
+                    quantity = 1,
+                },
+
+                {
+                    cardId = "ENWAGN",
+                    quantity = 1,
+                },
+
+            },
+        },
+
+        --- Standard Packages ---
+
+
+        {
+            id = "STDPKG",
+            name = "Standard Demo package",
+            cards = {
+                {
+                    cardId = "EN0001",
+                    quantity = 1,
+                },
+
+            },
+        },
 
         {
             id = "BSCDCK",
-            name = "Sermon City Basic",
+            name = "Standard Sermon City Deck",
             cards = {
                 {
                     cardId = "ENBISH",
@@ -121,46 +238,6 @@ local decks = {
                     quantity = 1,
                 },
             },
-        },
-
-        {
-            id = "Demo",
-            name = "Enemy Testbed",
-            cards = {
-                {
-                    cardId = "ENSTRD",
-                    quantity = 10,
-                },
-            },
-        },
-
-        --- Champion Decks ---
-
-
-        {
-            id = "PAMDCK",
-            name = "PAM",
-            cards = {
-                {
-                    cardId = "ENEXTDRVWSP",
-                    quantity = 5,
-                },
-            },
-        },
-
-        --- Modular Packages ---
-
-        {
-            id = "DEMOPKG",
-            name = "Demo package",
-        },
-
-        --- Standard Packages ---
-
-
-        {
-            id = "STDPKG",
-            name = "Standard Demo package",
         },
 
 }

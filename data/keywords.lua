@@ -107,6 +107,13 @@ local keywords = {
             text = "If this card is reduced to half of its health or less, its die faces are multiplied by 2.",
         },
 
+        {
+            id = "KWBOOM",
+            name = "Boom",
+            text = "If this card is destroyed, all cards in its row take damage.",
+            hasvalue = 1,
+        },
+
         --- Conditions ---
 
         {

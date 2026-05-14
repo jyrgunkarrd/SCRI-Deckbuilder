@@ -421,6 +421,25 @@ local function getHoveredPackageIndex(state, x, y)
     return nil
 end
 
+local function buildStartingWorldResources(jaclDefinition)
+    local resources = {
+        alms = 0,
+        fuel = 0,
+        munitions = 0,
+        tithes = 0,
+    }
+
+    for _, resourceEntry in ipairs(jaclDefinition and jaclDefinition.startRes or {}) do
+        local resourceType = resourceEntry and resourceEntry.type or nil
+
+        if resourceType then
+            resources[resourceType] = math.max(0, math.floor(tonumber(resourceEntry.amount) or 0))
+        end
+    end
+
+    return resources
+end
+
 local function commitPackageSelection(state, packageIndex)
     local package = packageIndex
         and state
@@ -444,6 +463,7 @@ local function commitPackageSelection(state, packageIndex)
     state.selectedRunPackageIndex = packageIndex
     state.selectedRunJaclId = package.jacl and package.jacl.id or nil
     state.selectedRunAgentIds = agentIds
+    state.worldResources = buildStartingWorldResources(package.jacl)
     state.selectedRunPackage = {
         packageIndex = packageIndex,
         jaclId = state.selectedRunJaclId,

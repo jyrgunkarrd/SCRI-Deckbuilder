@@ -6,6 +6,7 @@ local cardlifecycle = {}
 local INCAP_SET_NAME = "troops"
 local INCAP_CARD_ID = "INCAP"
 local INCAP_RECOVERY_ANIMATION_DURATION = 0.58
+local BOOM_KEYWORD_ID = "KWBOOM"
 
 local function copyMethodEntries(methodEntries)
     local copiedEntries = {}
@@ -45,6 +46,43 @@ local function applyEnemyDefeatChampionDamage(ctx, card)
     return true
 end
 
+local function applyBoomKeywordDamage(ctx, cardIndex, card)
+    local state = ctx and ctx.state or nil
+    local cardDefinition = ctx and card and ctx.cardregistry.getCard(card.setName, card.cardId) or nil
+
+    if not state
+        or not card
+        or card.boomKeywordDamageApplied
+        or not card.location
+        or card.location.kind ~= "grid"
+        or not card.location.rowId
+        or not ctx.dealDamageToCard
+        or not keywordrules.cardHasKeyword(cardDefinition, BOOM_KEYWORD_ID, card) then
+        return false
+    end
+
+    local boomDamage = math.max(0, tonumber(keywordrules.getCardKeywordValue(card, cardDefinition, BOOM_KEYWORD_ID)) or 0)
+
+    if boomDamage <= 0 then
+        return false
+    end
+
+    card.boomKeywordDamageApplied = true
+
+    for targetCardIndex, targetCard in ipairs(state.cards or {}) do
+        if targetCardIndex ~= cardIndex
+            and targetCard
+            and targetCard.location
+            and targetCard.location.kind == "grid"
+            and targetCard.location.rowId == card.location.rowId
+            and not cardlifecycle.isCardUnavailable(targetCard) then
+            ctx.dealDamageToCard(targetCard, boomDamage)
+        end
+    end
+
+    return true
+end
+
 local function resolveDefeatedCard(ctx, cardIndex, card)
     local state = ctx and ctx.state or nil
 
@@ -54,6 +92,7 @@ local function resolveDefeatedCard(ctx, cardIndex, card)
 
     local attachedKitCards = card.attachedKitCards
 
+    applyBoomKeywordDamage(ctx, cardIndex, card)
     cardlifecycle.releaseAttachedKits(ctx, card)
     ctx.resolveDestroyedTroopCard(cardIndex, attachedKitCards)
 
@@ -106,6 +145,8 @@ local function transformDefeatedAgentToIncap(ctx, card, cardIndex)
     card.maxHealth = nil
     card.blocking = nil
     card.keywordValues = nil
+    card.passiveGrowthHealthBonus = nil
+    card.boomKeywordDamageApplied = nil
     card.dieFaceOverrides = nil
     card.attachedKitCards = nil
     card.attachedPilotCard = nil
@@ -163,6 +204,8 @@ function cardlifecycle.restoreIncapAgentIfRecovered(ctx, card)
     card.maxHealth = nil
     card.blocking = nil
     card.keywordValues = nil
+    card.passiveGrowthHealthBonus = nil
+    card.boomKeywordDamageApplied = nil
     card.dieFaceOverrides = nil
     card.method = nil
     card.associatedAgent = nil

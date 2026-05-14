@@ -8,7 +8,9 @@ local GROWTH_KEYWORD_ID = "KWGRO"
 local TOUGH_KEYWORD_ID = "KWTOUGH"
 local RAGE_KEYWORD_ID = "KWRAGE"
 local WOUND_KEYWORD_ID = "KWWOUND"
+local CARD_SCRIPT_MODULE_PREFIX = "data.cards.scripts."
 local exhaustedKeywordInstances = {}
+local cardScriptHandlers = {}
 
 local enemyChampionHandlers = {
     enemy_champion_play_another_card = function()
@@ -66,6 +68,69 @@ local function loadKeywords()
     end
 end
 
+local function getCardScriptHandler(funcName)
+    if not funcName then
+        return nil
+    end
+
+    local scriptName = tostring(funcName)
+
+    if cardScriptHandlers[scriptName] ~= nil then
+        return cardScriptHandlers[scriptName]
+    end
+
+    local ok, handler = pcall(require, CARD_SCRIPT_MODULE_PREFIX .. scriptName)
+
+    if ok and type(handler) == "table" then
+        cardScriptHandlers[scriptName] = handler
+        return handler
+    end
+
+    if not ok and not tostring(handler):find("module '" .. CARD_SCRIPT_MODULE_PREFIX .. scriptName .. "' not found", 1, true) then
+        error(handler)
+    end
+
+    cardScriptHandlers[scriptName] = false
+    return nil
+end
+
+local function appendPassiveScriptKeywordIds(keywordIds, seenKeywordIds, cardDefinition, card)
+    local handler = cardDefinition and getCardScriptHandler(cardDefinition.func) or nil
+
+    if not handler or type(handler.getPassiveKeywordIds) ~= "function" then
+        return
+    end
+
+    for _, keywordId in ipairs(handler.getPassiveKeywordIds(card, cardDefinition) or {}) do
+        if keywordId and not seenKeywordIds[keywordId] then
+            keywordIds[#keywordIds + 1] = keywordId
+            seenKeywordIds[keywordId] = true
+        end
+    end
+end
+
+local function getPassiveScriptKeywordValue(card, cardDefinition, keywordId)
+    local handler = cardDefinition and getCardScriptHandler(cardDefinition.func) or nil
+
+    if not handler or type(handler.getPassiveKeywordValue) ~= "function" then
+        return nil
+    end
+
+    local keywordValue = handler.getPassiveKeywordValue(card, cardDefinition, keywordId)
+
+    if keywordValue == nil then
+        return nil
+    end
+
+    keywordValue = math.max(0, tonumber(keywordValue) or 0)
+
+    if keywordValue <= 0 then
+        return nil
+    end
+
+    return keywordValue
+end
+
 function keywordrules.getCardKeywordIds(cardDefinition, card)
     local keywordIds = {}
     local seenKeywordIds = {}
@@ -89,6 +154,8 @@ function keywordrules.getCardKeywordIds(cardDefinition, card)
     for _, attachedDefinition in ipairs(getAttachedKitDefinitions(card)) do
         appendKeywordIds(keywordIds, seenKeywordIds, attachedDefinition)
     end
+
+    appendPassiveScriptKeywordIds(keywordIds, seenKeywordIds, cardDefinition, card)
 
     return keywordIds
 end
@@ -366,11 +433,42 @@ function keywordrules.getCardKeywordValue(card, cardDefinition, keywordId)
         end
     end
 
+    local passiveKeywordValue = getPassiveScriptKeywordValue(card, cardDefinition, keywordId)
+
+    if passiveKeywordValue ~= nil then
+        keywordValue = keywordValue + passiveKeywordValue
+        hasKeywordValue = true
+    end
+
     if not hasKeywordValue then
         return nil
     end
 
     return keywordValue
+end
+
+function keywordrules.syncPassiveGrowthHealth(card, cardDefinition)
+    if not card or not cardDefinition or card.currentHealth == nil or card.maxHealth == nil then
+        return nil
+    end
+
+    local passiveGrowthValue = getPassiveScriptKeywordValue(card, cardDefinition, GROWTH_KEYWORD_ID) or 0
+    local previousPassiveGrowthValue = math.max(0, tonumber(card.passiveGrowthHealthBonus) or 0)
+    local delta = passiveGrowthValue - previousPassiveGrowthValue
+
+    if delta == 0 then
+        return passiveGrowthValue
+    end
+
+    local currentMaxHealth = math.max(0, tonumber(card.maxHealth) or 0)
+    local updatedMaxHealth = math.max(0, currentMaxHealth + delta)
+    local updatedCurrentHealth = math.max(0, tonumber(card.currentHealth) or 0) + delta
+
+    card.maxHealth = updatedMaxHealth
+    card.currentHealth = math.max(0, math.min(updatedCurrentHealth, updatedMaxHealth))
+    card.passiveGrowthHealthBonus = passiveGrowthValue > 0 and passiveGrowthValue or nil
+
+    return passiveGrowthValue
 end
 
 function keywordrules.getCardKeywordValues(card, cardDefinition)

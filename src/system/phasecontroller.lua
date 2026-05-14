@@ -1,6 +1,7 @@
 local phasecontroller = {}
 local REGEN_KEYWORD_ID = "KWREGEN"
 local keywordrules = require("src.system.keywordrules")
+local crewrules = require("src.system.crewrules")
 local CACHE_CARD_TYPE = "cache"
 local MEAT_CACHE_CARD_ID = "MEATTOK"
 local WOUND_KEYWORD_ID = "KWWOUND"
@@ -471,10 +472,12 @@ local function resolveRetaliation(gameState, deps, retaliation)
         and gameState.activePrimaryObjective
         and gameState.activePrimaryObjective.id == retaliation.targetCard.objectiveId then
         deps.addObjectiveProgress(gameState.activePrimaryObjective, retaliation.damageValue or 0)
+        applyRetaliationSideEffects(gameState, deps, retaliation)
 
     elseif retaliation.targetType == "WZOpp"
         and gameState.activeWarzone then
         deps.addWarzoneControl(gameState.activeWarzone, -(retaliation.damageValue or 0), "warzone")
+        applyRetaliationSideEffects(gameState, deps, retaliation)
 
     elseif retaliation.targetType == "IntCD"
         and retaliation.targetCard
@@ -482,6 +485,7 @@ local function resolveRetaliation(gameState, deps, retaliation)
         and gameState.activeIntel
         and gameState.activeIntel.id == retaliation.targetCard.objectiveId then
         deps.addObjectiveProgress(gameState.activeIntel, -(retaliation.damageValue or 0), "intel")
+        applyRetaliationSideEffects(gameState, deps, retaliation)
 
     elseif retaliation.targetType == "Inf"
         and retaliation.targetCard
@@ -490,6 +494,7 @@ local function resolveRetaliation(gameState, deps, retaliation)
 
         if generatedCardDefinition then
             deps.beginInfiltrationEffect(retaliation.entityKey, generatedCardDefinition, retaliation.damageValue or 0)
+            applyRetaliationSideEffects(gameState, deps, retaliation)
         end
 
     elseif retaliation.targetType == "smn" or retaliation.targetType == "rsmn" then
@@ -501,7 +506,9 @@ local function resolveRetaliation(gameState, deps, retaliation)
 
     else
         local targetCard = gameState.cards[retaliation.targetCardIndex]
-        local shouldApplyAreaDamage = targetCard and not deps.isCardUnavailable(targetCard)
+        local shouldApplyAreaDamage = targetCard
+            and not deps.isCardUnavailable(targetCard)
+            and not crewrules.isCardProtectedByCover(gameState.cards, targetCard)
 
         if shouldApplyAreaDamage then
             local damageResult = deps.dealDamageToCard(targetCard, retaliation.damageValue or 0)
@@ -625,6 +632,9 @@ function phasecontroller.enterCurrentPhase(gameState, deps)
             deps.resolveHuntersInHand()
         else
             deps.playHunterAddedSfxForCards(gameState.cards)
+        end
+        if deps.addStartingCrewCards then
+            deps.addStartingCrewCards()
         end
         deps.addSetupAgents()
         deps.normalizeSetupCardSlots()

@@ -6,6 +6,14 @@ local damagerules = {}
 local TOUGH_KEYWORD_ID = "KWTOUGH"
 local BULLETPROOF_KEYWORD_ID = "KWBULLETPROOF"
 
+local function syncPassiveGrowthHealth(card)
+    local cardDefinition = card and cardregistry.getCard(card.setName, card.cardId) or nil
+
+    if keywordrules.syncPassiveGrowthHealth then
+        keywordrules.syncPassiveGrowthHealth(card, cardDefinition)
+    end
+end
+
 local function applyDamageLimitKeywords(card, damageAmount)
     local limitedDamage = math.max(0, tonumber(damageAmount) or 0)
 
@@ -54,6 +62,7 @@ function damagerules.dealDamageToCard(card, amount)
             end
         end
         appliedDamage = appliedDamage - blockedDamage
+        syncPassiveGrowthHealth(card)
     end
 
     local preKeywordDamage = appliedDamage
@@ -121,6 +130,7 @@ function damagerules.addBlockingToCard(card, amount, options)
     local addedBlocking = math.max(0, tonumber(amount) or 0)
 
     card.blocking = previousBlocking + addedBlocking
+    syncPassiveGrowthHealth(card)
 
     if options and options.carryEnemyGuard == true and addedBlocking > 0 then
         card.enemyGuardCarryBlock = math.max(0, tonumber(card.enemyGuardCarryBlock) or 0) + addedBlocking
@@ -149,6 +159,8 @@ function damagerules.clearAllBlocking(cards)
                 card.blocking = nil
                 card.enemyGuardCarryBlock = nil
             end
+
+            syncPassiveGrowthHealth(card)
         end
     end
 end
@@ -164,6 +176,8 @@ function damagerules.clearEnemyGuardCarryBlocking(cards)
             if card.blocking <= 0 then
                 card.blocking = nil
             end
+
+            syncPassiveGrowthHealth(card)
         end
     end
 end

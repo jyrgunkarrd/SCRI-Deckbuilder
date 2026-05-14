@@ -24,6 +24,7 @@ local CLICK_SFX_PATH = "assets/audio/sfx/click.wav"
 local GO_SFX_PATH = "assets/audio/sfx/go.wav"
 local MISSION_START_SFX_PATH = "assets/audio/sfx/missionstart.wav"
 local RESTORED_SFX_PATH = "assets/audio/sfx/restored.wav"
+local CHAMPION_DEFEAT_SFX_DIRECTORY = "assets/audio/sfx/"
 
 local hoverSource = nil
 local resourceMoveSource = nil
@@ -49,6 +50,7 @@ local clickSource = nil
 local goSource = nil
 local missionStartSource = nil
 local restoredSource = nil
+local championDefeatSources = {}
 
 local function getHoverSource()
     if hoverSource ~= nil then
@@ -266,6 +268,26 @@ local function getRestoredSource()
     return restoredSource
 end
 
+local function getChampionDefeatSource(fileName)
+    if not fileName or fileName == "" then
+        return nil
+    end
+
+    local safeFileName = tostring(fileName):match("[^/\\]+$")
+    local sourcePath = safeFileName and (CHAMPION_DEFEAT_SFX_DIRECTORY .. safeFileName) or nil
+
+    if not sourcePath or not love.filesystem.getInfo(sourcePath) then
+        return nil
+    end
+
+    if championDefeatSources[sourcePath] ~= nil then
+        return championDefeatSources[sourcePath]
+    end
+
+    championDefeatSources[sourcePath] = love.audio.newSource(sourcePath, "static")
+    return championDefeatSources[sourcePath]
+end
+
 function sfxrules.playHover()
     local source = getHoverSource():clone()
     source:play()
@@ -384,6 +406,17 @@ end
 function sfxrules.playRestored()
     local source = getRestoredSource():clone()
     source:play()
+end
+
+function sfxrules.playChampionDefeat(fileName)
+    local source = getChampionDefeatSource(fileName)
+
+    if not source then
+        return false
+    end
+
+    source:clone():play()
+    return true
 end
 
 return sfxrules

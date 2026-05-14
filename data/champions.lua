@@ -30,6 +30,7 @@ local champions = {
         D4 = "BDMG2",
         D5 = "BDMG1",
         D6 = "BDMG1",
+        defeat = "fem-defeat.wav",
     },
 }
 

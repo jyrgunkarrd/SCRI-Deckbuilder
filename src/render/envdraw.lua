@@ -13,6 +13,7 @@ local CHAMP_IMAGE_DIRECTORY = "assets/images/champ/"
 local OBJECTIVE_IMAGE_DIRECTORY = "assets/images/objectives/"
 local WARZONE_IMAGE_DIRECTORY = "assets/images/warzone/"
 local METHOD_IMAGE_DIRECTORY = "assets/images/method/"
+local MAP_IMAGE_DIRECTORY = "assets/images/map/"
 local JACL_LABEL_FONT_PATH = "assets/fonts/Furore.otf"
 local CHAMP_LABEL_FONT_PATH = "assets/fonts/Furore.otf"
 local PHASE_TRACKER_FONT_PATH = "assets/fonts/Furore.otf"
@@ -88,6 +89,9 @@ local RESOURCE_TRACKER_COUNTER_GAP = 6
 local RESOURCE_TRACKER_ROW_STEP = 108
 local RESOURCE_TRACKER_COUNTER_WIDTH = 72
 local RESOURCE_TRACKER_COUNTER_FONT_SIZE = 26
+local SYSTEM_BADGE_COUNT = 5
+local SYSTEM_BADGE_OUTLINE_COLOR = { 0.549, 1, 0.871, 1 }
+local SYSTEM_BADGE_INNER_FILL_COLOR = { 0.075, 0.082, 0.095, 0.92 }
 local RESOURCE_EXCHANGE_MODAL_MARGIN = 24
 local RESOURCE_EXCHANGE_MODAL_PADDING = 28
 local RESOURCE_TRACKER_COLUMNS = {
@@ -180,6 +184,7 @@ local getObjectiveImage
 local getWarzoneImage
 local getFont
 local getMethodImage
+local getMapImage
 
 local function lerp(a, b, t)
     return a + ((b - a) * t)
@@ -228,7 +233,8 @@ local function buildResourceGridLayout(startX, startY, metrics)
     local resourceHitBoxes = {}
 
     for columnIndex, column in ipairs(RESOURCE_TRACKER_COLUMNS) do
-        local columnX = startX + ((columnIndex - 1) * (metrics.columnWidth + metrics.columnGap))
+        local columnOffset = metrics.columnOffsets and metrics.columnOffsets[columnIndex] or 0
+        local columnX = startX + ((columnIndex - 1) * (metrics.columnWidth + metrics.columnGap)) + columnOffset
 
         for rowIndex, resourceName in ipairs(column.resources) do
             if resourceName then
@@ -261,6 +267,7 @@ local function buildResourceGridLayout(startX, startY, metrics)
         counterGap = metrics.counterGap,
         rowStep = metrics.rowStep,
         counterWidth = metrics.counterWidth,
+        columnOffsets = metrics.columnOffsets,
         resourceCenters = resourceCenters,
         resourceHitBoxes = resourceHitBoxes,
     }
@@ -271,7 +278,8 @@ local function drawResourceGrid(layout, resourceCounts)
     local resourceValues = resourceCounts or {}
 
     for columnIndex, column in ipairs(RESOURCE_TRACKER_COLUMNS) do
-        local columnX = layout.startX + ((columnIndex - 1) * (layout.columnWidth + layout.columnGap))
+        local columnOffset = layout.columnOffsets and layout.columnOffsets[columnIndex] or 0
+        local columnX = layout.startX + ((columnIndex - 1) * (layout.columnWidth + layout.columnGap)) + columnOffset
 
         for rowIndex, resourceName in ipairs(column.resources) do
             if resourceName then
@@ -304,6 +312,67 @@ local function drawResourceGrid(layout, resourceCounts)
     end
 
     love.graphics.setFont(previousFont)
+    love.graphics.setColor(1, 1, 1, 1)
+end
+
+local function drawSystemBadgeColumn(layout)
+    if not layout then
+        return
+    end
+
+    local boxSize = layout.iconSize
+    local boxX = layout.startX - layout.columnGap - boxSize
+    local image = getMapImage("systems.png") or getMapImage("system.png")
+
+    for systemIndex = 1, SYSTEM_BADGE_COUNT do
+        local rowY = layout.startY + ((systemIndex - 1) * layout.rowStep)
+        local cornerRadius = math.max(3, math.floor(boxSize * 0.075))
+        local inset = math.max(3, math.floor(boxSize * 0.075))
+
+        love.graphics.setColor(0.025, 0.028, 0.035, 0.9)
+        love.graphics.rectangle("fill", boxX, rowY, boxSize, boxSize, cornerRadius, cornerRadius)
+        love.graphics.setColor(
+            SYSTEM_BADGE_OUTLINE_COLOR[1],
+            SYSTEM_BADGE_OUTLINE_COLOR[2],
+            SYSTEM_BADGE_OUTLINE_COLOR[3],
+            SYSTEM_BADGE_OUTLINE_COLOR[4]
+        )
+        love.graphics.rectangle("line", boxX, rowY, boxSize, boxSize, cornerRadius, cornerRadius)
+        love.graphics.setColor(
+            SYSTEM_BADGE_INNER_FILL_COLOR[1],
+            SYSTEM_BADGE_INNER_FILL_COLOR[2],
+            SYSTEM_BADGE_INNER_FILL_COLOR[3],
+            SYSTEM_BADGE_INNER_FILL_COLOR[4]
+        )
+        love.graphics.rectangle(
+            "fill",
+            boxX + inset,
+            rowY + inset,
+            boxSize - (inset * 2),
+            boxSize - (inset * 2),
+            math.max(2, cornerRadius - 1),
+            math.max(2, cornerRadius - 1)
+        )
+
+        if image then
+            local imagePadding = math.max(6, math.floor(boxSize * 0.14))
+            local imageSize = boxSize - (imagePadding * 2)
+            local imageScale = math.min(imageSize / image:getWidth(), imageSize / image:getHeight())
+            local imageWidth = image:getWidth() * imageScale
+            local imageHeight = image:getHeight() * imageScale
+
+            love.graphics.setColor(1, 1, 1, 1)
+            love.graphics.draw(
+                image,
+                boxX + ((boxSize - imageWidth) * 0.5),
+                rowY + ((boxSize - imageHeight) * 0.5),
+                0,
+                imageScale,
+                imageScale
+            )
+        end
+    end
+
     love.graphics.setColor(1, 1, 1, 1)
 end
 
@@ -1076,6 +1145,31 @@ function getMethodImage(resourceName)
     end
 
     local imagePath = METHOD_IMAGE_DIRECTORY .. resourceName .. ".png"
+
+    if not love.filesystem.getInfo(imagePath) then
+        imageCache[cacheKey] = false
+        return nil
+    end
+
+    imageCache[cacheKey] = love.graphics.newImage(imagePath, {
+        mipmaps = true,
+    })
+    imageCache[cacheKey]:setFilter("linear", "linear")
+    return imageCache[cacheKey]
+end
+
+getMapImage = function(fileName)
+    if not fileName then
+        return nil
+    end
+
+    local cacheKey = "map:" .. fileName
+
+    if imageCache[cacheKey] ~= nil then
+        return imageCache[cacheKey]
+    end
+
+    local imagePath = MAP_IMAGE_DIRECTORY .. fileName
 
     if not love.filesystem.getInfo(imagePath) then
         imageCache[cacheKey] = false
@@ -2000,6 +2094,22 @@ local function buildResourceTrackerLayout()
     local metrics = getResourceGridMetrics(nil, availableHeight)
     local startX = windowWidth - RESOURCE_TRACKER_MARGIN_X - metrics.width
     local startY = math.max(0, (gridTopY - metrics.height) / 2)
+    local topRow = gridLayout.rows[1]
+    local rightmostCell = topRow and topRow.cells and topRow.cells[#topRow.cells] or nil
+
+    if rightmostCell then
+        local secondColumnX = startX + metrics.columnWidth + metrics.columnGap
+        local visibleColumnWidth = math.max(metrics.iconSize, metrics.counterWidth)
+        local currentRightEdge = secondColumnX + ((metrics.columnWidth + visibleColumnWidth) / 2)
+        local targetRightEdge = rightmostCell.x + rightmostCell.width
+        local rightColumnOffset = math.min(0, targetRightEdge - currentRightEdge)
+
+        if rightColumnOffset < 0 then
+            metrics.columnOffsets = {
+                [2] = rightColumnOffset,
+            }
+        end
+    end
 
     return buildResourceGridLayout(startX, startY, metrics)
 end
@@ -2010,6 +2120,7 @@ end
 
 function envdraw.drawResourceTracker(resourceCounts)
     local layout = buildResourceTrackerLayout()
+    drawSystemBadgeColumn(layout)
     drawResourceGrid(layout, resourceCounts)
 end
 

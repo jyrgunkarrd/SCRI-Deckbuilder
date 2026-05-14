@@ -37,6 +37,7 @@ function contextassembly.build(contextbuilders, c)
             addCardKeywordValue = c.addCardKeywordValue,
             addObjectiveProgress = c.addObjectiveProgress,
             addSetupAgents = c.addSetupAgents,
+            addStartingCrewCards = c.addStartingCrewCards,
             addWarzoneControl = c.addWarzoneControl,
             applyModalState = c.applyModalState,
             beginEndPhaseSacrificeSelection = c.beginEndPhaseSacrificeSelection,

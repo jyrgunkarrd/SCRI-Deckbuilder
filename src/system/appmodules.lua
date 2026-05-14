@@ -22,6 +22,7 @@ local appmodules = {
     championrules = require("src.system.championrules"),
     contextassembly = require("src.system.contextassembly"),
     contextbuilders = require("src.system.contextbuilders"),
+    crewrules = require("src.system.crewrules"),
     deckrules = require("src.system.deckrules"),
     engagerules = require("src.system.engagerules"),
     envrules = require("src.system.envrules"),

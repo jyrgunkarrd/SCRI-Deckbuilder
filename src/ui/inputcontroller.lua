@@ -5,6 +5,7 @@ local function clearHoverAndExpansion(gameState)
     gameState.expandedTopSlotId = nil
     gameState.hoveredCardIndex = nil
     gameState.hoveredKeyword = nil
+    gameState.hoveredButtonBadge = nil
     gameState.hoveredCardAbilityPreviewCards = nil
     gameState.hoveredCardAbilityPreviewLabel = nil
     gameState.hoveredCardAbilityPreviewDefinition = nil

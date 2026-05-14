@@ -401,9 +401,345 @@ local enemies = {
         D6 = "ORBSMN",
     },
 
+    ---=== MODULAR PACKAGES ===---
+
+    --- Ezekiel ---
+
+        -- Captain --
+    {
+        id = "ENZEK",
+        name = "The Ezekiel",
+        classname = "Enemy",
+        subclass = "Troop",
+        flavor = "\"None have ventured further from Sermon City. And whatever they've seen out there, it only seems to have redoubled their loyalties.\"",
+        health = 10,
+        max = 10,
+        keyword = { "KWTOUGH", "KWFLY" },
+        encounter = {
+            spawns = {
+                { enemyId = "ENADV", count = 2 },
+            },
+        },
+        preview = {
+            label = "SQUAD",
+            cards = {
+                { "ENADV", quantity = 2 },
+            },
+        },
+        rfc = 8,
+        D1 = "PDMG4",
+        D2 = "PDMG4",
+        D3 = "ADVSMN",
+        D4 = "ADVSMN",
+        D5 = "ADVSMN",
+        D6 = "ADVSMN",
+    },
+
+    {
+        id = "ENFOG",
+        name = "Fogbank",
+        classname = "Enemy",
+        subclass = "Troop",
+        flavor = "\"Only a fool would refuse loyalty to those who have the weather's obedience.\"",
+        health = 3,
+        max = 3,
+        textbox = "This card gains Growth equal to its Block.",
+        func = "ENFOGFUNC",
+        keyword = { "KWEVA" },
+        encounter = {
+            spawns = {
+                { enemyId = "ENSTRM", count = 2 },
+            },
+        },
+        preview = {
+            label = "SQUAD",
+            cards = {
+                { "ENSTRM", quantity = 2 },
+            },
+        },
+        rfc = 3,
+        D1 = "OBJBLK2",
+        D2 = "OBJBLK2",
+        D3 = "THRBLK2",
+        D4 = "THRBLK2",
+        D5 = "CQDMG2",
+        D6 = "CQDMG2",
+    },
+
+    {
+        id = "ENADVACE",
+        artId = "ENADV",
+        name = "Advent Squadron",
+        classname = "Enemy",
+        subclass = "Troop",
+        flavor = "\"Good pilots. Great bootlickers.\"",
+        health = 2,
+        max = 2,
+        keyword = { "KWFLY" },
+        encounter = {
+            spawns = {
+                { enemyId = "ENSKY", count = 2 },
+            },
+        },
+        preview = {
+            label = "SQUAD",
+            cards = {
+                { "ENSKY", quantity = 2 },
+            },
+        },
+        rfc = 2,
+        D1 = "BDMG2",
+        D2 = "BDMG2",
+        D3 = "BDMG1",
+        D4 = "NUL",
+        D5 = "NUL",
+        D6 = "NUL",
+    },
+
+        -- Subordinate --
+
+        {
+            id = "ENADV",
+            name = "Advent Squadron",
+            classname = "Enemy",
+            subclass = "Troop",
+            flavor = "\"Good pilots. Great bootlickers.\"",
+            health = 2,
+            max = 2,
+            keyword = { "KWFLY" },
+            rfc = 2,
+            D1 = "BDMG2",
+            D2 = "BDMG2",
+            D3 = "BDMG1",
+            D4 = "NUL",
+            D5 = "NUL",
+            D6 = "NUL",
+        },
+
+        {
+            id = "ENSTRM",
+            name = "Storm Rider",
+            classname = "Enemy",
+            subclass = "Troop",
+            flavor = "\"It's amazing what people will sign-up for just to play with some cool toys.\"",
+            health = 4,
+            max = 4,
+            keyword = { "KWEVA" },
+            rfc = 3,
+            D1 = "EXORNGDMG5",
+            D2 = "EXORNGDMG5",
+            D3 = "BDMG3",
+            D4 = "BDMG3",
+            D5 = "CQDMG2",
+            D6 = "CQDMG1",
+        },
+
+        {
+            id = "ENSKY",
+            name = "Sky Wolf",
+            classname = "Enemy",
+            subclass = "Troop",
+            flavor = "\"Slaughter and payment are one and the same to them.\"",
+            health = 1,
+            max = 1,
+            keyword = { "KWFLY" },
+            rfc = 2,
+            D1 = "ARDMG1",
+            D2 = "ARDMG1",
+            D3 = "BDMG2",
+            D4 = "BDMG2",
+            D5 = "NUL",
+            D6 = "NUL",
+        },
+
+    --- Red Dot's Gang ---
+
+        -- Captain --
+        
+        {
+            id = "ENDOT",
+            artId = "ENDOT",
+            name = "Red Dot",
+            classname = "Enemy",
+            subclass = "Troop",
+            flavor = "\"It is necessity, not loyalty. Their mayhem would lose its glow without the contrast of the police state.\"",
+            health = 4,
+            max = 4,
+            keyword = { "KWBULLETPROOF" },
+            encounter = {
+                spawns = {
+                    { enemyId = "ENTKO", count = 2 },
+                },
+            },
+            preview = {
+                label = "SQUAD",
+                cards = {
+                    { "ENTKO", quantity = 2 },
+                },
+            },
+            rfc = 6,
+            D1 = "RNGDMG6",
+            D2 = "RNGDMG6",
+            D3 = "RNGDMG4",
+            D4 = "RNGDMG4",
+            D5 = "CQDMG2",
+            D6 = "CQDMG2",
+        },
+
+                
+        {
+            id = "ENFID",
+            artId = "ENFID",
+            name = "The Fiddler",
+            classname = "Enemy",
+            subclass = "Troop",
+            flavor = "\"She's hoping to one day make someone scream until they sound like a string instrument.\"",
+            health = 8,
+            max = 8,
+            keyword = { "KWCNTR", "KWTOUGH" },
+            kwval = {
+                KWCNTR = 1,
+            },
+            encounter = {
+                spawns = {
+                    { enemyId = "ENTKO", count = 2 },
+                },
+            },
+            preview = {
+                label = "SQUAD",
+                cards = {
+                    { "ENTKO", quantity = 2 },
+                },
+            },
+            rfc = 10,
+            D1 = "PDMG6",
+            D2 = "PDMG6",
+            D3 = "PDMG4",
+            D4 = "PDMG4",
+            D5 = "CQDMG3",
+            D6 = "CQDMG3",
+        },
+
+        {
+            id = "ENFDOH",
+            artId = "ENFDOH",
+            name = "Fey Doh",
+            classname = "Enemy",
+            subclass = "Troop",
+            flavor = "\"It is whatever it wants to be. And usually that's not great for everything else around it.\"",
+            health = 3,
+            max = 3,
+            keyword = { "KWBULLETPROOF", "KWRAGE" },
+            encounter = {
+                spawns = {
+                    { enemyId = "ENTKO", count = 2 },
+                },
+            },
+            preview = {
+                label = "SQUAD",
+                cards = {
+                    { "ENTKO", quantity = 2 },
+                },
+            },
+            rfc = 5,
+            D1 = "CQDMG2",
+            D2 = "CQDMG2",
+            D3 = "CQDMG1",
+            D4 = "CQDMG1",
+            D5 = "NUL",
+            D6 = "NUL",
+        },
+
+        {
+            id = "ENOCTO",
+            artId = "ENOCTO",
+            name = "Octopuss",
+            classname = "Enemy",
+            subclass = "Troop",
+            flavor = "\"...It's true. They put a cat's brain in there.\"",
+            health = 14,
+            max = 14,
+            keyword = { "KWRAGE" },
+            encounter = {
+                spawns = {
+                    { enemyId = "ENTKO", count = 2 },
+                },
+            },
+            preview = {
+                label = "SQUAD",
+                cards = {
+                    { "ENTKO", quantity = 2 },
+                },
+            },
+            rfc = 16,
+            D1 = "WDMG2",
+            D2 = "WDMG2",
+            D3 = "CQDMG2",
+            D4 = "CQDMG2",
+            D5 = "NUL",
+            D6 = "NUL",
+        },
+
+        {
+            id = "ENWAGN",
+            artId = "ENWAGN",
+            name = "Wagon",
+            classname = "Enemy",
+            subclass = "Troop",
+            flavor = "\"It'd make a Hell of a bang.\"",
+            health = 10,
+            max = 10,
+            keyword = { "KWBOOM" },
+            kwval = {
+                KWBOOM = 5,
+            },
+            encounter = {
+                spawns = {
+                    { enemyId = "ENTKO", count = 2 },
+                },
+            },
+            preview = {
+                label = "SQUAD",
+                cards = {
+                    { "ENTKO", quantity = 2 },
+                },
+            },
+            rfc = 12,
+            D1 = "AWDMG1",
+            D2 = "AWDMG1",
+            D3 = "CQDMG2",
+            D4 = "CQDMG2",
+            D5 = "ADMG1",
+            D6 = "ADMG1",
+        },
+
+        -- Subordinate --
+
+        {
+            id = "ENTKO",
+            artId = "ENTKO",
+            name = "TKO",
+            classname = "Enemy",
+            subclass = "Troop",
+            flavor = "\"Some just need to hit something as hard as possible. Something that will feel it.\"",
+            health = 6,
+            max = 6,
+            keyword = { "KWTOUGH" },
+            rfc = 8,
+            D1 = "HCQDMG6",
+            D2 = "CQDMG3",
+            D3 = "CQDMG3",
+            D4 = "CQDMG2",
+            D5 = "CQDMG2",
+            D6 = "NUL",
+        },
+
+
+    ---=== CHAMPION DECKS ===---
+
     --- PAM Deck ---
 
-        --- Captains ---
+        -- Captains --
 
         {
             id = "ENEXTDRVWSP",
@@ -428,6 +764,7 @@ local enemies = {
                 label = "SQUAD",
                 cards = {
                     { "ENPLDRV", quantity = 2 },
+                    { "ENLWSP", quantity = 2 },
                 },
             },
             rfc = 3,
@@ -439,8 +776,85 @@ local enemies = {
             D6 = "NUL",
         },
 
-        --- Subordinates ---
+        {
+            id = "ENJNGLWSP",
+            name = "Mercenary Jungler",
+            artId = "ENJNGMRC",
+            classname = "Enemy",
+            subclass = "Troop",
+            flavor = "\"They figured out how to control us well before we figured out how to control them.\"",
+            health = 5,
+            max = 5,
+            encounter = {
+                spawns = {
+                    { enemyId = "ENPLDRV", count = 1 },
+                    { enemyId = "ENLWSP", count = 2 },
+                },
+            },
+            preview = {
+                label = "SQUAD",
+                cards = {
+                    { "ENPLDRV", quantity = 1 },
+                    { "ENLWSP", quantity = 2 },
+                },
+            },
+            rfc = 3,
+            D1 = "IMMACRNGDMG3",
+            D2 = "IMMACRNGDMG3",
+            D3 = "CQDMG2",
+            D4 = "CQDMG2",
+            D5 = "NUL",
+            D6 = "NUL",
+        },
 
+        {
+            id = "ENCLKMKR",
+            name = "Clocker",
+            artId = "ENCLKMKR",
+            classname = "Enemy",
+            subclass = "Troop",
+            flavor = "\"If he can't buy you, he'll clock you.\"",
+            health = 12,
+            max = 12,
+            encounter = {
+                spawns = {
+                    { enemyId = "ENJNGMRC", count = 2 },
+                },
+            },
+            preview = {
+                label = "SQUAD",
+                cards = {
+                    { "ENJNGMRC", quantity = 2 },
+                },
+            },
+            rfc = 15,
+            D1 = "CLKATKSMN2",
+            D2 = "CLKATKSMN",
+            D3 = "CLKATKSMN",
+            D4 = "CLKATKSMN",
+            D5 = "NUL",
+            D6 = "NUL",
+        },
+
+        -- Subordinates --
+
+        {
+            id = "ENJNGMRC",
+            name = "Mercenary Jungler",
+            artId = "ENJNGMRC",
+            classname = "Enemy",
+            subclass = "Troop",
+            flavor = "\"They figured out how to control us well before we figured out how to control them.\"",
+            health = 5,
+            max = 5,
+            rfc = 3,
+            D1 = "IMMACRNGDMG3",
+            D2 = "IMMACRNGDMG3",
+            D3 = "CQDMG2",
+            D4 = "CQDMG2",
+            D5 = "NUL",
+            D6 = "NUL",
+        },
 
         {
             id = "ENPLDRV",
@@ -502,6 +916,25 @@ local enemies = {
             D2 = "LWSPATKSMN",
             D3 = "LWSPATKSMN",
             D4 = "NUL",
+            D5 = "NUL",
+            D6 = "NUL",
+        },
+
+        {
+            id = "ENCLK",
+            name = "Clocked",
+            artId = "ENCLK",
+            classname = "Enemy",
+            subclass = "Troop",
+            flavor = "\"They're clocked. Forget 'em.\"",
+            keyword = { "KWRAGE" },
+            health = 2,
+            max = 2,
+            rfc = 1,
+            D1 = "PDMG3",
+            D2 = "PDMG3",
+            D3 = "CQDMG2",
+            D4 = "CQDMG2",
             D5 = "NUL",
             D6 = "NUL",
         },
