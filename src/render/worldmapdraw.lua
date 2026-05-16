@@ -11,6 +11,8 @@ local worldloadoutdraw = require("src.render.worldloadoutdraw")
 local munitionsrules = require("src.system.munitionsrules")
 local tithesrules = require("src.system.tithesrules")
 local worldrewardmodal = require("src.ui.worldrewardmodal")
+local cardrewardmodal = require("src.ui.cardrewardmodal")
+local rewarddebug = require("src.system.rewarddebug")
 local jaclDefinitions = require("data.jacl")
 
 local CARD_FONT_PATH = "assets/fonts/Furore.otf"
@@ -789,7 +791,18 @@ local function getSelectedRunLoadoutDeckSourceAt(state, x, y)
     return worldloadoutdraw.getDeckSourceAt(state, x, y)
 end
 
-local function buildPreviewDeck(deckSource)
+local function getCardRewardIdsForDeckSource(state, deckSource)
+    if not state or not deckSource or not deckSource.rewardOwnerKind or not deckSource.rewardOwnerId then
+        return nil
+    end
+
+    local rewards = state.selectedRunCardRewards or {}
+    local bucket = deckSource.rewardOwnerKind == "jacl" and rewards.jacl or rewards.agents
+
+    return bucket and bucket[deckSource.rewardOwnerId] or nil
+end
+
+local function buildPreviewDeck(state, deckSource)
     local definition = deckSource and deckSource.definition or nil
     local candidateDeckIds = {}
 
@@ -810,6 +823,11 @@ local function buildPreviewDeck(deckSource)
 
         if deck then
             deck.owner = "worldstage"
+            deckrules.addCardIds(deck, getCardRewardIdsForDeckSource(state, deckSource), {
+                owner = "worldstage",
+                insertRandomly = false,
+                source = "reward-preview",
+            })
             deck.displayTitle = deckSource.title or definition.name or deck.name
             return deck
         end
@@ -819,7 +837,7 @@ local function buildPreviewDeck(deckSource)
 end
 
 local function openWorldMapDeckModal(state, deckSource, deps)
-    local deck = buildPreviewDeck(deckSource)
+    local deck = buildPreviewDeck(state, deckSource)
 
     if not state or not deck then
         return false
@@ -861,6 +879,11 @@ local function buildMissionLaunchPayload(state, hoveredNode)
     local preview = hoveredNode and hoveredNode.preview or nil
 
     if not state or not preview then
+        rewarddebug.log("buildMissionLaunchPayload.skip", {
+            hasState = state ~= nil,
+            hasHoveredNode = hoveredNode ~= nil,
+            hasPreview = preview ~= nil,
+        })
         return nil
     end
 
@@ -869,6 +892,7 @@ local function buildMissionLaunchPayload(state, hoveredNode)
         agentIds = {},
         championAdditionalDeckIds = {},
         prize = preview.prize,
+        cardrw = preview.cardrw,
     }
 
     for _, agentId in ipairs(state.selectedRunAgentIds or {}) do
@@ -892,8 +916,18 @@ local function buildMissionLaunchPayload(state, hoveredNode)
     end
 
     if not payload.jaclId or #payload.agentIds <= 0 or not payload.championId or not payload.warzoneId then
+        rewarddebug.log("buildMissionLaunchPayload.incomplete", payload)
         return nil
     end
+
+    rewarddebug.log("buildMissionLaunchPayload.ok", {
+        prize = payload.prize,
+        cardrw = payload.cardrw,
+        jaclId = payload.jaclId,
+        agentIds = payload.agentIds,
+        championId = payload.championId,
+        warzoneId = payload.warzoneId,
+    })
 
     return payload
 end
@@ -1565,7 +1599,7 @@ function worldmapdraw.updateHover(state, deps)
         return
     end
 
-    if state.worldMapRewardModal then
+    if state.worldMapRewardModal or state.worldMapCardRewardModal then
         state.hoveredWorldMapNode = nil
         state.pinnedWorldMapNode = nil
         state.worldMapDeckModal = nil
@@ -1598,8 +1632,48 @@ function worldmapdraw.updateHover(state, deps)
     end
 end
 
-function worldmapdraw.updateRewardModal(state, dt)
-    return worldrewardmodal.update(state, dt)
+function worldmapdraw.updateRewardModal(state, dt, deps)
+    local hadRewardModal = state and state.worldMapRewardModal ~= nil
+    local pendingCardReward = state
+        and (state.pendingWorldMapCardReward or (state.worldMapRewardModal and state.worldMapRewardModal.cardrw))
+        or nil
+    local updated = worldrewardmodal.update(state, dt)
+
+    if hadRewardModal and state and not state.worldMapRewardModal and not state.worldMapCardRewardModal and pendingCardReward then
+        rewarddebug.log("updateRewardModal.openAfterRewardModal", {
+            pendingCardReward = pendingCardReward,
+        })
+
+        if cardrewardmodal.open(state, {
+            poolId = "universal",
+            count = 3,
+            cardrw = pendingCardReward,
+        }) then
+            state.pendingWorldMapCardReward = nil
+        else
+            rewarddebug.log("updateRewardModal.openAfterRewardModal.failed", {
+                pendingCardReward = pendingCardReward,
+            })
+        end
+    elseif state and not state.worldMapRewardModal and not state.worldMapCardRewardModal and pendingCardReward then
+        rewarddebug.log("updateRewardModal.openPending", {
+            pendingCardReward = pendingCardReward,
+        })
+
+        if cardrewardmodal.open(state, {
+            poolId = "universal",
+            count = 3,
+            cardrw = pendingCardReward,
+        }) then
+            state.pendingWorldMapCardReward = nil
+        else
+            rewarddebug.log("updateRewardModal.openPending.failed", {
+                pendingCardReward = pendingCardReward,
+            })
+        end
+    end
+
+    return updated or cardrewardmodal.update(state, dt, deps)
 end
 
 function worldmapdraw.mousepressed(state, x, y, button, deps)
@@ -1609,6 +1683,10 @@ function worldmapdraw.mousepressed(state, x, y, button, deps)
 
     if state.worldMapRewardModal then
         return worldrewardmodal.mousepressed(state, x, y, button, deps)
+    end
+
+    if state.worldMapCardRewardModal then
+        return cardrewardmodal.mousepressed(state, x, y, button, deps)
     end
 
     if state.worldMapObjectivePreviewModal then
@@ -1682,7 +1760,7 @@ function worldmapdraw.mousepressed(state, x, y, button, deps)
 end
 
 function worldmapdraw.wheelmoved(state, _, y)
-    if worldrewardmodal.wheelmoved(state) then
+    if worldrewardmodal.wheelmoved(state) or cardrewardmodal.wheelmoved(state) then
         return true
     end
 
@@ -2066,7 +2144,7 @@ function worldmapdraw.draw(state)
     local playerMapPosition = getPlayerMapPosition(state)
     local nextMapPosition = getNextMapPosition(playerMapPosition)
 
-    local suppressMapElements = state and state.worldMapRewardModal
+    local suppressMapElements = state and (state.worldMapRewardModal or state.worldMapCardRewardModal)
 
     love.graphics.clear(0.045, 0.047, 0.055, 1)
 
@@ -2230,6 +2308,7 @@ function worldmapdraw.draw(state)
     end
 
     worldrewardmodal.draw(state)
+    cardrewardmodal.draw(state)
 end
 
 return worldmapdraw

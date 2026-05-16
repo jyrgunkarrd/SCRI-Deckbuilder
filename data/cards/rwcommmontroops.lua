@@ -7,13 +7,24 @@ local rwcommmontroops = {
 
     {
         id = "CMNDEMO",
-        name = "Common Demo",
+        name = "Common Demo B6",
         type = "troop",
         classname = "Demo",
         subclass = "Troop",
         func = "deathdraw",
         rarity = "common",
-        poolId = "universal",
+        poolId = "AGT0001",
+    },
+
+    {
+        id = "CMNDEMO2",
+        name = "Common Demo Mam",
+        type = "troop",
+        classname = "Demo",
+        subclass = "Troop",
+        func = "deathdraw",
+        rarity = "uncommon",
+        poolId = "AGT0002",
     },
 }
 

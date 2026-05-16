@@ -93,6 +93,8 @@ local function addPreviewDeckTarget(state, x, y, width, height, source)
         height = height,
         definition = source.definition,
         title = source.name or source.id,
+        rewardOwnerKind = source.rewardOwnerKind,
+        rewardOwnerId = source.rewardOwnerId,
     }
 end
 
@@ -239,6 +241,8 @@ function worldloadoutdraw.getDeckSourceAt(state, x, y)
         return {
             definition = jaclDefinition,
             title = jaclDefinition and jaclDefinition.name or "JACL",
+            rewardOwnerKind = "jacl",
+            rewardOwnerId = state.selectedRunJaclId,
         }
     end
 
@@ -247,7 +251,8 @@ function worldloadoutdraw.getDeckSourceAt(state, x, y)
     for agentIndex = 1, 2 do
         local agentX = layout.x + layout.jaclWidth + layout.gap + ((agentIndex - 1) * (layout.agentWidth + layout.gap))
         local agentY = layout.y + layout.jaclHeight - layout.agentHeight
-        local agentDefinition = getTroopById(agentIds[agentIndex])
+        local agentId = agentIds[agentIndex]
+        local agentDefinition = getTroopById(agentId)
 
         if agentDefinition
             and carddraw.isPointInsideCard(x, y, agentX, agentY, 0, {
@@ -257,6 +262,8 @@ function worldloadoutdraw.getDeckSourceAt(state, x, y)
             return {
                 definition = agentDefinition,
                 title = agentDefinition.name or agentDefinition.id,
+                rewardOwnerKind = "agent",
+                rewardOwnerId = agentId,
             }
         end
     end
@@ -278,6 +285,8 @@ function worldloadoutdraw.draw(state)
     addPreviewDeckTarget(state, layout.x, layout.y, layout.jaclWidth, layout.jaclHeight - layout.jaclLabelHeight, {
         definition = jaclDefinition,
         name = jaclDefinition and jaclDefinition.name or "JACL",
+        rewardOwnerKind = "jacl",
+        rewardOwnerId = state.selectedRunJaclId,
     })
 
     for agentIndex = 1, 2 do
@@ -295,6 +304,8 @@ function worldloadoutdraw.draw(state)
             addPreviewDeckTarget(state, agentX, agentY, layout.agentWidth, layout.agentHeight, {
                 definition = agentDefinition,
                 name = agentDefinition.name or agentDefinition.id,
+                rewardOwnerKind = "agent",
+                rewardOwnerId = agentId,
             })
         else
             drawEmptyAgentLoadoutCard(agentX, agentY, layout.agentWidth, layout.agentHeight)

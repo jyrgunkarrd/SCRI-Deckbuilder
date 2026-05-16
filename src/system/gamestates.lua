@@ -20,6 +20,10 @@ function gamestates.create()
         selectedRunPackage = nil,
         selectedRunMunitionsSystem = nil,
         selectedRunTitheSystem = nil,
+        selectedRunCardRewards = {
+            jacl = {},
+            agents = {},
+        },
         worldResources = {
             alms = 0,
             fuel = 0,
@@ -30,6 +34,8 @@ function gamestates.create()
         activeMissionReward = nil,
         worldMapRewardModal = nil,
         worldMapRewardCollectButtonTarget = nil,
+        pendingWorldMapCardReward = nil,
+        worldMapCardRewardModal = nil,
     }
 end
 
@@ -86,7 +92,7 @@ end
 function gamestates.updateWorldStage(state, dt, deps)
     runsetupmodal.ensure(state)
     runsetupmodal.update(state, dt, deps)
-    worldmapdraw.updateRewardModal(state, dt)
+    worldmapdraw.updateRewardModal(state, dt, deps)
 
     if state.runSetupModal and state.runSetupModal.isOpen then
         state.hoveredWorldMapNode = nil
@@ -108,6 +114,16 @@ function gamestates.updateWorldStage(state, dt, deps)
         return
     end
 
+    if state.worldMapCardRewardModal then
+        state.hoveredWorldMapNode = nil
+        state.pinnedWorldMapNode = nil
+        state.worldMapDeckModal = nil
+        state.worldMapObjectivePreviewModal = nil
+        state.worldMapNodePlayButtonTarget = nil
+        state.worldMapNodePlayButtonTargets = nil
+        return
+    end
+
     worldmapdraw.updateHover(state, deps)
 end
 
@@ -116,7 +132,7 @@ function gamestates.keypressedFileSelect(_, key)
 end
 
 function gamestates.keypressedWorldStage(state, key)
-    if state and state.worldMapRewardModal then
+    if state and (state.worldMapRewardModal or state.worldMapCardRewardModal) then
         return true
     end
 
@@ -136,6 +152,10 @@ function gamestates.keypressedWorldStage(state, key)
     state.selectedRunPackage = nil
     state.selectedRunMunitionsSystem = nil
     state.selectedRunTitheSystem = nil
+    state.selectedRunCardRewards = {
+        jacl = {},
+        agents = {},
+    }
     state.hoveredWorldMapNode = nil
     state.pinnedWorldMapNode = nil
     state.worldMapDeckModal = nil
@@ -144,6 +164,8 @@ function gamestates.keypressedWorldStage(state, key)
     state.worldMapNodePlayButtonTargets = nil
     state.worldMapRewardModal = nil
     state.worldMapRewardCollectButtonTarget = nil
+    state.pendingWorldMapCardReward = nil
+    state.worldMapCardRewardModal = nil
     state.activeMissionPrize = nil
     state.activeMissionReward = nil
     state.saveSlots = fileselect.getSaveSlots()
@@ -156,7 +178,7 @@ function gamestates.mousepressedFileSelect(state, x, y, button, deps)
 end
 
 function gamestates.mousepressedWorldStage(state, x, y, button, deps)
-    if state and state.worldMapRewardModal then
+    if state and (state.worldMapRewardModal or state.worldMapCardRewardModal) then
         return worldmapdraw.mousepressed(state, x, y, button, deps)
     end
 

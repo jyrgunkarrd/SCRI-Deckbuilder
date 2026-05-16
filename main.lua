@@ -40,6 +40,7 @@ objectiverules = appmodules.objectiverules
 phasecontroller = appmodules.phasecontroller
 previewrules = appmodules.previewrules
 resourcerules = appmodules.resourcerules
+rewarddebug = appmodules.rewarddebug
 spawnbridge = appmodules.spawnbridge
 strategyrules = appmodules.strategyrules
 systemrules = appmodules.systemrules
@@ -91,13 +92,28 @@ local function getMissionRewardAlms()
 end
 
 local function setActiveMissionReward(reward)
+    local previousReward = appState.activeMissionReward
     local alms = math.max(0, math.floor(tonumber(reward and reward.alms) or 0))
     local resourceKey = reward and reward.resourceKey or nil
     local resourceAmount = math.max(0, math.floor(tonumber(reward and reward.resourceAmount) or 0))
+    local cardrw = reward and reward.cardrw or previousReward and previousReward.cardrw or nil
+
+    if rewarddebug and rewarddebug.log then
+        rewarddebug.log("setActiveMissionReward", {
+            alms = alms,
+            resourceKey = resourceKey,
+            resourceAmount = resourceAmount,
+            cardrw = cardrw,
+            incomingCardrw = reward and reward.cardrw or nil,
+            previousCardrw = previousReward and previousReward.cardrw or nil,
+            source = reward and reward.source or nil,
+        })
+    end
 
     appState.activeMissionReward = {
         alms = alms,
         source = reward and reward.source or nil,
+        cardrw = cardrw,
     }
 
     if resourceKey and resourceAmount > 0 then
@@ -179,6 +195,8 @@ local function beginVictoryTransition()
     appState.worldMapNodePlayButtonTargets = nil
     appState.worldMapRewardModal = nil
     appState.worldMapRewardCollectButtonTarget = nil
+    appState.pendingWorldMapCardReward = nil
+    appState.worldMapCardRewardModal = nil
     appState.worldToMissionTransition = nil
 end
 
@@ -331,16 +349,36 @@ local function completeVictoryTransitionToWorld(transition)
     appState.worldMapNodePlayButtonTargets = nil
     appState.worldMapRewardModal = nil
     appState.worldMapRewardCollectButtonTarget = nil
+    appState.pendingWorldMapCardReward = nil
+    appState.worldMapCardRewardModal = nil
     transition.switchedToWorld = true
 
     local reward = appState.activeMissionReward
     local prize = getMissionRewardAlms()
+    local resourceAmount = math.max(0, math.floor(tonumber(reward and reward.resourceAmount) or 0))
+    local hasCurrencyReward = prize > 0 or (reward and reward.resourceKey and resourceAmount > 0)
 
-    if prize > 0 or (reward and reward.resourceKey and (tonumber(reward.resourceAmount) or 0) > 0) then
+    if rewarddebug and rewarddebug.log then
+        rewarddebug.log("completeVictoryTransitionToWorld.reward", {
+            hasReward = reward ~= nil,
+            prize = prize,
+            resourceKey = reward and reward.resourceKey or nil,
+            resourceAmount = resourceAmount,
+            cardrw = reward and reward.cardrw or nil,
+            hasCurrencyReward = hasCurrencyReward,
+        })
+    end
+
+    if reward and reward.cardrw then
+        appState.pendingWorldMapCardReward = reward.cardrw
+    end
+
+    if hasCurrencyReward then
         appState.worldMapRewardModal = {
             prize = prize,
             resourceKey = reward and reward.resourceKey or nil,
-            resourceAmount = reward and reward.resourceAmount or nil,
+            resourceAmount = resourceAmount,
+            cardrw = reward and reward.cardrw or nil,
         }
     end
 
@@ -510,6 +548,63 @@ function getSetupAgentDeckIds()
     end
 
     return deckIds
+end
+
+local function copyCardRewardBuckets(source)
+    local copied = {
+        jacl = {},
+        agents = {},
+    }
+
+    for ownerId, cardIds in pairs((source and source.jacl) or {}) do
+        copied.jacl[ownerId] = {}
+
+        for index, cardId in ipairs(cardIds or {}) do
+            copied.jacl[ownerId][index] = cardId
+        end
+    end
+
+    for ownerId, cardIds in pairs((source and source.agents) or {}) do
+        copied.agents[ownerId] = {}
+
+        for index, cardId in ipairs(cardIds or {}) do
+            copied.agents[ownerId][index] = cardId
+        end
+    end
+
+    return copied
+end
+
+local function collectSetupRewardCardIds()
+    local rewardCardIds = {}
+    local rewards = setupScenario.playerCardRewards or {}
+    local jaclRewards = rewards.jacl and rewards.jacl[setupScenario.playerJaclId] or nil
+
+    for _, cardId in ipairs(jaclRewards or {}) do
+        rewardCardIds[#rewardCardIds + 1] = cardId
+    end
+
+    for _, agentId in ipairs(setupScenario.setupAgentIds or {}) do
+        local agentRewards = rewards.agents and rewards.agents[agentId] or nil
+
+        for _, cardId in ipairs(agentRewards or {}) do
+            rewardCardIds[#rewardCardIds + 1] = cardId
+        end
+    end
+
+    return rewardCardIds
+end
+
+local function applySetupRewardCardsToPlayerDeck()
+    if not gameState.playerDeck then
+        return 0
+    end
+
+    return deckrules.addCardIds(gameState.playerDeck, collectSetupRewardCardIds(), {
+        owner = "player",
+        insertRandomly = true,
+        source = "card-reward",
+    })
 end
 
 local function normalizeSetupCardSlots()
@@ -1527,6 +1622,8 @@ startNewRun = function(saveSlotId, saveTimestamp)
         and deckrules.buildDeckWithAdditionalDecks(gameState.activeChampion.deckId, setupScenario.championAdditionalDeckIds or {})
         or nil
 
+    applySetupRewardCardsToPlayerDeck()
+
     if gameState.playerDeck then
         gameState.playerDeck.owner = "player"
 
@@ -1553,6 +1650,17 @@ startNewRun = function(saveSlotId, saveTimestamp)
 end
 
 local function applyWorldMissionPayload(payload)
+    if rewarddebug and rewarddebug.log then
+        rewarddebug.log("applyWorldMissionPayload", {
+            prize = payload and payload.prize or nil,
+            cardrw = payload and payload.cardrw or nil,
+            jaclId = payload and payload.jaclId or nil,
+            agentIds = payload and payload.agentIds or nil,
+            championId = payload and payload.championId or nil,
+            warzoneId = payload and payload.warzoneId or nil,
+        })
+    end
+
     setupScenario.playerJaclId = payload.jaclId
     setupScenario.setupAgentIds = {}
 
@@ -1564,9 +1672,11 @@ local function applyWorldMissionPayload(payload)
     setupScenario.activeWarzoneId = payload.warzoneId
     setupScenario.randomWarzoneSuffix = nil
     setupScenario.championAdditionalDeckIds = {}
+    setupScenario.playerCardRewards = copyCardRewardBuckets(appState.selectedRunCardRewards)
     setActiveMissionReward({
         alms = payload.prize,
         source = "victory",
+        cardrw = payload.cardrw,
     })
 
     for _, deckId in ipairs(payload.championAdditionalDeckIds or {}) do
@@ -1649,6 +1759,12 @@ local function buildMissionSetupQueue(saveSlotId, saveTimestamp)
                 gameState.playerDeck = gameState.playerJacl
                     and deckrules.buildDeckWithAdditionalDecks(gameState.playerJacl.deckId, getSetupAgentDeckIds())
                     or nil
+            end,
+        },
+        {
+            id = "player-reward-cards",
+            action = function()
+                applySetupRewardCardsToPlayerDeck()
             end,
         },
         {
@@ -1810,6 +1926,8 @@ startMissionFromWorldNode = function(payload)
     appState.worldMapNodePlayButtonTargets = nil
     appState.worldMapRewardModal = nil
     appState.worldMapRewardCollectButtonTarget = nil
+    appState.pendingWorldMapCardReward = nil
+    appState.worldMapCardRewardModal = nil
     appState.victoryTransition = nil
     appState.worldToMissionTransition = nil
     appState.pendingMissionSetup = {
@@ -1822,6 +1940,11 @@ startMissionFromWorldNode = function(payload)
 end
 
 function love.load()
+    if rewarddebug and rewarddebug.clear then
+        rewarddebug.clear()
+        rewarddebug.log("love.load")
+    end
+
     love.math.setRandomSeed(os.time())
     love.graphics.setBackgroundColor(0.08, 0.08, 0.1)
     love.graphics.setColor(1, 1, 1)

@@ -477,6 +477,10 @@ local function commitPackageSelection(state, packageIndex)
         titheSystem = state.selectedRunTitheSystem,
         agents = package.agents or {},
     }
+    state.selectedRunCardRewards = {
+        jacl = {},
+        agents = {},
+    }
     state.runSetupModal.isOpen = false
     state.runSetupModal.agentPreviewCardId = nil
     state.runSetupModal.deckModal = nil

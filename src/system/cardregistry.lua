@@ -65,6 +65,22 @@ function cardregistry.getCardById(cardId)
     return cardsById[cardId]
 end
 
+function cardregistry.getAllCards()
+    loadRegistry()
+
+    local cards = {}
+
+    for _, definition in pairs(cardsById or {}) do
+        cards[#cards + 1] = definition
+    end
+
+    table.sort(cards, function(left, right)
+        return tostring(left and left.id or "") < tostring(right and right.id or "")
+    end)
+
+    return cards
+end
+
 function cardregistry.reload()
     cardsBySet = nil
     cardsById = nil

@@ -326,6 +326,55 @@ function deckrules.drawCardToHand(deck, slotIndex)
     })
 end
 
+function deckrules.addCardById(deck, cardId, options)
+    if not deck or not cardId then
+        return nil
+    end
+
+    local cardDefinition = cardregistry.getCardById(cardId)
+
+    if not cardDefinition then
+        deck.missingCards = deck.missingCards or {}
+        deck.missingCards[#deck.missingCards + 1] = {
+            cardId = cardId,
+            quantity = 1,
+            source = options and options.source or "reward",
+        }
+        return nil
+    end
+
+    local deckCard = createDetachedDeckCard(deck, cardDefinition, {
+        kind = "deck",
+    })
+
+    deckCard.deckOwner = options and options.owner or deck.owner or deckCard.deckOwner
+
+    if options and options.insertRandomly == false then
+        deck.cards[#deck.cards + 1] = deckCard
+    else
+        local insertIndex = love.math.random(1, #deck.cards + 1)
+        table.insert(deck.cards, insertIndex, deckCard)
+    end
+
+    return deckCard
+end
+
+function deckrules.addCardIds(deck, cardIds, options)
+    if not deck then
+        return 0
+    end
+
+    local addedCount = 0
+
+    for _, cardId in ipairs(cardIds or {}) do
+        if deckrules.addCardById(deck, cardId, options) then
+            addedCount = addedCount + 1
+        end
+    end
+
+    return addedCount
+end
+
 function deckrules.shuffleCardsIntoDeck(deck, cards)
     if not deck then
         return 0
