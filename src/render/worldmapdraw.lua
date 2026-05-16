@@ -6,23 +6,21 @@ local deckrules = require("src.system.deckrules")
 local cardregistry = require("src.system.cardregistry")
 local previewrules = require("src.system.previewrules")
 local envdraw = require("src.render.envdraw")
-local objectiveDefinitions = require("data.objectives")
+local worldencounterpreviewdraw = require("src.render.worldencounterpreviewdraw")
+local munitionsrules = require("src.system.munitionsrules")
+local tithesrules = require("src.system.tithesrules")
+local worldrewardmodal = require("src.ui.worldrewardmodal")
 local jaclDefinitions = require("data.jacl")
 local troopDefinitions = require("data.cards.troops")
-local warzoneDefinitions = require("data.warzones")
 
 local JACL_IMAGE_DIRECTORY = "assets/images/jacl/"
 local CARD_FONT_PATH = "assets/fonts/Furore.otf"
 local MAP_IMAGE_DIRECTORY = "assets/images/map/"
-local CHAMP_IMAGE_DIRECTORY = "assets/images/champ/"
-local STDPKG_IMAGE_DIRECTORY = "assets/images/stdpkg/"
-local MODULARPKG_IMAGE_DIRECTORY = "assets/images/modularpkg/"
 local WARZONE_IMAGE_DIRECTORY = "assets/images/warzone/"
 local CREW_IMAGE_DIRECTORY = "assets/images/crew/"
 
 local jaclImageCache = {}
 local nodePreviewIconCache = {}
-local encounterPreviewImageCache = {}
 local objectivePreviewImageCache = {}
 local warzonePreviewImageCache = {}
 local crewImageCache = {}
@@ -34,22 +32,6 @@ local PLAYER_POSITION_PULSE_MAX_ALPHA = 1
 local NEXT_DESTINATION_COLOR = { 1, 0.16, 0.1, 1 }
 local MAP_CLUSTER_COUNT = 3
 local MAP_CLUSTER_SIZE = 5
-local NODE_PREVIEW_MARGIN_X = 34
-local NODE_PREVIEW_WIDTH = 560
-local NODE_PREVIEW_PADDING = 18
-local NODE_PREVIEW_LINE_GAP = 8
-local NODE_PREVIEW_THUMBNAIL_SIZE = 54
-local NODE_PREVIEW_ROW_GAP = 10
-local NODE_PREVIEW_CHAMPION_RAIL_WIDTH = 188
-local NODE_PREVIEW_CHAMPION_IMAGE_HEIGHT = 246
-local NODE_PREVIEW_COLUMN_GAP = 18
-local NODE_PREVIEW_CHAMPION_HEALTH_HEIGHT = 22
-local NODE_PREVIEW_OBJECTIVE_THUMBNAIL_SIZE = 58
-local NODE_PREVIEW_OBJECTIVE_ROW_GAP = 12
-local NODE_PREVIEW_PLAY_BUTTON_SIZE = 34
-local NODE_PREVIEW_PLAY_BUTTON_MARGIN = 10
-local NODE_PREVIEW_PLAY_BUTTON_COLOR = { 0.906, 0.102, 0.176, 1 }
-local NODE_PREVIEW_CORNER_ICON_SIZE = 34
 local WORLD_DECK_MODAL_CARD_WIDTH = 150
 local WORLD_DECK_MODAL_CARD_GAP = 14
 local WORLD_DECK_MODAL_HEADER_HEIGHT = 44
@@ -72,14 +54,18 @@ local WORLD_RESOURCE_TRACKER_OUTLINE_COLOR = { 0.549, 1, 0.871, 1 }
 local WORLD_RESOURCE_TRACKER_FILL_COLOR = { 0.025, 0.032, 0.04, 0.88 }
 local WORLD_RESOURCE_TRACKER_TEXT_COLOR = { 0.9, 0.98, 0.96, 1 }
 local WORLD_RESOURCE_TRACKER_LABEL_COLOR = { 0.58, 0.74, 0.72, 1 }
+local WORLD_RESOURCE_TRACKER_DETAIL_COLOR = { 0.95, 0.96, 0.98, 1 }
 local WORLD_ALMS_TRACKER_COLOR = { 0.976, 0.761, 0.169, 1 }
+local WORLD_MUNITIONS_TOOLTIP_PADDING = 12
+local WORLD_MUNITIONS_TOOLTIP_GAP = 8
+local WORLD_MUNITIONS_TOOLTIP_HEADER_SIZE = 14
+local WORLD_MUNITIONS_TOOLTIP_BODY_SIZE = 12
 local WORLD_ROLE_PORTRAIT_LABEL_COLOR = { 1, 0.725, 0.337, 1 }
 local WORLD_ROLE_PORTRAIT_OUTLINE_COLOR = { 1, 0.725, 0.337, 1 }
 local WORLD_ROLE_PORTRAIT_FILL_COLOR = { 0.075, 0.082, 0.095, 0.92 }
 local WORLD_SYSTEMS_LABEL_COLOR = { 0.549, 1, 0.871, 1 }
 local WORLD_SYSTEMS_OUTLINE_COLOR = { 0.549, 1, 0.871, 1 }
 local WORLD_SYSTEMS_BOX_FILL_COLOR = { 0.075, 0.082, 0.095, 0.92 }
-local NODE_LOADING_FLASH_INTERVAL = 0.06
 local WORLD_ROLE_PORTRAITS = {
     {
         label = "Captain",
@@ -123,7 +109,6 @@ local WORLD_RESOURCE_TRACKERS = {
 local drawDiceSummonPreviewLeft
 local getSelectedRunLoadoutLayout
 local getWorldResourceTrackerLayout
-local isLoadingWorldMapNode
 
 local function getFont(size)
     local key = tostring(size)
@@ -252,6 +237,89 @@ local function getJaclById(jaclId)
     return nil
 end
 
+local function getSelectedMunitionsSystem(state)
+    if state and state.selectedRunMunitionsSystem then
+        return state.selectedRunMunitionsSystem
+    end
+
+    if state and state.selectedRunPackage and state.selectedRunPackage.munitionsSystem then
+        return state.selectedRunPackage.munitionsSystem
+    end
+
+    local jaclDefinition = state
+        and state.selectedRunPackage
+        and state.selectedRunPackage.jacl
+        or getJaclById(state and state.selectedRunJaclId or nil)
+
+    return munitionsrules.getJaclMunitions(jaclDefinition)
+end
+
+local function getSelectedTitheSystem(state)
+    if state and state.selectedRunTitheSystem then
+        return state.selectedRunTitheSystem
+    end
+
+    if state and state.selectedRunPackage and state.selectedRunPackage.titheSystem then
+        return state.selectedRunPackage.titheSystem
+    end
+
+    local jaclDefinition = state
+        and state.selectedRunPackage
+        and state.selectedRunPackage.jacl
+        or getJaclById(state and state.selectedRunJaclId or nil)
+
+    return tithesrules.getJaclTithe(jaclDefinition)
+end
+
+local function drawMunitionsSystemTooltip(systemDefinition, anchor)
+    if not systemDefinition or not anchor then
+        return
+    end
+
+    local previousFont = love.graphics.getFont()
+    local headerFont = getFont(WORLD_MUNITIONS_TOOLTIP_HEADER_SIZE)
+    local bodyFont = getFont(WORLD_MUNITIONS_TOOLTIP_BODY_SIZE)
+    local headerText = systemDefinition.name or systemDefinition.id or "Munitions"
+    local bodyText = systemDefinition.text or ""
+    local textWidth = math.max(headerFont:getWidth(headerText), bodyText ~= "" and bodyFont:getWidth(bodyText) or 0)
+    local tooltipWidth = math.max(180, math.floor((WORLD_MUNITIONS_TOOLTIP_PADDING * 2) + textWidth))
+    local tooltipHeight = math.floor(
+        (WORLD_MUNITIONS_TOOLTIP_PADDING * 2)
+        + headerFont:getHeight()
+        + (bodyText ~= "" and (6 + bodyFont:getHeight()) or 0)
+    )
+    local windowWidth = love.graphics.getWidth()
+    local tooltipX = math.floor(anchor.x + ((anchor.width - tooltipWidth) * 0.5))
+    local tooltipY = math.floor(anchor.y - WORLD_MUNITIONS_TOOLTIP_GAP - tooltipHeight)
+
+    tooltipX = math.max(8, math.min(tooltipX, windowWidth - tooltipWidth - 8))
+    tooltipY = math.max(8, tooltipY)
+
+    love.graphics.setColor(0, 0, 0, 0.58)
+    love.graphics.rectangle("fill", tooltipX - 5, tooltipY - 5, tooltipWidth + 10, tooltipHeight + 10, 7, 7)
+    love.graphics.setColor(0.075, 0.082, 0.095, 0.96)
+    love.graphics.rectangle("fill", tooltipX, tooltipY, tooltipWidth, tooltipHeight, 5, 5)
+    love.graphics.setColor(0.82, 0.85, 0.89, 0.84)
+    love.graphics.rectangle("line", tooltipX, tooltipY, tooltipWidth, tooltipHeight, 5, 5)
+
+    love.graphics.setFont(headerFont)
+    love.graphics.setColor(WORLD_RESOURCE_TRACKER_DETAIL_COLOR[1], WORLD_RESOURCE_TRACKER_DETAIL_COLOR[2], WORLD_RESOURCE_TRACKER_DETAIL_COLOR[3], 1)
+    love.graphics.print(headerText, tooltipX + WORLD_MUNITIONS_TOOLTIP_PADDING, tooltipY + WORLD_MUNITIONS_TOOLTIP_PADDING)
+
+    if bodyText ~= "" then
+        love.graphics.setFont(bodyFont)
+        love.graphics.setColor(0.82, 0.85, 0.89, 0.98)
+        love.graphics.print(
+            bodyText,
+            tooltipX + WORLD_MUNITIONS_TOOLTIP_PADDING,
+            tooltipY + WORLD_MUNITIONS_TOOLTIP_PADDING + headerFont:getHeight() + 6
+        )
+    end
+
+    love.graphics.setFont(previousFont)
+    love.graphics.setColor(1, 1, 1, 1)
+end
+
 local function getTroopById(troopId)
     if not troopId then
         return nil
@@ -260,46 +328,6 @@ local function getTroopById(troopId)
     for _, troopDefinition in ipairs(troopDefinitions or {}) do
         if troopDefinition.id == troopId then
             return troopDefinition
-        end
-    end
-
-    return nil
-end
-
-local function getWarzoneDefinitionById(warzoneId)
-    if not warzoneId then
-        return nil
-    end
-
-    for _, warzoneDefinition in ipairs(warzoneDefinitions or {}) do
-        if warzoneDefinition.id == warzoneId then
-            return warzoneDefinition
-        end
-    end
-
-    return nil
-end
-
-local function getPairedWarzoneVariant(warzoneDefinition)
-    if not warzoneDefinition or not warzoneDefinition.id then
-        return nil
-    end
-
-    local variantId = warzoneDefinition.id:sub(-1) == "B"
-        and warzoneDefinition.id:sub(1, -2)
-        or (warzoneDefinition.id .. "B")
-
-    return getWarzoneDefinitionById(variantId)
-end
-
-local function getObjectiveDefinitionById(objectiveId)
-    if not objectiveId then
-        return nil
-    end
-
-    for _, objectiveDefinition in ipairs(objectiveDefinitions or {}) do
-        if objectiveDefinition.id == objectiveId then
-            return objectiveDefinition
         end
     end
 
@@ -377,93 +405,6 @@ local function getJaclImage(jaclDefinition)
     })
     jaclImageCache[jaclDefinition.name]:setFilter("linear", "linear")
     return jaclImageCache[jaclDefinition.name]
-end
-
-local function getNodePreviewIconImage(nodeDefinition)
-    if not nodeDefinition then
-        return nil
-    end
-
-    local candidates = {}
-
-    if nodeDefinition.id then
-        candidates[#candidates + 1] = nodeDefinition.id
-        candidates[#candidates + 1] = tostring(nodeDefinition.id):lower()
-    end
-
-    if nodeDefinition.icon then
-        candidates[#candidates + 1] = nodeDefinition.icon
-    end
-
-    for _, candidate in ipairs(candidates) do
-        local cacheKey = tostring(candidate)
-
-        if nodePreviewIconCache[cacheKey] ~= nil then
-            return nodePreviewIconCache[cacheKey] or nil
-        end
-
-        local imagePath = MAP_IMAGE_DIRECTORY .. cacheKey .. ".png"
-
-        if love.filesystem.getInfo(imagePath) then
-            local image = love.graphics.newImage(imagePath, {
-                mipmaps = true,
-            })
-
-            image:setFilter("linear", "linear")
-            image:setMipmapFilter("linear")
-            nodePreviewIconCache[cacheKey] = image
-            return image
-        end
-
-        nodePreviewIconCache[cacheKey] = false
-    end
-
-    return nil
-end
-
-local function getEncounterPreviewImage(encounter)
-    local definition = encounter and encounter.definition or nil
-
-    if not definition or not definition.id then
-        return nil
-    end
-
-    local directory = nil
-
-    if encounter.sourceKind == "champion" then
-        directory = CHAMP_IMAGE_DIRECTORY
-    elseif encounter.sourceKind == "stdpkg" then
-        directory = STDPKG_IMAGE_DIRECTORY
-    elseif encounter.sourceKind == "modularpkg" then
-        directory = MODULARPKG_IMAGE_DIRECTORY
-    elseif encounter.sourceKind == "warzone" then
-        directory = WARZONE_IMAGE_DIRECTORY
-    end
-
-    if not directory then
-        return nil
-    end
-
-    local cacheKey = encounter.sourceKind .. ":" .. definition.id
-
-    if encounterPreviewImageCache[cacheKey] ~= nil then
-        return encounterPreviewImageCache[cacheKey] or nil
-    end
-
-    local imagePath = directory .. definition.id .. ".png"
-
-    if not love.filesystem.getInfo(imagePath) then
-        encounterPreviewImageCache[cacheKey] = false
-        return nil
-    end
-
-    local image = love.graphics.newImage(imagePath, {
-        mipmaps = true,
-    })
-    image:setFilter("linear", "linear")
-    image:setMipmapFilter("linear")
-    encounterPreviewImageCache[cacheKey] = image
-    return image
 end
 
 local function getPlayerMapPosition(state)
@@ -654,41 +595,6 @@ local function getDefaultFunctionalNode(state)
     return getRouteNodePreviewGroup(state, nextMapPosition.clusterIndex, nextMapPosition.nodeIndex)
 end
 
-local function printWrappedLine(text, x, y, width, font)
-    love.graphics.printf(text, x, y, width, "left")
-    local _, lines = font:getWrap(text, width)
-
-    return y + (#lines * font:getHeight())
-end
-
-local function getWrappedLineCount(font, text, width)
-    local _, lines = font:getWrap(text or "", width)
-
-    return #lines
-end
-
-local function drawEncounterThumbnail(image, x, y, size, accentColor)
-    love.graphics.setColor(0.025, 0.028, 0.035, 1)
-    love.graphics.rectangle("fill", x, y, size, size, 4, 4)
-
-    if image then
-        local scale = math.min(size / image:getWidth(), size / image:getHeight())
-        local imageWidth = image:getWidth() * scale
-        local imageHeight = image:getHeight() * scale
-        local imageX = x + ((size - imageWidth) * 0.5)
-        local imageY = y + ((size - imageHeight) * 0.5)
-
-        love.graphics.setColor(1, 1, 1, 1)
-        love.graphics.draw(image, imageX, imageY, 0, scale, scale)
-    else
-        love.graphics.setColor(0.15, 0.16, 0.19, 1)
-        love.graphics.rectangle("fill", x + 4, y + 4, size - 8, size - 8, 3, 3)
-    end
-
-    love.graphics.setColor(accentColor[1], accentColor[2], accentColor[3], 0.86)
-    love.graphics.rectangle("line", x, y, size, size, 4, 4)
-end
-
 local function addWorldMapPreviewDeckTarget(state, x, y, width, height, source)
     if not state or not source or not source.definition then
         return
@@ -703,698 +609,6 @@ local function addWorldMapPreviewDeckTarget(state, x, y, width, height, source)
         definition = source.definition,
         title = source.name or source.id,
     }
-end
-
-local function addWorldMapObjectivePreviewTarget(state, x, y, width, height, card)
-    local definition = card and card.definition or nil
-
-    if not state
-        or not definition
-        or (
-            definition.type ~= "objective"
-            and definition.type ~= "intel"
-            and definition.type ~= "warzone"
-            and definition.type ~= "poi"
-        ) then
-        return
-    end
-
-    state.worldMapObjectivePreviewTargets = state.worldMapObjectivePreviewTargets or {}
-    state.worldMapObjectivePreviewTargets[#state.worldMapObjectivePreviewTargets + 1] = {
-        x = x,
-        y = y,
-        width = width,
-        height = height,
-        definition = definition,
-    }
-end
-
-local function drawEncounterPreviewRow(row, x, y, textX, textWidth, thumbnailSize, titleFont, metaFont, accentColor, state)
-    drawEncounterThumbnail(row.image, x, y, thumbnailSize, accentColor)
-    addWorldMapPreviewDeckTarget(state, x, y, thumbnailSize, thumbnailSize, row)
-
-    love.graphics.setFont(metaFont)
-    love.graphics.setColor(accentColor[1], accentColor[2], accentColor[3], 1)
-    love.graphics.printf(row.sourceLabel or "Encounter", textX, y + 2, textWidth, "left")
-
-    love.graphics.setFont(titleFont)
-    love.graphics.setColor(0.94, 0.95, 0.96, 1)
-    love.graphics.printf(row.name or row.id or "?", textX, y + metaFont:getHeight() + 5, textWidth, "left")
-end
-
-local function drawChampionHealthBar(championRow, x, y, width, height)
-    local health = math.max(0, math.floor(tonumber(championRow and championRow.health) or 0))
-    local maxHealth = math.max(1, math.floor(tonumber(championRow and championRow.max) or health or 1))
-    local gap = 3
-    local pipCount = math.min(maxHealth, 24)
-    local columns = math.min(pipCount, 10)
-    local rows = math.max(1, math.ceil(pipCount / columns))
-    local maxPipWidth = math.floor((width - ((columns - 1) * gap)) / columns)
-    local maxPipHeight = math.floor((height - ((rows - 1) * gap)) / rows)
-    local pipSize = math.max(3, math.min(maxPipWidth, maxPipHeight))
-    local startX = x + ((width - ((columns * pipSize) + ((columns - 1) * gap))) * 0.5)
-    local startY = y + ((height - ((rows * pipSize) + ((rows - 1) * gap))) * 0.5)
-
-    for pipIndex = 1, pipCount do
-        local row = math.floor((pipIndex - 1) / columns)
-        local column = (pipIndex - 1) % columns
-        local pipX = startX + (column * (pipSize + gap))
-        local pipY = startY + (row * (pipSize + gap))
-
-        if pipIndex <= health then
-            love.graphics.setColor(1, 0.855, 0.255, 1)
-        else
-            love.graphics.setColor(0.2, 0.18, 0.09, 0.95)
-        end
-
-        love.graphics.rectangle("fill", pipX, pipY, pipSize, pipSize)
-    end
-end
-
-local function getChampionIntelPreviewCards(championDefinition)
-    local cards = {}
-
-    for _, intelEntry in ipairs(championDefinition and championDefinition.intelDeck or {}) do
-        local objectiveDefinition = getObjectiveDefinitionById(intelEntry.cardId)
-
-        if objectiveDefinition then
-            cards[#cards + 1] = {
-                id = objectiveDefinition.id,
-                name = objectiveDefinition.name,
-                quantity = math.max(1, math.floor(tonumber(intelEntry.quantity) or 1)),
-                definition = objectiveDefinition,
-                image = getObjectivePreviewImage(objectiveDefinition.id),
-            }
-        end
-    end
-
-    return cards
-end
-
-local function getChampionObjectivePreviewCards(championDefinition)
-    local cards = {}
-    local seenObjectiveIds = {}
-    local objectiveId = championDefinition and (championDefinition.PrimaryObjective or championDefinition.primaryObjective) or nil
-
-    while objectiveId and not seenObjectiveIds[objectiveId] do
-        seenObjectiveIds[objectiveId] = true
-
-        local objectiveDefinition = getObjectiveDefinitionById(objectiveId)
-
-        if not objectiveDefinition then
-            break
-        end
-
-        cards[#cards + 1] = {
-            id = objectiveDefinition.id,
-            name = objectiveDefinition.name,
-            definition = objectiveDefinition,
-            image = getObjectivePreviewImage(objectiveDefinition.id),
-        }
-
-        objectiveId = objectiveDefinition.escalate
-    end
-
-    return cards
-end
-
-local function getLinkedPoiForWarzone(warzoneDefinition)
-    if not warzoneDefinition then
-        return nil
-    end
-
-    local poiId = warzoneDefinition.poi
-    local pairedVariant = nil
-
-    if not poiId then
-        pairedVariant = getPairedWarzoneVariant(warzoneDefinition)
-        poiId = pairedVariant and pairedVariant.poi or nil
-    end
-
-    return getWarzoneDefinitionById(poiId)
-end
-
-local function buildWarzonePreviewCard(warzoneRow)
-    local definition = warzoneRow and warzoneRow.definition or nil
-
-    if not definition then
-        return nil
-    end
-
-    return {
-        id = definition.id,
-        name = definition.name,
-        definition = definition,
-        image = getWarzonePreviewImage(definition.id),
-    }
-end
-
-local function buildPoiPreviewCard(warzoneRow)
-    local definition = getLinkedPoiForWarzone(warzoneRow and warzoneRow.definition or nil)
-
-    if not definition then
-        return nil
-    end
-
-    return {
-        id = definition.id,
-        name = definition.name,
-        definition = definition,
-        image = getWarzonePreviewImage(definition.id),
-    }
-end
-
-local function drawObjectivePreviewCard(card, x, y, size, labelFont, accentColor, state)
-    love.graphics.setColor(0.025, 0.028, 0.035, 1)
-    love.graphics.rectangle("fill", x, y, size, size, 4, 4)
-
-    if card and card.image then
-        local image = card.image
-        local scale = math.min(size / image:getWidth(), size / image:getHeight())
-        local imageWidth = image:getWidth() * scale
-        local imageHeight = image:getHeight() * scale
-
-        love.graphics.setColor(1, 1, 1, 1)
-        love.graphics.draw(
-            image,
-            x + ((size - imageWidth) * 0.5),
-            y + ((size - imageHeight) * 0.5),
-            0,
-            scale,
-            scale
-        )
-    else
-        love.graphics.setColor(0.15, 0.16, 0.19, 1)
-        love.graphics.rectangle("fill", x + 4, y + 4, size - 8, size - 8, 3, 3)
-    end
-
-    love.graphics.setColor(accentColor[1], accentColor[2], accentColor[3], 0.86)
-    love.graphics.rectangle("line", x, y, size, size, 4, 4)
-    addWorldMapObjectivePreviewTarget(state, x, y, size, size, card)
-
-    if card and card.quantity and card.quantity > 1 then
-        local badgeSize = 18
-
-        love.graphics.setColor(0.02, 0.02, 0.025, 0.94)
-        love.graphics.rectangle("fill", x + size - badgeSize - 4, y + size - badgeSize - 4, badgeSize, badgeSize, 3, 3)
-        love.graphics.setColor(accentColor[1], accentColor[2], accentColor[3], 0.95)
-        love.graphics.rectangle("line", x + size - badgeSize - 4, y + size - badgeSize - 4, badgeSize, badgeSize, 3, 3)
-        love.graphics.setFont(labelFont)
-        love.graphics.setColor(0.95, 0.96, 0.98, 1)
-        love.graphics.printf("x" .. tostring(card.quantity), x + size - badgeSize - 4, y + size - badgeSize + 1, badgeSize, "center")
-    end
-end
-
-local function drawObjectivePreviewRow(labelText, cards, x, y, width, cardSize, labelFont, accentColor, state)
-    if not cards or #cards <= 0 then
-        return
-    end
-
-    local _, labelLines = labelFont:getWrap(labelText or "", width)
-    local labelHeight = math.max(1, #labelLines) * labelFont:getHeight()
-
-    love.graphics.setFont(labelFont)
-    love.graphics.setColor(accentColor[1], accentColor[2], accentColor[3], 1)
-    love.graphics.printf(labelText, x, y, width, "left")
-
-    local cardY = y + labelHeight + 5
-    local gap = #cards > 1 and math.max(8, math.floor((width - (#cards * cardSize)) / (#cards - 1))) or 0
-
-    gap = math.min(gap, 14)
-
-    for cardIndex, card in ipairs(cards or {}) do
-        local cardX = x + ((cardIndex - 1) * (cardSize + gap))
-
-        drawObjectivePreviewCard(card, cardX, cardY, cardSize, labelFont, accentColor, state)
-    end
-end
-
-local function getWrappedLabelHeight(labelFont, labelText, width)
-    local _, labelLines = labelFont:getWrap(labelText or "", width)
-
-    return math.max(1, #labelLines) * labelFont:getHeight()
-end
-
-local function getSplitPreviewRowMetrics(leftLabel, leftCards, rightLabel, rightCards, x, width, cardSize, labelFont)
-    local gap = NODE_PREVIEW_OBJECTIVE_ROW_GAP + 8
-    local leftCount = #(leftCards or {})
-    local rightCount = #(rightCards or {})
-    local leftCardGap = leftCount > 1 and math.min(14, math.max(8, math.floor((width - (leftCount * cardSize)) / math.max(1, leftCount - 1)))) or 0
-    local leftRequiredWidth = leftCount > 0 and ((leftCount * cardSize) + ((leftCount - 1) * leftCardGap)) or 0
-    local rightRequiredWidth = rightCount > 0 and cardSize or 0
-    local minRightX = x + leftRequiredWidth + gap
-    local preferredRightX = x + ((width - gap) * 0.5) + gap
-    local maxRightX = x + width - rightRequiredWidth
-    local rightX = math.min(maxRightX, math.max(preferredRightX, minRightX))
-    local leftWidth = math.max(cardSize, rightX - x - gap)
-    local rightWidth = math.max(cardSize, x + width - rightX)
-    local leftLabelHeight = leftCount > 0 and getWrappedLabelHeight(labelFont, leftLabel, leftWidth) or 0
-    local rightLabelHeight = rightCount > 0 and getWrappedLabelHeight(labelFont, rightLabel, rightWidth) or 0
-
-    return {
-        rightX = rightX,
-        leftWidth = leftWidth,
-        rightWidth = rightWidth,
-        height = math.max(leftLabelHeight, rightLabelHeight) + 5 + cardSize,
-    }
-end
-
-local function drawSplitPreviewRow(leftLabel, leftCards, rightLabel, rightCards, x, y, width, cardSize, labelFont, accentColor, state)
-    local metrics = getSplitPreviewRowMetrics(leftLabel, leftCards, rightLabel, rightCards, x, width, cardSize, labelFont)
-
-    drawObjectivePreviewRow(leftLabel, leftCards, x, y, metrics.leftWidth, cardSize, labelFont, accentColor, state)
-    drawObjectivePreviewRow(rightLabel, rightCards, metrics.rightX, y, metrics.rightWidth, cardSize, labelFont, accentColor, state)
-
-    return metrics.height
-end
-
-local function shouldDrawNodePreviewPlayButton(state, hoveredNode)
-    local nextMapPosition = getNextMapPosition(getPlayerMapPosition(state))
-
-    return hoveredNode
-        and isPlayerMapNode(nextMapPosition, "path", hoveredNode.clusterIndex, hoveredNode.nodeIndex)
-end
-
-local function drawNodePreviewPlayButton(state, hoveredNode, panelX, panelY, panelWidth)
-    local buttonSize = NODE_PREVIEW_PLAY_BUTTON_SIZE
-    local buttonX = panelX + panelWidth - NODE_PREVIEW_PLAY_BUTTON_MARGIN - buttonSize
-    local buttonY = panelY + NODE_PREVIEW_PLAY_BUTTON_MARGIN
-    local triangleInsetX = buttonSize * 0.34
-    local triangleInsetY = buttonSize * 0.28
-
-    love.graphics.setColor(
-        NODE_PREVIEW_PLAY_BUTTON_COLOR[1],
-        NODE_PREVIEW_PLAY_BUTTON_COLOR[2],
-        NODE_PREVIEW_PLAY_BUTTON_COLOR[3],
-        NODE_PREVIEW_PLAY_BUTTON_COLOR[4]
-    )
-    love.graphics.rectangle("fill", buttonX, buttonY, buttonSize, buttonSize, 3, 3)
-    love.graphics.setColor(0.96, 0.96, 0.95, 1)
-    love.graphics.polygon(
-        "fill",
-        buttonX + triangleInsetX,
-        buttonY + triangleInsetY,
-        buttonX + triangleInsetX,
-        buttonY + buttonSize - triangleInsetY,
-        buttonX + buttonSize - triangleInsetX + 2,
-        buttonY + (buttonSize * 0.5)
-    )
-
-    if state then
-        state.worldMapNodePlayButtonTargets = state.worldMapNodePlayButtonTargets or {}
-        state.worldMapNodePlayButtonTargets[#state.worldMapNodePlayButtonTargets + 1] = {
-            x = buttonX,
-            y = buttonY,
-            width = buttonSize,
-            height = buttonSize,
-            hoveredNode = hoveredNode,
-        }
-        state.worldMapNodePlayButtonTarget = state.worldMapNodePlayButtonTargets[#state.worldMapNodePlayButtonTargets]
-    end
-end
-
-local function drawNodePreviewCornerIcon(hoveredNode, panelX, panelY)
-    local image = getNodePreviewIconImage(hoveredNode and hoveredNode.nodeDefinition or nil)
-
-    if not image then
-        return
-    end
-
-    local iconSize = NODE_PREVIEW_CORNER_ICON_SIZE
-    local iconX = panelX - math.floor(iconSize * 0.32)
-    local iconY = panelY - math.floor(iconSize * 0.32)
-    local imageScale = math.min(iconSize / image:getWidth(), iconSize / image:getHeight())
-    local imageWidth = image:getWidth() * imageScale
-    local imageHeight = image:getHeight() * imageScale
-
-    love.graphics.setColor(0.015, 0.018, 0.023, 0.96)
-    love.graphics.rectangle("fill", iconX, iconY, iconSize, iconSize, 5, 5)
-    love.graphics.setColor(0.9, 0.92, 0.95, 0.78)
-    love.graphics.rectangle("line", iconX, iconY, iconSize, iconSize, 5, 5)
-    love.graphics.setColor(1, 1, 1, 1)
-    love.graphics.draw(
-        image,
-        iconX + ((iconSize - imageWidth) * 0.5),
-        iconY + ((iconSize - imageHeight) * 0.5),
-        0,
-        imageScale,
-        imageScale
-    )
-end
-
-local function drawChampionPreviewRail(championRow, x, y, width, imageHeight, healthHeight, labelHeight, titleFont, metaFont, accentColor, state)
-    local nameText = championRow and (championRow.name or championRow.id) or "Unknown Champion"
-    local frameX = x
-    local frameY = y
-    local frameWidth = width
-    local frameHeight = imageHeight
-    local labelY = nil
-
-    if championRow and championRow.image then
-        local image = championRow.image
-        local scale = math.min(width / image:getWidth(), imageHeight / image:getHeight())
-        local scaledImageWidth = image:getWidth() * scale
-        local scaledImageHeight = image:getHeight() * scale
-        local previousScissorX, previousScissorY, previousScissorWidth, previousScissorHeight = love.graphics.getScissor()
-
-        frameX = x + ((width - scaledImageWidth) * 0.5)
-        frameWidth = scaledImageWidth
-        frameHeight = scaledImageHeight
-
-        love.graphics.setColor(0.025, 0.028, 0.035, 1)
-        love.graphics.rectangle("fill", frameX, frameY, frameWidth, frameHeight, 5, 5)
-        love.graphics.setScissor(frameX, frameY, frameWidth, frameHeight)
-        love.graphics.setColor(1, 1, 1, 1)
-        love.graphics.draw(image, frameX, frameY, 0, scale, scale)
-
-        if previousScissorX then
-            love.graphics.setScissor(previousScissorX, previousScissorY, previousScissorWidth, previousScissorHeight)
-        else
-            love.graphics.setScissor()
-        end
-    else
-        frameX = x + 6
-        frameY = y + 6
-        frameWidth = width - 12
-        frameHeight = imageHeight - 12
-
-        love.graphics.setColor(0.025, 0.028, 0.035, 1)
-        love.graphics.rectangle("fill", frameX, frameY, frameWidth, frameHeight, 5, 5)
-        love.graphics.setColor(0.15, 0.16, 0.19, 1)
-        love.graphics.rectangle("fill", frameX + 6, frameY + 6, frameWidth - 12, frameHeight - 12, 3, 3)
-    end
-
-    love.graphics.setColor(accentColor[1], accentColor[2], accentColor[3], 0.9)
-    love.graphics.rectangle("line", frameX, frameY, frameWidth, frameHeight, 5, 5)
-
-    addWorldMapPreviewDeckTarget(state, frameX, frameY, frameWidth, frameHeight, championRow)
-
-    labelY = frameY + frameHeight + healthHeight
-    love.graphics.setColor(0.035, 0.035, 0.025, 0.98)
-    love.graphics.rectangle("fill", frameX, frameY + frameHeight, frameWidth, healthHeight)
-    drawChampionHealthBar(championRow, frameX + 10, frameY + frameHeight + 4, frameWidth - 20, healthHeight - 8)
-
-    love.graphics.setColor(0.02, 0.02, 0.025, 0.96)
-    love.graphics.rectangle("fill", frameX, labelY, frameWidth, labelHeight, 0, 0)
-
-    love.graphics.setFont(metaFont)
-    love.graphics.setColor(accentColor[1], accentColor[2], accentColor[3], 1)
-    love.graphics.printf("Champion", frameX + 10, labelY + 8, frameWidth - 20, "left")
-
-    love.graphics.setFont(titleFont)
-    love.graphics.setColor(0.94, 0.95, 0.96, 1)
-    love.graphics.printf(nameText, frameX + 10, labelY + metaFont:getHeight() + 12, frameWidth - 20, "left")
-end
-
-local function getNodePreviewEdge(hoveredNode)
-    local pos = hoveredNode
-        and hoveredNode.nodeDefinition
-        and hoveredNode.nodeDefinition.pos
-        or nil
-
-    return tostring(pos):lower() == "bottom" and "bottom" or "top"
-end
-
-local function drawNodeEncounterPreview(state, hoveredNode, panelIndexOnEdge)
-    local preview = hoveredNode and hoveredNode.preview or nil
-
-    if not preview then
-        return
-    end
-
-    local screenWidth, screenHeight = love.graphics.getDimensions()
-    local titleFont = getFont(18)
-    local bodyFont = getFont(13)
-    local smallFont = getFont(11)
-    local championLabelFont = getFont(15)
-    local championNameFont = getFont(18)
-    local panelWidth = math.min(NODE_PREVIEW_WIDTH, screenWidth * 0.48)
-    local contentWidth = panelWidth - (NODE_PREVIEW_PADDING * 2)
-    local championRailWidth = math.min(NODE_PREVIEW_CHAMPION_RAIL_WIDTH, contentWidth * 0.42)
-    local rightColumnXOffset = championRailWidth + NODE_PREVIEW_COLUMN_GAP
-    local rightContentWidth = contentWidth - rightColumnXOffset
-    local titleText = preview.title or "Node"
-    local summaryText = preview.summary or ""
-    local detailLines = {}
-    local championRow = nil
-    local warzoneRow = nil
-    local packageRows = {}
-    local encounterTextWidth = rightContentWidth - NODE_PREVIEW_THUMBNAIL_SIZE - NODE_PREVIEW_ROW_GAP
-
-    for _, detail in ipairs(preview.details or {}) do
-        detailLines[#detailLines + 1] = detail
-    end
-
-    for _, encounter in ipairs(preview.encounters or {}) do
-        local definition = encounter.definition or {}
-
-        local row = {
-            sourceLabel = encounter.sourceLabel,
-            sourceKind = encounter.sourceKind,
-            name = definition.name,
-            id = definition.id,
-            health = definition.health,
-            max = definition.max,
-            definition = definition,
-            image = getEncounterPreviewImage(encounter),
-        }
-
-        if encounter.sourceKind == "champion" and not championRow then
-            championRow = row
-        elseif encounter.sourceKind == "warzone" and not warzoneRow then
-            warzoneRow = row
-        else
-            packageRows[#packageRows + 1] = row
-        end
-    end
-
-    if not championRow and not warzoneRow and #packageRows == 0 then
-        packageRows[#packageRows + 1] = {
-            sourceLabel = "Encounter",
-            name = "No matching encounter entries.",
-        }
-    end
-
-    local intelCards = getChampionIntelPreviewCards(championRow and championRow.definition or nil)
-    local objectiveCards = getChampionObjectivePreviewCards(championRow and championRow.definition or nil)
-    local warzoneCard = buildWarzonePreviewCard(warzoneRow)
-    local poiCard = buildPoiPreviewCard(warzoneRow)
-    local warzoneCards = warzoneCard and { warzoneCard } or {}
-    local poiCards = poiCard and { poiCard } or {}
-    local hasIntelRow = #intelCards > 0 or #warzoneCards > 0
-    local hasObjectiveRow = #objectiveCards > 0 or #poiCards > 0
-    local intelRowHeight = hasIntelRow
-        and getSplitPreviewRowMetrics(
-            "Intel Deck",
-            intelCards,
-            "Warzone",
-            warzoneCards,
-            0,
-            rightContentWidth,
-            NODE_PREVIEW_OBJECTIVE_THUMBNAIL_SIZE,
-            smallFont
-        ).height
-        or 0
-    local objectiveRowHeight = hasObjectiveRow
-        and getSplitPreviewRowMetrics(
-            "Objectives",
-            objectiveCards,
-            "Person of Interest",
-            poiCards,
-            0,
-            rightContentWidth,
-            NODE_PREVIEW_OBJECTIVE_THUMBNAIL_SIZE,
-            smallFont
-        ).height
-        or 0
-
-    local rightColumnHeight = NODE_PREVIEW_PADDING
-        + titleFont:getHeight()
-        + NODE_PREVIEW_LINE_GAP
-        + (getWrappedLineCount(bodyFont, summaryText, rightContentWidth) * bodyFont:getHeight())
-        + NODE_PREVIEW_LINE_GAP
-
-    for _, detail in ipairs(detailLines) do
-        rightColumnHeight = rightColumnHeight + (getWrappedLineCount(bodyFont, detail, rightContentWidth) * bodyFont:getHeight()) + 4
-    end
-
-    rightColumnHeight = rightColumnHeight + NODE_PREVIEW_LINE_GAP
-
-    for _, encounterRow in ipairs(packageRows) do
-        local nameHeight = getWrappedLineCount(bodyFont, encounterRow.name or encounterRow.id or "?", encounterTextWidth) * bodyFont:getHeight()
-        local textHeight = smallFont:getHeight() + 5 + nameHeight
-
-        rightColumnHeight = rightColumnHeight + math.max(NODE_PREVIEW_THUMBNAIL_SIZE, textHeight) + NODE_PREVIEW_ROW_GAP
-    end
-
-    if hasIntelRow then
-        rightColumnHeight = rightColumnHeight
-            + intelRowHeight
-            + NODE_PREVIEW_OBJECTIVE_ROW_GAP
-    end
-
-    if hasObjectiveRow then
-        rightColumnHeight = rightColumnHeight
-            + objectiveRowHeight
-            + NODE_PREVIEW_OBJECTIVE_ROW_GAP
-    end
-
-    rightColumnHeight = rightColumnHeight + NODE_PREVIEW_PADDING
-
-    local championRailHeight = NODE_PREVIEW_CHAMPION_IMAGE_HEIGHT + NODE_PREVIEW_CHAMPION_HEALTH_HEIGHT + 70
-    local panelHeight = math.max(rightColumnHeight, championRailHeight + (NODE_PREVIEW_PADDING * 2))
-
-    local previewEdge = getNodePreviewEdge(hoveredNode)
-    local panelX = (screenWidth - panelWidth) * 0.5
-    local panelOffsetY = ((panelIndexOnEdge or 1) - 1) * (panelHeight + NODE_PREVIEW_MARGIN_X)
-    local panelY = previewEdge == "bottom"
-        and math.max(NODE_PREVIEW_MARGIN_X, screenHeight - NODE_PREVIEW_MARGIN_X - panelHeight - panelOffsetY)
-        or (NODE_PREVIEW_MARGIN_X + panelOffsetY)
-    local accentColor = hoveredNode.nodeDefinition and hoveredNode.nodeDefinition.accentColor or { 0.82, 0.85, 0.89, 1 }
-    local railX = panelX + NODE_PREVIEW_PADDING
-    local railY = panelY + ((panelHeight - championRailHeight) * 0.5)
-    local contentX = panelX + NODE_PREVIEW_PADDING + rightColumnXOffset
-    local showPlayButton = shouldDrawNodePreviewPlayButton(state, hoveredNode)
-    local y = panelY + NODE_PREVIEW_PADDING
-    local isLoadingPreview = isLoadingWorldMapNode(state, hoveredNode.clusterIndex, hoveredNode.nodeIndex)
-
-    love.graphics.setColor(0.02, 0.025, 0.03, 0.58)
-    love.graphics.rectangle("fill", panelX - 6, panelY - 6, panelWidth + 12, panelHeight + 12, 8, 8)
-    love.graphics.setColor(0.06, 0.07, 0.09, 0.97)
-    love.graphics.rectangle("fill", panelX, panelY, panelWidth, panelHeight, 6, 6)
-    if isLoadingPreview then
-        local pendingElapsed = state.pendingMissionSetup and state.pendingMissionSetup.elapsed or 0
-
-        if math.floor(pendingElapsed / NODE_LOADING_FLASH_INTERVAL) % 2 == 0 then
-            love.graphics.setColor(1, 0.73, 0.08, 1)
-        else
-            love.graphics.setColor(0, 0, 0, 1)
-        end
-    else
-        love.graphics.setColor(accentColor[1], accentColor[2], accentColor[3], 0.95)
-    end
-    love.graphics.rectangle("line", panelX, panelY, panelWidth, panelHeight, 6, 6)
-
-    drawNodePreviewCornerIcon(hoveredNode, panelX, panelY)
-
-    if showPlayButton then
-        drawNodePreviewPlayButton(state, hoveredNode, panelX, panelY, panelWidth)
-    end
-
-    drawChampionPreviewRail(
-        championRow,
-        railX,
-        railY,
-        championRailWidth,
-        NODE_PREVIEW_CHAMPION_IMAGE_HEIGHT,
-        NODE_PREVIEW_CHAMPION_HEALTH_HEIGHT,
-        70,
-        championNameFont,
-        championLabelFont,
-        accentColor,
-        state
-    )
-
-    love.graphics.setFont(titleFont)
-    love.graphics.setColor(0.95, 0.96, 0.98, 1)
-    love.graphics.printf(
-        titleText,
-        contentX,
-        y,
-        showPlayButton and math.max(1, rightContentWidth - NODE_PREVIEW_PLAY_BUTTON_SIZE - NODE_PREVIEW_PLAY_BUTTON_MARGIN) or rightContentWidth,
-        "left"
-    )
-    y = y + titleFont:getHeight() + NODE_PREVIEW_LINE_GAP
-
-    love.graphics.setFont(bodyFont)
-    love.graphics.setColor(0.78, 0.81, 0.84, 1)
-    y = printWrappedLine(summaryText, contentX, y, rightContentWidth, bodyFont) + NODE_PREVIEW_LINE_GAP
-
-    love.graphics.setColor(0.9, 0.91, 0.92, 0.95)
-    for _, detail in ipairs(detailLines) do
-        y = printWrappedLine(detail, contentX, y, rightContentWidth, bodyFont) + 4
-    end
-
-    y = y + NODE_PREVIEW_LINE_GAP
-
-    love.graphics.setFont(smallFont)
-    love.graphics.setColor(accentColor[1], accentColor[2], accentColor[3], 1)
-    for _, encounterRow in ipairs(packageRows) do
-        local rowTextX = contentX + NODE_PREVIEW_THUMBNAIL_SIZE + NODE_PREVIEW_ROW_GAP
-        local nameHeight = getWrappedLineCount(bodyFont, encounterRow.name or encounterRow.id or "?", encounterTextWidth) * bodyFont:getHeight()
-        local textHeight = smallFont:getHeight() + 5 + nameHeight
-        local rowHeight = math.max(NODE_PREVIEW_THUMBNAIL_SIZE, textHeight)
-
-        drawEncounterPreviewRow(
-            encounterRow,
-            contentX,
-            y,
-            rowTextX,
-            encounterTextWidth,
-            NODE_PREVIEW_THUMBNAIL_SIZE,
-            bodyFont,
-            smallFont,
-            accentColor,
-            state
-        )
-        y = y + rowHeight + NODE_PREVIEW_ROW_GAP
-    end
-
-    if hasIntelRow then
-        y = y + drawSplitPreviewRow(
-            "Intel Deck",
-            intelCards,
-            "Warzone",
-            warzoneCards,
-            contentX,
-            y,
-            rightContentWidth,
-            NODE_PREVIEW_OBJECTIVE_THUMBNAIL_SIZE,
-            smallFont,
-            accentColor,
-            state
-        ) + NODE_PREVIEW_OBJECTIVE_ROW_GAP
-    end
-
-    if hasObjectiveRow then
-        drawSplitPreviewRow(
-            "\nObjectives",
-            objectiveCards,
-            "Person of Interest",
-            poiCards,
-            contentX,
-            y,
-            rightContentWidth,
-            NODE_PREVIEW_OBJECTIVE_THUMBNAIL_SIZE,
-            smallFont,
-            accentColor,
-            state
-        )
-    end
-end
-
-local function drawNodeEncounterPreviewGroup(state, previewGroup)
-    local previewNodes = previewGroup and previewGroup.previewNodes or nil
-
-    if not previewNodes then
-        if previewGroup then
-            drawNodeEncounterPreview(state, previewGroup, 1)
-        end
-
-        return
-    end
-
-    local edgeCounts = {
-        top = 0,
-        bottom = 0,
-    }
-
-    for _, previewNode in ipairs(previewNodes) do
-        local edge = getNodePreviewEdge(previewNode)
-
-        edgeCounts[edge] = (edgeCounts[edge] or 0) + 1
-        drawNodeEncounterPreview(state, previewNode, edgeCounts[edge])
-    end
 end
 
 getWorldResourceTrackerLayout = function(state)
@@ -1471,6 +685,9 @@ local function drawWorldResourceTrackers(state)
     local labelFont = getFont(layout.labelFontSize)
     local valueFont = getFont(layout.valueFontSize)
     local resources = state and state.worldResources or {}
+    local munitionsSystem = getSelectedMunitionsSystem(state)
+    local titheSystem = getSelectedTitheSystem(state)
+    local hoveredSystemTooltip = nil
 
     for trackerIndex, tracker in ipairs(WORLD_RESOURCE_TRACKERS) do
         local rowY = layout.y + ((trackerIndex - 1) * (layout.trackerHeight + layout.gap))
@@ -1479,6 +696,13 @@ local function drawWorldResourceTrackers(state)
         local trackerX = iconX + layout.iconSize + layout.iconGap
         local value = math.max(0, math.floor(tonumber(resources[tracker.key]) or 0))
         local image = getMapImage(tracker.icon)
+        local mouseX, mouseY = love.mouse.getPosition()
+        local iconAnchor = {
+            x = iconX,
+            y = iconY,
+            width = layout.iconSize,
+            height = layout.iconSize,
+        }
 
         if image then
             local imageScale = math.min(layout.iconSize / image:getWidth(), layout.iconSize / image:getHeight())
@@ -1494,6 +718,18 @@ local function drawWorldResourceTrackers(state)
                 imageScale,
                 imageScale
             )
+        end
+
+        if tracker.key == "munitions" and isPointInsideRect(mouseX, mouseY, iconAnchor) then
+            hoveredSystemTooltip = {
+                systemDefinition = munitionsSystem,
+                anchor = iconAnchor,
+            }
+        elseif tracker.key == "tithes" and isPointInsideRect(mouseX, mouseY, iconAnchor) then
+            hoveredSystemTooltip = {
+                systemDefinition = titheSystem,
+                anchor = iconAnchor,
+            }
         end
 
         love.graphics.setColor(
@@ -1536,7 +772,29 @@ local function drawWorldResourceTrackers(state)
             WORLD_RESOURCE_TRACKER_LABEL_COLOR[3],
             WORLD_RESOURCE_TRACKER_LABEL_COLOR[4]
         )
-        love.graphics.print(tracker.label, trackerX + layout.paddingX, rowY + layout.labelOffsetY)
+        local labelText = tracker.label
+        local labelX = trackerX + layout.paddingX
+        local labelY = rowY + layout.labelOffsetY
+        love.graphics.print(labelText, labelX, labelY)
+
+        local trackerSystem = tracker.key == "munitions" and munitionsSystem
+            or tracker.key == "tithes" and titheSystem
+            or nil
+
+        if trackerSystem and trackerSystem.name then
+            love.graphics.setFont(valueFont)
+            love.graphics.setColor(
+                WORLD_RESOURCE_TRACKER_DETAIL_COLOR[1],
+                WORLD_RESOURCE_TRACKER_DETAIL_COLOR[2],
+                WORLD_RESOURCE_TRACKER_DETAIL_COLOR[3],
+                WORLD_RESOURCE_TRACKER_DETAIL_COLOR[4]
+            )
+            love.graphics.print(
+                trackerSystem.name,
+                trackerX + layout.paddingX,
+                rowY + layout.valueOffsetY
+            )
+        end
 
         love.graphics.setFont(valueFont)
         love.graphics.setColor(
@@ -1555,6 +813,7 @@ local function drawWorldResourceTrackers(state)
     end
 
     love.graphics.setColor(1, 1, 1, 1)
+    return hoveredSystemTooltip and hoveredSystemTooltip.systemDefinition and hoveredSystemTooltip or nil
 end
 
 local function getDeckSourceAt(state, x, y)
@@ -1741,6 +1000,7 @@ local function buildMissionLaunchPayload(state, hoveredNode)
         jaclId = state.selectedRunJaclId,
         agentIds = {},
         championAdditionalDeckIds = {},
+        prize = preview.prize,
     }
 
     for _, agentId in ipairs(state.selectedRunAgentIds or {}) do
@@ -2406,6 +1666,7 @@ local function drawWorldMapDeckModal(deckModal)
             showLabelWhenCollapsed = true,
             showHealthOnPortrait = false,
             showBadgesInTextbox = true,
+            showEmphasisOnPortrait = true,
             displayName = cardLayout.card.displayName,
             portraitPath = cardLayout.card.portraitPath,
         })
@@ -2436,6 +1697,16 @@ function worldmapdraw.updateHover(state, deps)
         return
     end
 
+    if state.worldMapRewardModal then
+        state.hoveredWorldMapNode = nil
+        state.pinnedWorldMapNode = nil
+        state.worldMapDeckModal = nil
+        state.worldMapObjectivePreviewModal = nil
+        state.worldMapNodePlayButtonTarget = nil
+        state.worldMapNodePlayButtonTargets = nil
+        return
+    end
+
     if state.pinnedWorldMapNode then
         state.hoveredWorldMapNode = nil
         return
@@ -2459,9 +1730,17 @@ function worldmapdraw.updateHover(state, deps)
     end
 end
 
+function worldmapdraw.updateRewardModal(state, dt)
+    return worldrewardmodal.update(state, dt)
+end
+
 function worldmapdraw.mousepressed(state, x, y, button, deps)
     if not state then
         return false
+    end
+
+    if state.worldMapRewardModal then
+        return worldrewardmodal.mousepressed(state, x, y, button, deps)
     end
 
     if state.worldMapObjectivePreviewModal then
@@ -2535,6 +1814,10 @@ function worldmapdraw.mousepressed(state, x, y, button, deps)
 end
 
 function worldmapdraw.wheelmoved(state, _, y)
+    if worldrewardmodal.wheelmoved(state) then
+        return true
+    end
+
     local deckModal = state and state.worldMapDeckModal or nil
 
     if not deckModal or not deckModal.deck then
@@ -2854,10 +2137,10 @@ local function drawWorldAlmsTracker(state)
 
     love.graphics.setFont(valueFont)
     love.graphics.setColor(
-        WORLD_RESOURCE_TRACKER_TEXT_COLOR[1],
-        WORLD_RESOURCE_TRACKER_TEXT_COLOR[2],
-        WORLD_RESOURCE_TRACKER_TEXT_COLOR[3],
-        WORLD_RESOURCE_TRACKER_TEXT_COLOR[4]
+        WORLD_ALMS_TRACKER_COLOR[1],
+        WORLD_ALMS_TRACKER_COLOR[2],
+        WORLD_ALMS_TRACKER_COLOR[3],
+        WORLD_ALMS_TRACKER_COLOR[4]
     )
     love.graphics.printf(
         tostring(value),
@@ -3034,14 +2317,6 @@ local function drawCenteredSquare(mode, x, y, radius)
     love.graphics.rectangle(mode, x - radius, y - radius, size, size)
 end
 
-isLoadingWorldMapNode = function(state, clusterIndex, nodeIndex)
-    local loadingNode = state and state.pendingMissionSetup and state.loadingWorldMapNode or nil
-
-    return loadingNode
-        and loadingNode.clusterIndex == clusterIndex
-        and loadingNode.nodeIndex == nodeIndex
-end
-
 function worldmapdraw.draw(state)
     local screenWidth = love.graphics.getWidth()
     local screenHeight = love.graphics.getHeight()
@@ -3067,7 +2342,11 @@ function worldmapdraw.draw(state)
     local playerMapPosition = getPlayerMapPosition(state)
     local nextMapPosition = getNextMapPosition(playerMapPosition)
 
+    local suppressMapElements = state and state.worldMapRewardModal
+
     love.graphics.clear(0.045, 0.047, 0.055, 1)
+
+    if not suppressMapElements then
     love.graphics.setLineWidth(5)
     love.graphics.setColor(0.5, 0.5, 0.5, 1)
     love.graphics.line(startX, y, lastDiamondX, y)
@@ -3179,7 +2458,7 @@ function worldmapdraw.draw(state)
             elseif isEventNode then
                 love.graphics.circle("fill", x, y, eventCircleRadius * 0.45)
             else
-                local nestedDiamondRadius = nodeRadius * 0.42
+                local nestedDiamondRadius = nodeRadius * (isBossNode and 0.34 or 0.42)
 
                 love.graphics.polygon(
                     "fill",
@@ -3196,6 +2475,8 @@ function worldmapdraw.draw(state)
         end
     end
 
+    end
+
     love.graphics.setLineWidth(1)
     love.graphics.setColor(1, 1, 1, 1)
 
@@ -3208,15 +2489,23 @@ function worldmapdraw.draw(state)
 
     drawWorldAlmsTracker(state)
     drawWorldRolePortraits(state)
-    drawWorldResourceTrackers(state)
+    local munitionsTooltip = drawWorldResourceTrackers(state)
     drawWorldSystemsColumn(state)
     drawSelectedRunLoadout(state)
-    drawNodeEncounterPreviewGroup(
-        state,
-        state and (state.pinnedWorldMapNode or state.hoveredWorldMapNode or getDefaultFunctionalNode(state)) or nil
-    )
-    drawWorldMapDeckModal(state and state.worldMapDeckModal or nil)
-    drawObjectiveCardPreviewModal(state and state.worldMapObjectivePreviewModal or nil)
+    if not suppressMapElements then
+        worldencounterpreviewdraw.drawGroup(
+            state,
+            state and (state.pinnedWorldMapNode or state.hoveredWorldMapNode or getDefaultFunctionalNode(state)) or nil
+        )
+        drawWorldMapDeckModal(state and state.worldMapDeckModal or nil)
+        drawObjectiveCardPreviewModal(state and state.worldMapObjectivePreviewModal or nil)
+    end
+
+    if munitionsTooltip then
+        drawMunitionsSystemTooltip(munitionsTooltip.systemDefinition, munitionsTooltip.anchor)
+    end
+
+    worldrewardmodal.draw(state)
 end
 
 return worldmapdraw

@@ -99,7 +99,9 @@ local function resolveDefeatedCard(ctx, cardIndex, card)
         local haywireProgress = ctx.haywirerules.getDamageDefeatProgress(ctx, card)
 
         if haywireProgress > 0 then
-            ctx.addObjectiveProgress(state.activePrimaryObjective, haywireProgress)
+            ctx.addObjectiveProgress(state.activePrimaryObjective, haywireProgress, "objective", {
+                skipHaywireBonus = true,
+            })
         end
     end
 
@@ -117,6 +119,34 @@ local function resolveDefeatedCard(ctx, cardIndex, card)
         addCardKeywordValue = ctx.addCardKeywordValue,
     })
     return true
+end
+
+local function isWarEngagePhase(ctx)
+    return ctx
+        and ctx.turnrules
+        and ctx.turnrules.getCurrentPhase
+        and ctx.turnrules.getCurrentWarSubphase
+        and ctx.turnrules.getCurrentPhase() == "War"
+        and ctx.turnrules.getCurrentWarSubphase() == "Engage"
+end
+
+local function rollRecoveredCardIfEngaging(ctx, cardIndex, card, cardDefinition)
+    if not isWarEngagePhase(ctx)
+        or not ctx.warrules
+        or not ctx.warrules.rerollEntity
+        or not ctx.warrules.getCardEntityKey
+        or not card
+        or not card.location
+        or card.location.kind ~= "grid" then
+        return false
+    end
+
+    return ctx.warrules.rerollEntity(
+        ctx.warrules.getCardEntityKey(cardIndex),
+        cardDefinition,
+        card.location.rowId == "OppRow",
+        card
+    )
 end
 
 local function shouldTransformDefeatedAgent(ctx, card)
@@ -235,6 +265,7 @@ function cardlifecycle.restoreIncapAgentIfRecovered(ctx, card)
 
     if ctx.warrules and cardIndex then
         ctx.warrules.clearCardRollState(cardIndex)
+        rollRecoveredCardIfEngaging(ctx, cardIndex, card, agentDefinition)
     end
 
     if cardIndex then
@@ -402,7 +433,7 @@ function cardlifecycle.discardDestroyedCard(ctx, card, cardIndex)
 
     local cardDefinition = ctx.cardregistry.getCard(card.setName, card.cardId)
 
-    if cardDefinition and (cardDefinition.type == "token" or cardDefinition.type == "cache") then
+    if cardDefinition and (cardDefinition.type == "token" or cardDefinition.type == "cache" or cardDefinition.type == "crew") then
         card.sentToDiscard = true
         cardlifecycle.restoreAttachedPilotToSlot(ctx, cardIndex, card)
         return nil

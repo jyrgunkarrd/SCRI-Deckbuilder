@@ -5,7 +5,9 @@ local troopDefinitions = require("data.cards.troops")
 local abilityrules = require("src.system.abilityrules")
 local cardregistry = require("src.system.cardregistry")
 local deckrules = require("src.system.deckrules")
+local munitionsrules = require("src.system.munitionsrules")
 local previewrules = require("src.system.previewrules")
+local tithesrules = require("src.system.tithesrules")
 local carddraw = require("src.render.carddraw")
 local envdraw = require("src.render.envdraw")
 
@@ -464,11 +466,15 @@ local function commitPackageSelection(state, packageIndex)
     state.selectedRunJaclId = package.jacl and package.jacl.id or nil
     state.selectedRunAgentIds = agentIds
     state.worldResources = buildStartingWorldResources(package.jacl)
+    state.selectedRunMunitionsSystem = munitionsrules.getJaclMunitions(package.jacl)
+    state.selectedRunTitheSystem = tithesrules.getJaclTithe(package.jacl)
     state.selectedRunPackage = {
         packageIndex = packageIndex,
         jaclId = state.selectedRunJaclId,
         agentIds = agentIds,
         jacl = package.jacl,
+        munitionsSystem = state.selectedRunMunitionsSystem,
+        titheSystem = state.selectedRunTitheSystem,
         agents = package.agents or {},
     }
     state.runSetupModal.isOpen = false

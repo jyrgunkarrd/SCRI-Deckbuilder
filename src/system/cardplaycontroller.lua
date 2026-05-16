@@ -134,7 +134,7 @@ local function isValidCrewButtonBlockTarget(cardIndex, pendingSelection, ctx)
     local card = cardIndex and ctx.state.cards[cardIndex] or nil
 
     return pendingSelection
-        and pendingSelection.kind == "crew_button_block_2"
+        and (pendingSelection.kind == "crew_button_block_2" or pendingSelection.kind == "tithe_block_1")
         and card
         and card.location
         and card.location.kind == "grid"
@@ -303,13 +303,13 @@ function cardplaycontroller.tryResolvePendingStrategySelection(cardIndex, ctx, t
         return true
     end
 
-    if pendingSelection.kind == "crew_button_block_2" then
+    if pendingSelection.kind == "crew_button_block_2" or pendingSelection.kind == "tithe_block_1" then
         if not isValidCrewButtonBlockTarget(cardIndex, pendingSelection, ctx) then
             return false
         end
 
         if ctx.addBlockingToCard then
-            ctx.addBlockingToCard(state.cards[cardIndex], 2)
+            ctx.addBlockingToCard(state.cards[cardIndex], pendingSelection.blockAmount or 2)
         end
 
         state.pendingButtonSelection = nil
@@ -373,6 +373,18 @@ function cardplaycontroller.cancelPendingStrategySelection(ctx)
             sourceCard.buttonBadgeExhausted = nil
         end
 
+        if pendingSelection.refundWorldResource
+            and ctx.worldResources
+            and pendingSelection.refundWorldResource.key then
+            local key = pendingSelection.refundWorldResource.key
+            local amount = math.max(0, math.floor(tonumber(pendingSelection.refundWorldResource.amount) or 0))
+            ctx.worldResources[key] = math.max(0, math.floor(tonumber(ctx.worldResources[key]) or 0)) + amount
+        end
+
+        if pendingSelection.exhaustedRewardButtonId and ctx.state.syntacRewardButtons then
+            ctx.state.syntacRewardButtons[pendingSelection.exhaustedRewardButtonId] = nil
+        end
+
         ctx.state.pendingButtonSelection = nil
 
         if ctx.notifications then
@@ -396,7 +408,8 @@ function cardplaycontroller.isPendingSelectionTarget(cardIndex, pendingSelection
         return isValidCrewButtonHealTarget(cardIndex, pendingSelection, ctx)
     end
 
-    if pendingSelection and pendingSelection.kind == "crew_button_block_2" then
+    if pendingSelection
+        and (pendingSelection.kind == "crew_button_block_2" or pendingSelection.kind == "tithe_block_1") then
         return isValidCrewButtonBlockTarget(cardIndex, pendingSelection, ctx)
     end
 

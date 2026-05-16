@@ -3,6 +3,7 @@ local contextassembly = {}
 function contextassembly.build(contextbuilders, c)
     return contextbuilders.mergeContextGroups({
         state = c.gameState,
+        appState = c.appState,
         abilityrules = c.abilityrules,
         carddraw = c.carddraw,
         cardlifecycle = c.cardlifecycle,
@@ -18,6 +19,8 @@ function contextassembly.build(contextbuilders, c)
         previewrules = c.previewrules,
         kitrules = c.kitrules,
         modals = c.modals,
+        munitionsrules = c.munitionsrules,
+        tithesrules = c.tithesrules,
         notifications = c.notifications,
         objectiverules = c.objectiverules,
         phasecontroller = c.phasecontroller,

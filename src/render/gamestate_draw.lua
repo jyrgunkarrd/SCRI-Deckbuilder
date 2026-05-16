@@ -150,7 +150,7 @@ function gamestatedraw.draw(ctx)
         ctx.envdraw.drawRerollButton(ctx.playerJacl, ctx.engageRerollCount, ctx.engageRerollCount > 0)
     end
 
-    ctx.envdraw.drawSyntacBox(ctx.playerJacl, ctx.syntacCount, ctx.syntacRewardButtons)
+    ctx.envdraw.drawSyntacBox(ctx.playerJacl, ctx.syntacCount, ctx.syntacRewardButtons, ctx.worldResources, ctx.munitionsSystem)
     ctx.envdraw.drawBottomLeftPanel(ctx.playerJacl, ctx.resourcerules.getResourceCounts())
     ctx.envdraw.drawPlayerHand()
 
@@ -298,6 +298,9 @@ function gamestatedraw.draw(ctx)
     end
 
     ctx.envdraw.drawResourceTransfers(ctx.resourcerules.getActiveTransfers())
+    if ctx.munitionsrules then
+        ctx.envdraw.drawResourceTransfers(ctx.munitionsrules.getActiveProjectiles())
+    end
 
     if ctx.mulliganActive then
         local mulliganAlpha = clamp(ctx.mulliganPromptAlpha or 1, 0, 1)
@@ -432,6 +435,8 @@ function gamestatedraw.draw(ctx)
         ctx.envdraw.drawSyntacMethodModal()
     elseif ctx.isResourceExchangeModalOpen then
         ctx.envdraw.drawResourceExchangeModal(ctx.resourcerules.getResourceCounts())
+    elseif ctx.envdraw.drawSyntacRewardButtonTooltip
+        and ctx.envdraw.drawSyntacRewardButtonTooltip(ctx.playerJacl, mouseX, mouseY, ctx.munitionsSystem, ctx.titheSystem) then
     elseif syntacHovered then
         ctx.envdraw.drawSyntacTooltip(ctx.playerJacl)
     elseif ctx.hoveredDiceFace then

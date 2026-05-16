@@ -9,6 +9,7 @@ local haywire = {
         name = "Malfunction",
         classname = "Haywire",
         subclass = "Basic",
+        textbox = "When this card is defeated by an enemy attack, add 2 progress to the enemy objective.",
         flavor = "\"FATAL ERROR\"",
         mcost = {
             { resource = "The Scratch", amount = 1 },

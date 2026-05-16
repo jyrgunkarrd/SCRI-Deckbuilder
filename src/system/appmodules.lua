@@ -37,6 +37,7 @@ local appmodules = {
     keywordrules = require("src.system.keywordrules"),
     kitrules = require("src.system.kitrules"),
     lifecyclebridge = require("src.system.lifecyclebridge"),
+    munitionsrules = require("src.system.munitionsrules"),
     notifications = require("src.system.notifications"),
     objectiverules = require("src.system.objectiverules"),
     phasecontroller = require("src.system.phasecontroller"),
@@ -48,6 +49,7 @@ local appmodules = {
     systemrules = require("src.system.systemrules"),
     syntacrules = require("src.system.syntacrules"),
     temporaryeffects = require("src.system.temporaryeffects"),
+    tithesrules = require("src.system.tithesrules"),
     tomerules = require("src.system.tomerules"),
     topsloteffects = require("src.system.topsloteffects"),
     trooprules = require("src.system.trooprules"),
@@ -60,6 +62,7 @@ local appmodules = {
     hoverpreview = require("src.ui.hoverpreview"),
     inputcontroller = require("src.ui.inputcontroller"),
     modals = require("src.ui.modals"),
+    surrendermodal = require("src.ui.surrendermodal"),
 }
 
 return appmodules

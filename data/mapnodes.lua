@@ -15,6 +15,8 @@ local mapnodes = {
             },
         },
         encounterPool = "A1C1",
+        prize = 100, 
+        cardrw = "regular",
     },
 
 }

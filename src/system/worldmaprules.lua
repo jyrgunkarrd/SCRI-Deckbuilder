@@ -207,6 +207,8 @@ function worldmaprules.getNodeEncounterPreview(nodeDefinition)
         summary = nodeDefinition.preview and nodeDefinition.preview.summary or nil,
         details = nodeDefinition.preview and nodeDefinition.preview.details or {},
         encounterPool = nodeDefinition.encounterPool,
+        prize = nodeDefinition.prize,
+        cardrw = nodeDefinition.cardrw,
         encounters = worldmaprules.getEncounterPoolEntries(nodeDefinition.encounterPool),
     }
 end

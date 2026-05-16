@@ -76,12 +76,13 @@ function lifecyclebridge.initializeCardsHealthState(c, cardList)
     return c.gameactions.initializeCardsHealthState(cardList)
 end
 
-function lifecyclebridge.addObjectiveProgress(c, objectiveDefinition, amount, slotId)
+function lifecyclebridge.addObjectiveProgress(c, objectiveDefinition, amount, slotId, options)
     return c.gameactions.addObjectiveProgress(
         lifecyclebridge.getGameActionsContext(c),
         objectiveDefinition,
         amount,
-        slotId
+        slotId,
+        options
     )
 end
 

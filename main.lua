@@ -45,6 +45,7 @@ strategyrules = appmodules.strategyrules
 systemrules = appmodules.systemrules
 syntacrules = appmodules.syntacrules
 temporaryeffects = appmodules.temporaryeffects
+tithesrules = appmodules.tithesrules
 tomerules = appmodules.tomerules
 topsloteffects = appmodules.topsloteffects
 trooprules = appmodules.trooprules
@@ -56,6 +57,8 @@ warzonerules = appmodules.warzonerules
 hoverpreview = appmodules.hoverpreview
 inputcontroller = appmodules.inputcontroller
 modals = appmodules.modals
+munitionsrules = appmodules.munitionsrules
+surrendermodal = appmodules.surrendermodal
 
 local setupScenario = gamestate.getDefaultScenario()
 local gameState = gamestate.createInitialState()
@@ -80,6 +83,35 @@ local isHunterCard
 local getCardPresentationContext
 local startNewRun
 getDamageJitterKeyForCard = lifecyclebridge.getDamageJitterKeyForCard
+
+local function getMissionRewardAlms()
+    local reward = appState.activeMissionReward
+
+    return math.max(0, math.floor(tonumber(reward and reward.alms or appState.activeMissionPrize) or 0))
+end
+
+local function setActiveMissionReward(reward)
+    local alms = math.max(0, math.floor(tonumber(reward and reward.alms) or 0))
+    local resourceKey = reward and reward.resourceKey or nil
+    local resourceAmount = math.max(0, math.floor(tonumber(reward and reward.resourceAmount) or 0))
+
+    appState.activeMissionReward = {
+        alms = alms,
+        source = reward and reward.source or nil,
+    }
+
+    if resourceKey and resourceAmount > 0 then
+        appState.activeMissionReward.resourceKey = resourceKey
+        appState.activeMissionReward.resourceAmount = resourceAmount
+    end
+
+    appState.activeMissionPrize = alms
+end
+
+local function clearActiveMissionReward()
+    appState.activeMissionReward = nil
+    appState.activeMissionPrize = nil
+end
 
 local function isCardDestroyed(card)
     return cardlifecycle.isCardDestroyed(card)
@@ -117,15 +149,15 @@ local function getObjectiveProgressEffectSlotId()
     return topsloteffects.getObjectiveProgressEffectSlotId()
 end
 
-resolveChampionDefeated = function()
-    if not gamestates.isMissionStage(appState) then
-        return appState.victoryTransition ~= nil
-    end
+local function isVictoryInputLocked()
+    return appState.victoryTransition
+        or appState.championVictoryDestruction
+        or appState.worldToMissionTransition
+        or appState.pendingMissionSetup
+        or false
+end
 
-    if appState.victoryTransition then
-        return true
-    end
-
+local function beginVictoryTransition()
     appState.victoryTransition = {
         elapsed = 0,
         duration = appconfig.VICTORY_TRANSITION_DURATION,
@@ -145,7 +177,136 @@ resolveChampionDefeated = function()
     appState.worldMapObjectivePreviewModal = nil
     appState.worldMapNodePlayButtonTarget = nil
     appState.worldMapNodePlayButtonTargets = nil
+    appState.worldMapRewardModal = nil
+    appState.worldMapRewardCollectButtonTarget = nil
     appState.worldToMissionTransition = nil
+end
+
+local function isVictoryDestructionUnit(card)
+    if not card
+        or not card.location
+        or card.location.kind ~= "grid"
+        or card.location.rowId ~= "OppRow"
+        or card.destroyed
+        or card.destroying then
+        return false
+    end
+
+    local definition = cardregistry.getCard(card.setName, card.cardId)
+
+    return definition
+        and (
+            definition.type == "troop"
+            or definition.type == "token"
+            or definition.type == "agent"
+            or definition.classname == "Enemy"
+        )
+        or false
+end
+
+local function beginChampionVictoryDestruction()
+    local targetCardIndexes = {}
+
+    startChampionDestruction()
+
+    for cardIndex, card in ipairs(gameState.cards or {}) do
+        if isVictoryDestructionUnit(card) then
+            targetCardIndexes[#targetCardIndexes + 1] = cardIndex
+            startCardDestruction(cardIndex)
+        end
+    end
+
+    gameState.draggedCardIndex = nil
+    gameState.selectedAttackerCardIndex = nil
+    gameState.selectedAttackerTopSlotId = nil
+    gameState.primedActivatedAbility = nil
+    gameState.pendingStrategySelection = nil
+    gameState.pendingSacrificeSelection = nil
+    gameState.pendingHandLimitDiscardSelection = nil
+    gameState.pendingButtonSelection = nil
+
+    appState.championVictoryDestruction = {
+        targetCardIndexes = targetCardIndexes,
+    }
+end
+
+local function hasChampionVictoryDestructionTarget(pending, cardIndex)
+    for _, targetCardIndex in ipairs(pending and pending.targetCardIndexes or {}) do
+        if targetCardIndex == cardIndex then
+            return true
+        end
+    end
+
+    return false
+end
+
+local function queueNewChampionVictoryDestructionTargets()
+    local pending = appState.championVictoryDestruction
+
+    if not pending then
+        return false
+    end
+
+    local queuedAny = false
+
+    for cardIndex, card in ipairs(gameState.cards or {}) do
+        if not hasChampionVictoryDestructionTarget(pending, cardIndex)
+            and isVictoryDestructionUnit(card) then
+            pending.targetCardIndexes[#pending.targetCardIndexes + 1] = cardIndex
+            startCardDestruction(cardIndex)
+            queuedAny = true
+        end
+    end
+
+    return queuedAny
+end
+
+local function isChampionVictoryDestructionComplete()
+    local pending = appState.championVictoryDestruction
+
+    if not pending then
+        return true
+    end
+
+    if topsloteffects.isChampionDestructionActive() then
+        return false
+    end
+
+    for _, card in ipairs(gameState.cards or {}) do
+        if card
+            and card.destroying
+            and card.location
+            and card.location.kind == "grid"
+            and card.location.rowId == "OppRow" then
+            return false
+        end
+    end
+
+    for _, cardIndex in ipairs(pending.targetCardIndexes or {}) do
+        local card = gameState.cards and gameState.cards[cardIndex] or nil
+
+        if card and card.destroying then
+            return false
+        end
+    end
+
+    return true
+end
+
+resolveChampionDefeated = function()
+    if not gamestates.isMissionStage(appState) then
+        return appState.victoryTransition ~= nil
+    end
+
+    if appState.victoryTransition then
+        return true
+    end
+
+    if appState.championVictoryDestruction then
+        return true
+    end
+
+    beginChampionVictoryDestruction()
 
     return true
 end
@@ -168,7 +329,22 @@ local function completeVictoryTransitionToWorld(transition)
     appState.worldMapObjectivePreviewModal = nil
     appState.worldMapNodePlayButtonTarget = nil
     appState.worldMapNodePlayButtonTargets = nil
+    appState.worldMapRewardModal = nil
+    appState.worldMapRewardCollectButtonTarget = nil
     transition.switchedToWorld = true
+
+    local reward = appState.activeMissionReward
+    local prize = getMissionRewardAlms()
+
+    if prize > 0 or (reward and reward.resourceKey and (tonumber(reward.resourceAmount) or 0) > 0) then
+        appState.worldMapRewardModal = {
+            prize = prize,
+            resourceKey = reward and reward.resourceKey or nil,
+            resourceAmount = reward and reward.resourceAmount or nil,
+        }
+    end
+
+    clearActiveMissionReward()
 end
 
 local function beginObjectiveEscalation(objectiveDefinition, escalationId)
@@ -381,8 +557,8 @@ spawnbridgeState = {
     end,
     isCardDestroyed = isCardDestroyed,
     isCardUnavailable = isCardUnavailable,
-    addObjectiveProgress = function(objectiveDefinition, amount, slotId)
-        return addObjectiveProgress(objectiveDefinition, amount, slotId)
+    addObjectiveProgress = function(objectiveDefinition, amount, slotId, options)
+        return addObjectiveProgress(objectiveDefinition, amount, slotId, options)
     end,
     beginObjectiveHunterDeckTransformation = beginObjectiveHunterDeckTransformation,
     beginReinforcementHunterDeckTransformation = beginReinforcementHunterDeckTransformation,
@@ -649,8 +825,8 @@ getGameActionsContext = function()
     return lifecyclebridge.getGameActionsContext(lifecyclebridgeState)
 end
 
-addObjectiveProgress = function(objectiveDefinition, amount, slotId)
-    return lifecyclebridge.addObjectiveProgress(lifecyclebridgeState, objectiveDefinition, amount, slotId)
+addObjectiveProgress = function(objectiveDefinition, amount, slotId, options)
+    return lifecyclebridge.addObjectiveProgress(lifecyclebridgeState, objectiveDefinition, amount, slotId, options)
 end
 
 canApplyObjectiveProgress = function(objectiveDefinition, amount)
@@ -737,6 +913,8 @@ dealDamageToChampion = function(amount, suppressFeedback)
         and championHealth
         and championHealth <= 0 then
         resolveChampionDefeated(damageResult)
+    elseif gamestates.isMissionStage(appState) then
+        surrendermodal.maybeOffer(gameState, damageResult, getMissionRewardAlms())
     end
 
     return damageResult
@@ -1140,6 +1318,7 @@ end
 
 contextassemblyState = {
         gameState = gameState,
+        appState = appState,
         abilityrules = abilityrules,
         carddraw = carddraw,
         cardlifecycle = cardlifecycle,
@@ -1155,6 +1334,8 @@ contextassemblyState = {
         previewrules = previewrules,
         kitrules = kitrules,
         modals = modals,
+        munitionsrules = munitionsrules,
+        tithesrules = tithesrules,
         notifications = notifications,
         objectiverules = objectiverules,
         phasecontroller = phasecontroller,
@@ -1320,7 +1501,10 @@ startNewRun = function(saveSlotId, saveTimestamp)
     warzonecontrolrules.reset()
     topsloteffects.reset()
     infiltrationrules.reset()
+    munitionsrules.reset()
     gameState.playerJacl = jaclrules.getJacl(setupScenario.playerJaclId)
+    gameState.munitionsSystem = munitionsrules.getJaclMunitions(gameState.playerJacl)
+    gameState.titheSystem = tithesrules.getJaclTithe(gameState.playerJacl)
     gameState.activeChampion = championrules.getChampion(setupScenario.activeChampionId)
     if gameState.activeChampion then
         gameState.activeChampion.hidden = false
@@ -1380,6 +1564,10 @@ local function applyWorldMissionPayload(payload)
     setupScenario.activeWarzoneId = payload.warzoneId
     setupScenario.randomWarzoneSuffix = nil
     setupScenario.championAdditionalDeckIds = {}
+    setActiveMissionReward({
+        alms = payload.prize,
+        source = "victory",
+    })
 
     for _, deckId in ipairs(payload.championAdditionalDeckIds or {}) do
         setupScenario.championAdditionalDeckIds[#setupScenario.championAdditionalDeckIds + 1] = deckId
@@ -1402,12 +1590,15 @@ local function buildMissionSetupQueue(saveSlotId, saveTimestamp)
                 warzonecontrolrules.reset()
                 topsloteffects.reset()
                 infiltrationrules.reset()
+                munitionsrules.reset()
             end,
         },
         {
             id = "definitions",
             action = function()
                 gameState.playerJacl = jaclrules.getJacl(setupScenario.playerJaclId)
+                gameState.munitionsSystem = munitionsrules.getJaclMunitions(gameState.playerJacl)
+                gameState.titheSystem = tithesrules.getJaclTithe(gameState.playerJacl)
                 gameState.activeChampion = championrules.getChampion(setupScenario.activeChampionId)
                 if gameState.activeChampion then
                     gameState.activeChampion.hidden = false
@@ -1617,6 +1808,8 @@ startMissionFromWorldNode = function(payload)
     appState.worldMapObjectivePreviewModal = nil
     appState.worldMapNodePlayButtonTarget = nil
     appState.worldMapNodePlayButtonTargets = nil
+    appState.worldMapRewardModal = nil
+    appState.worldMapRewardCollectButtonTarget = nil
     appState.victoryTransition = nil
     appState.worldToMissionTransition = nil
     appState.pendingMissionSetup = {
@@ -1695,6 +1888,35 @@ function love.update(dt)
         return
     end
 
+    if appState.championVictoryDestruction then
+        cardlifecycle.updateDestroyedCards(getCardLifecycleContext(), dt)
+        queueNewChampionVictoryDestructionTargets()
+
+        local topSlotEffectEvents = topsloteffects.update(dt)
+
+        if topSlotEffectEvents.championDestroyed and gameState.activeChampion then
+            gameState.activeChampion.hidden = true
+        end
+
+        for entityKey, jitter in pairs(gameState.damageJitters) do
+            jitter.elapsed = jitter.elapsed + dt
+
+            if jitter.elapsed >= jitter.duration then
+                gameState.damageJitters[entityKey] = nil
+            end
+        end
+
+        notifications.update(dt)
+        updateHoveredCard()
+
+        if isChampionVictoryDestructionComplete() then
+            appState.championVictoryDestruction = nil
+            beginVictoryTransition()
+        end
+
+        return
+    end
+
     if gamestates.isFileSelect(appState) then
         gamestates.updateFileSelect(appState, dt, {
             sfxrules = sfxrules,
@@ -1717,8 +1939,25 @@ function love.update(dt)
 
     local entranceDt = math.min(dt, appconfig.CARD_ENTRANCE_MAX_DT)
 
+    if surrendermodal.hasOpenModal(gameState) then
+        for entityKey, jitter in pairs(gameState.damageJitters) do
+            jitter.elapsed = jitter.elapsed + dt
+
+            if jitter.elapsed >= jitter.duration then
+                gameState.damageJitters[entityKey] = nil
+            end
+        end
+
+        notifications.update(dt)
+        updateHoveredCard()
+        return
+    end
+
     gameState.cardEntranceTimer = gameState.cardEntranceTimer + entranceDt
     resourcerules.update(dt)
+    munitionsrules.update(dt, {
+        sfxrules = sfxrules,
+    })
     updateKitReturnAnimations(dt)
     updatePilotVehicleAnimations(dt)
     updateHunterAutoPlayAnimations(dt)
@@ -1800,7 +2039,16 @@ function love.update(dt)
 end
 
 function love.mousepressed(x, y, button)
-    if appState.victoryTransition or appState.worldToMissionTransition or appState.pendingMissionSetup then
+    if isVictoryInputLocked() then
+        return
+    end
+
+    if surrendermodal.hasOpenModal(gameState) then
+        surrendermodal.mousepressed(gameState, x, y, button, {
+            beginChampionVictoryDestruction = beginChampionVictoryDestruction,
+            setActiveMissionReward = setActiveMissionReward,
+            sfxrules = sfxrules,
+        })
         return
     end
 
@@ -1823,7 +2071,11 @@ function love.mousepressed(x, y, button)
 end
 
 function love.wheelmoved(_, y)
-    if appState.victoryTransition or appState.worldToMissionTransition or appState.pendingMissionSetup then
+    if isVictoryInputLocked() then
+        return
+    end
+
+    if surrendermodal.hasOpenModal(gameState) then
         return
     end
 
@@ -1840,7 +2092,11 @@ function love.wheelmoved(_, y)
 end
 
 function love.mousereleased(x, y, button)
-    if appState.victoryTransition or appState.worldToMissionTransition or appState.pendingMissionSetup then
+    if isVictoryInputLocked() then
+        return
+    end
+
+    if surrendermodal.hasOpenModal(gameState) then
         return
     end
 
@@ -1852,7 +2108,11 @@ function love.mousereleased(x, y, button)
 end
 
 function love.keypressed(key)
-    if appState.victoryTransition or appState.worldToMissionTransition or appState.pendingMissionSetup then
+    if isVictoryInputLocked() then
+        return
+    end
+
+    if surrendermodal.hasOpenModal(gameState) then
         return
     end
 
@@ -1875,6 +2135,8 @@ function drawMissionStage()
         turnrules = turnrules,
         warrules = warrules,
         resourcerules = resourcerules,
+        munitionsrules = munitionsrules,
+        tithesrules = tithesrules,
         cardregistry = cardregistry,
         crewrules = crewrules,
         previewrules = previewrules,
@@ -1894,6 +2156,9 @@ function drawMissionStage()
         engageRerollCount = gameState.engageRerollCount,
         syntacCount = gameState.syntacCount,
         syntacRewardButtons = gameState.syntacRewardButtons,
+        worldResources = appState.worldResources,
+        munitionsSystem = gameState.munitionsSystem,
+        titheSystem = gameState.titheSystem,
         getRetaliationPhaseObjectiveProgress = getRetaliationPhaseObjectiveProgress,
         getEndPhaseObjectiveProgress = getEndPhaseObjectiveProgress,
         getHaywireHandObjectiveProgress = getHaywireHandObjectiveProgress,
@@ -1965,6 +2230,8 @@ function drawMissionStage()
         drawHaywireDeckAddAnimations = drawHaywireDeckAddAnimations,
         drawPilotVehicleAnimations = drawPilotVehicleAnimations,
     })
+
+    surrendermodal.draw(gameState)
 end
 
 function drawWorldToMissionTransition(transition)
@@ -1980,6 +2247,8 @@ function drawWorldToMissionTransition(transition)
 
     if transition.missionReady and scanlineY > 0 then
         love.graphics.setScissor(0, 0, windowWidth, scanlineY)
+        love.graphics.setColor(0.045, 0.047, 0.055, 1)
+        love.graphics.rectangle("fill", 0, 0, windowWidth, scanlineY)
         drawMissionStage()
         love.graphics.setScissor()
     end

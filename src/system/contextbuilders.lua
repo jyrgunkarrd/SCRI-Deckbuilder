@@ -22,6 +22,7 @@ function contextbuilders.getGameActionsContext(c)
         cardregistry = c.cardregistry,
         topsloteffects = c.topsloteffects,
         haywirerules = c.haywirerules,
+        turnrules = c.turnrules,
         damageJitterDuration = c.damageJitterDuration,
         damageJitterMagnitude = c.damageJitterMagnitude,
         beginObjectiveEscalation = c.beginObjectiveEscalation,
@@ -77,6 +78,7 @@ end
 function contextbuilders.getCardPlayControllerContext(c)
     return {
         state = c.state,
+        worldResources = c.appState and c.appState.worldResources or nil,
         carddraw = c.carddraw,
         cardregistry = c.cardregistry,
         keywordrules = c.keywordrules,
@@ -111,15 +113,22 @@ end
 function contextbuilders.getSyntacAbilityContext(c)
     return {
         state = c.state,
+        worldResources = c.appState and c.appState.worldResources or nil,
+        carddraw = c.carddraw,
         envdraw = c.envdraw,
+        munitionsrules = c.munitionsrules,
+        tithesrules = c.tithesrules,
         sfxrules = c.sfxrules,
         resourcerules = c.resourcerules,
         cardregistry = c.cardregistry,
+        notifications = c.notifications,
+        isCardUnavailable = c.isCardUnavailable,
         addBlockingToCard = c.addBlockingToCard,
         dealDamageToCard = c.dealDamageToCard,
         dealDamageToChampion = c.dealDamageToChampion,
         addWarzoneControl = c.addWarzoneControl,
         addObjectiveProgress = c.addObjectiveProgress,
+        getCardDrawPosition = c.getCardDrawPosition,
         getCurrentPhase = c.turnrules.getCurrentPhase,
         isEngagePhase = c.isEngagePhase,
     }
@@ -460,7 +469,8 @@ function contextbuilders.getTargetingContext(c)
                     or false
             end
 
-            if pendingSelection and pendingSelection.kind == "crew_button_block_2" then
+            if pendingSelection
+                and (pendingSelection.kind == "crew_button_block_2" or pendingSelection.kind == "tithe_block_1") then
                 local card = cardIndex and state.cards[cardIndex] or nil
                 local cardDefinition = card and c.cardregistry.getCard(card.setName, card.cardId) or nil
 

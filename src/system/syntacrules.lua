@@ -84,8 +84,26 @@ function syntacrules.tryUseRewardButton(mouseX, mouseY, ctx)
     local state = ctx.state
     local button = ctx.envdraw.getSyntacRewardButtonAt(mouseX, mouseY, state.playerJacl)
 
-    if not button or (button.id ~= "method" and button.id ~= "draw" and button.id ~= "rerolls") then
+    if not button or (button.id ~= "method" and button.id ~= "draw" and button.id ~= "rerolls" and button.id ~= "munitions" and button.id ~= "tithes") then
         return false
+    end
+
+    if button.id == "tithes" then
+        if ctx.tithesrules and ctx.tithesrules.tryUseButton then
+            return ctx.tithesrules.tryUseButton(ctx)
+        end
+
+        ctx.sfxrules.playPlayReject()
+        return true
+    end
+
+    if button.id == "munitions" then
+        if ctx.munitionsrules and ctx.munitionsrules.tryUseButton then
+            return ctx.munitionsrules.tryUseButton(ctx)
+        end
+
+        ctx.sfxrules.playPlayReject()
+        return true
     end
 
     if not syntacrules.canUseRewardButtons(ctx) then

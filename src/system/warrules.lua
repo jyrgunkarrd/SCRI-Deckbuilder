@@ -102,6 +102,20 @@ local function isHeavyComparableTarget(definition)
     return definition.health ~= nil or definition.max ~= nil
 end
 
+local function isDamageImmuneDefinition(definition)
+    return definition
+        and (
+            definition.type == CACHE_CARD_TYPE
+            or definition.type == MARKER_CARD_TYPE
+        )
+        or false
+end
+
+local function isDamageImmuneCard(card)
+    local definition = card and cardregistry.getCard(card.setName, card.cardId) or nil
+    return isDamageImmuneDefinition(definition)
+end
+
 local function getHighestCurrentHeavyTargetHealthInRow(cards, rowId)
     local highestHealth = nil
 
@@ -1413,6 +1427,11 @@ end
 function warrules.getIncomingDamagePreview(cardIndex, isSourceActive, cards)
     local incomingDamage = 0
     local cardKey = warrules.getCardEntityKey(cardIndex)
+    local previewCard = cards and cards[cardIndex] or nil
+
+    if isDamageImmuneCard(previewCard) then
+        return 0
+    end
 
     for entityKey, rollState in pairs(warRollDisplayStates) do
         local sourceIsActive = isSourceActive == nil or isSourceActive(entityKey, rollState)
@@ -1483,6 +1502,10 @@ function warrules.getIncomingBlockPreview(cardIndex, isSourceActive)
 end
 
 function warrules.getBlockedDamagePreview(card, incomingDamage)
+    if isDamageImmuneCard(card) then
+        return 0
+    end
+
     local damage = math.max(0, tonumber(incomingDamage) or 0)
     local blocking = math.max(0, tonumber(card and card.blocking) or 0)
 
@@ -1490,6 +1513,10 @@ function warrules.getBlockedDamagePreview(card, incomingDamage)
 end
 
 function warrules.getHealthDamagePreview(card, incomingDamage)
+    if isDamageImmuneCard(card) then
+        return 0
+    end
+
     local damage = math.max(0, tonumber(incomingDamage) or 0)
     local blocking = math.max(0, tonumber(card and card.blocking) or 0)
 

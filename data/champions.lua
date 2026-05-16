@@ -4,7 +4,7 @@
 local champions = {
     {
         id = "CH0001",
-        name = "PAM",
+        name = "PAM", --reminder: PAM = Pilotless Attack Machine
         health = 20,
         max= 20,
         deckId = "PAMDCK",
@@ -31,6 +31,7 @@ local champions = {
         D5 = "BDMG1",
         D6 = "BDMG1",
         defeat = "fem-defeat.wav",
+        surrtext = "PAM transmits terms of surrender, bargaining for her survival. She would be a deprecated war machine now out of your way — but one still gripping the trigger of a gun held to the world's head.\n\nDo you accept her terms?"
     },
 }
 

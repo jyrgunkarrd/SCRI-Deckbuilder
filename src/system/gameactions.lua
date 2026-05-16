@@ -136,11 +136,13 @@ function gameactions.resolveFairWeatherEnemies(ctx)
     return defeatedCount
 end
 
-function gameactions.addObjectiveProgress(ctx, objectiveDefinition, amount, slotId)
+function gameactions.addObjectiveProgress(ctx, objectiveDefinition, amount, slotId, options)
     local state = ctx.state
     local progressAmount = tonumber(amount) or 0
+    options = options or {}
 
     if progressAmount > 0
+        and options.skipHaywireBonus ~= true
         and (slotId == nil or slotId == "objective")
         and objectiveDefinition == state.activePrimaryObjective
         and ctx.haywirerules then
@@ -249,7 +251,9 @@ local function resolveHaywireDamageDefeat(ctx, card)
 
     if haywireProgress > 0 then
         card.haywireDamageDefeatProgressApplied = true
-        ctx.addObjectiveProgress(ctx.state.activePrimaryObjective, haywireProgress)
+        ctx.addObjectiveProgress(ctx.state.activePrimaryObjective, haywireProgress, "objective", {
+            skipHaywireBonus = true,
+        })
     end
 
     return true
