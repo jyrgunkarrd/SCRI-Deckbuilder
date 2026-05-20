@@ -1,6 +1,7 @@
 local gamestates = {}
 
 local fileselect = require("src.states.fileselect")
+local systemrules = require("src.system.systemrules")
 local worldmapdraw = require("src.render.worldmapdraw")
 local runsetupmodal = require("src.ui.runsetupmodal")
 
@@ -30,12 +31,24 @@ function gamestates.create()
             munitions = 0,
             tithes = 0,
         },
+        deadCrewRoles = {},
+        missionDeadCrewRoles = {},
+        worldMapFuelPayments = {},
+        pendingDomainAwareness = nil,
+        worldMissionSystems = systemrules.createFreshSystems(),
         activeMissionPrize = nil,
         activeMissionReward = nil,
         worldMapRewardModal = nil,
         worldMapRewardCollectButtonTarget = nil,
+        worldMapSystemRepair = nil,
+        worldMapSystemRepairQueue = nil,
         pendingWorldMapCardReward = nil,
         worldMapCardRewardModal = nil,
+        pendingWorldMapHunterModal = nil,
+        worldMapHunterModal = nil,
+        pendingWorldMapCrewReviveModal = nil,
+        worldMapCrewReviveModal = nil,
+        playerDefeat = nil,
     }
 end
 
@@ -124,6 +137,16 @@ function gamestates.updateWorldStage(state, dt, deps)
         return
     end
 
+    if state.worldMapHunterModal or state.worldMapCrewReviveModal then
+        state.hoveredWorldMapNode = nil
+        state.pinnedWorldMapNode = nil
+        state.worldMapDeckModal = nil
+        state.worldMapObjectivePreviewModal = nil
+        state.worldMapNodePlayButtonTarget = nil
+        state.worldMapNodePlayButtonTargets = nil
+        return
+    end
+
     worldmapdraw.updateHover(state, deps)
 end
 
@@ -132,7 +155,7 @@ function gamestates.keypressedFileSelect(_, key)
 end
 
 function gamestates.keypressedWorldStage(state, key)
-    if state and (state.worldMapRewardModal or state.worldMapCardRewardModal) then
+    if state and (state.worldMapRewardModal or state.worldMapCardRewardModal or state.worldMapHunterModal or state.worldMapCrewReviveModal) then
         return true
     end
 
@@ -164,8 +187,20 @@ function gamestates.keypressedWorldStage(state, key)
     state.worldMapNodePlayButtonTargets = nil
     state.worldMapRewardModal = nil
     state.worldMapRewardCollectButtonTarget = nil
+    state.worldMapSystemRepair = nil
+    state.worldMapSystemRepairQueue = nil
     state.pendingWorldMapCardReward = nil
     state.worldMapCardRewardModal = nil
+    state.pendingWorldMapHunterModal = nil
+    state.worldMapHunterModal = nil
+    state.pendingWorldMapCrewReviveModal = nil
+    state.worldMapCrewReviveModal = nil
+    state.playerDefeat = nil
+    state.deadCrewRoles = {}
+    state.missionDeadCrewRoles = {}
+    state.worldMapFuelPayments = {}
+    state.pendingDomainAwareness = nil
+    state.worldMissionSystems = systemrules.createFreshSystems()
     state.activeMissionPrize = nil
     state.activeMissionReward = nil
     state.saveSlots = fileselect.getSaveSlots()
@@ -178,7 +213,7 @@ function gamestates.mousepressedFileSelect(state, x, y, button, deps)
 end
 
 function gamestates.mousepressedWorldStage(state, x, y, button, deps)
-    if state and (state.worldMapRewardModal or state.worldMapCardRewardModal) then
+    if state and (state.worldMapRewardModal or state.worldMapCardRewardModal or state.worldMapHunterModal or state.worldMapCrewReviveModal) then
         return worldmapdraw.mousepressed(state, x, y, button, deps)
     end
 
@@ -187,6 +222,10 @@ function gamestates.mousepressedWorldStage(state, x, y, button, deps)
     end
 
     return worldmapdraw.mousepressed(state, x, y, button, deps)
+end
+
+function gamestates.mousereleasedWorldStage(state, x, y, button, deps)
+    return worldmapdraw.mousereleased(state, x, y, button, deps)
 end
 
 function gamestates.wheelmovedWorldStage(state, x, y)

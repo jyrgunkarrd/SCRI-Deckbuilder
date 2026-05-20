@@ -29,6 +29,7 @@ end
 
 function gamestatedraw.draw(ctx)
     local currentPhase = ctx.turnrules.getCurrentPhase()
+    local setupPhase = ctx.turnrules.getSetupPhase()
     local drawTopStripOnTop = ctx.expandedTopSlotId ~= nil
     local warRollDisplayStates = ctx.warrules.getDisplayStates()
     local warzonePreviewState = ctx.warrules.getWarzoneControlPreview(
@@ -114,10 +115,45 @@ function gamestatedraw.draw(ctx)
     local poiFlipRenderState = topSlotEffectRenderStates.poiFlip
     local poiHunterTransformationRenderState = topSlotEffectRenderStates.poiHunterTransformation
     local poiHunterTransformationRenderStates = topSlotEffectRenderStates.poiHunterTransformations
+    local function shouldDrawHunterBelowAgentPanel(card)
+        return currentPhase == setupPhase
+            and ctx.isHunterCard
+            and ctx.isHunterCard(card)
+    end
+
+    local function canDrawCard(card, cardIndex)
+        return card
+            and not ctx.isCardDestroyed(card)
+            and not (ctx.crewrules and ctx.crewrules.isCrewCovered(ctx.cards, cardIndex))
+            and not card.returningToHandAnimation
+            and not card.mulliganInAnimation
+            and not card.mulliganOutAnimation
+            and not card.pilotVehicleAnimation
+            and not card.hunterAutoPlayAnimation
+    end
+
+    local function drawCardAtIndex(card, cardIndex)
+        local drawX, drawY, expansionProgress, renderOptions = ctx.getCardDrawPosition(card, cardIndex)
+
+        ctx.carddraw.drawCardState(card.setName, card.cardId, drawX, drawY, expansionProgress, renderOptions)
+        ctx.drawCardStateOverlays(card, cardIndex, drawX, drawY, expansionProgress, renderOptions)
+    end
 
     ctx.envdraw.drawPhaseTracker(currentPhase)
     ctx.envdraw.drawResourceTracker(ctx.resourcerules.getResourceCounts(), ctx.missionSystems)
     ctx.envdraw.drawGrid(currentPhase)
+
+    for cardIndex, card in ipairs(ctx.cards) do
+        if shouldDrawHunterBelowAgentPanel(card) and canDrawCard(card, cardIndex) then
+            drawCardAtIndex(card, cardIndex)
+        end
+    end
+
+    local hunterAutoPlayAnimationsDrawnBelowAgentPanel = currentPhase == setupPhase and ctx.drawHunterAutoPlayAnimations ~= nil
+
+    if hunterAutoPlayAnimationsDrawnBelowAgentPanel then
+        ctx.drawHunterAutoPlayAnimations()
+    end
 
     if not drawTopStripOnTop then
         ctx.envdraw.drawChampion(
@@ -159,24 +195,18 @@ function gamestatedraw.draw(ctx)
     end
 
     for cardIndex, card in ipairs(ctx.cards) do
-        if not ctx.isCardDestroyed(card)
-            and not (ctx.crewrules and ctx.crewrules.isCrewCovered(ctx.cards, cardIndex))
-            and not card.returningToHandAnimation
-            and not card.mulliganInAnimation
-            and not card.mulliganOutAnimation
-            and not card.pilotVehicleAnimation
-            and not card.hunterAutoPlayAnimation
+        if canDrawCard(card, cardIndex)
+            and not shouldDrawHunterBelowAgentPanel(card)
             and cardIndex ~= ctx.hoveredCardIndex
             and cardIndex ~= ctx.draggedCardIndex
             and cardIndex ~= ctx.expandedGridCardIndex then
-            local drawX, drawY, expansionProgress, renderOptions = ctx.getCardDrawPosition(card, cardIndex)
-            ctx.carddraw.drawCardState(card.setName, card.cardId, drawX, drawY, expansionProgress, renderOptions)
-            ctx.drawCardStateOverlays(card, cardIndex, drawX, drawY, expansionProgress, renderOptions)
+            drawCardAtIndex(card, cardIndex)
         end
     end
 
     if ctx.hoveredCardIndex
         and ctx.hoveredCardIndex ~= ctx.expandedGridCardIndex
+        and not shouldDrawHunterBelowAgentPanel(ctx.cards[ctx.hoveredCardIndex])
         and not (ctx.crewrules and ctx.crewrules.isCrewCovered(ctx.cards, ctx.hoveredCardIndex))
         and not ctx.cards[ctx.hoveredCardIndex].returningToHandAnimation
         and not ctx.cards[ctx.hoveredCardIndex].pilotVehicleAnimation
@@ -190,6 +220,7 @@ function gamestatedraw.draw(ctx)
 
     if ctx.expandedGridCardIndex
         and ctx.expandedGridCardIndex ~= ctx.draggedCardIndex
+        and not shouldDrawHunterBelowAgentPanel(ctx.cards[ctx.expandedGridCardIndex])
         and not (ctx.crewrules and ctx.crewrules.isCrewCovered(ctx.cards, ctx.expandedGridCardIndex))
         and not ctx.cards[ctx.expandedGridCardIndex].returningToHandAnimation
         and not ctx.cards[ctx.expandedGridCardIndex].pilotVehicleAnimation
@@ -230,7 +261,7 @@ function gamestatedraw.draw(ctx)
         ctx.drawKitReturnAnimations()
     end
 
-    if ctx.drawHunterAutoPlayAnimations then
+    if ctx.drawHunterAutoPlayAnimations and not hunterAutoPlayAnimationsDrawnBelowAgentPanel then
         ctx.drawHunterAutoPlayAnimations()
     end
 
@@ -524,6 +555,9 @@ function gamestatedraw.draw(ctx)
     elseif ctx.hoveredKeyword then
         local mouseX, mouseY = love.mouse.getPosition()
         ctx.carddraw.drawKeywordTooltip(ctx.hoveredKeyword, mouseX, mouseY)
+    elseif ctx.hoveredEnhancement then
+        local mouseX, mouseY = love.mouse.getPosition()
+        ctx.carddraw.drawEnhancementTooltip(ctx.hoveredEnhancement, mouseX, mouseY)
     elseif ctx.hoveredJaclSpecialDefinition then
         local jaclLayout = ctx.envdraw.getBottomLeftPanelLayout(ctx.playerJacl)
         ctx.envdraw.drawJaclSpecialTooltip(

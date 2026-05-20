@@ -409,6 +409,36 @@ local function getEffectiveTargetType(targetType)
     return targetType
 end
 
+local function getAppliedConditionIds(faceDefinition)
+    local appliedConditionIds = {}
+    local seenConditionIds = {}
+
+    if not faceDefinition then
+        return appliedConditionIds
+    end
+
+    local function addConditionId(conditionId)
+        if conditionId and not seenConditionIds[conditionId] then
+            seenConditionIds[conditionId] = true
+            appliedConditionIds[#appliedConditionIds + 1] = conditionId
+        end
+    end
+
+    if type(faceDefinition.applycond) == "table" then
+        for _, conditionId in ipairs(faceDefinition.applycond) do
+            addConditionId(conditionId)
+        end
+    elseif faceDefinition.applycond then
+        addConditionId(faceDefinition.applycond)
+    end
+
+    if faceDefinition.wound == true then
+        addConditionId("KWWOUND")
+    end
+
+    return appliedConditionIds
+end
+
 local function getNormalizedFaceBehavior(faceDefinition)
     if not faceDefinition then
         return {
@@ -426,6 +456,7 @@ local function getNormalizedFaceBehavior(faceDefinition)
             selfHeal = false,
             sabotageObjective = false,
             summonOnAttack = false,
+            applycond = {},
         }
     end
 
@@ -514,7 +545,7 @@ local function getNormalizedFaceBehavior(faceDefinition)
     local selfHeal = faceDefinition.selfHeal == true or hasTargetType(faceDefinition.targ, "maulatk")
     local sabotageObjective = faceDefinition.sabotageObjective == true or hasTargetType(faceDefinition.targ, "AtkSab")
     local summonOnAttack = faceDefinition.summonOnAttack == true or hasTargetType(faceDefinition.targ, "AtkSmn")
-    local wound = faceDefinition.wound == true
+    local applycond = getAppliedConditionIds(faceDefinition)
     local mangle = faceDefinition.mangle == true
     local drawCards = faceDefinition.drawcard == true
     local generatedResource = faceDefinition.genres
@@ -539,7 +570,7 @@ local function getNormalizedFaceBehavior(faceDefinition)
         selfHeal = selfHeal,
         sabotageObjective = sabotageObjective,
         summonOnAttack = summonOnAttack,
-        wound = wound,
+        applycond = applycond,
         mangle = mangle,
     }
 end
@@ -708,7 +739,7 @@ local function buildRollState(entityKey, definition, faceIndices, isEnemy, prese
         selfHeal = normalizedBehavior.selfHeal,
         sabotageObjective = normalizedBehavior.sabotageObjective,
         summonOnAttack = normalizedBehavior.summonOnAttack,
-        wound = normalizedBehavior.wound,
+        applycond = normalizedBehavior.applycond,
         mangle = normalizedBehavior.mangle,
         autoReload = autoReload,
         exhausted = (preserveState and preserveState.exhausted) or (sourceCard and sourceCard.preludeStrategyExhausted == true) or false,
@@ -1737,7 +1768,7 @@ function warrules.beginRetaliatePhase(topSlotTargets, cards)
                     selfBlock = rollState.selfBlock,
                     selfHeal = rollState.selfHeal,
                     summonOnAttack = rollState.summonOnAttack,
-                    wound = rollState.wound,
+                    applycond = rollState.applycond,
                     mangle = rollState.mangle,
                     isTopSlot = true,
                 }
@@ -1796,7 +1827,7 @@ function warrules.beginRetaliatePhase(topSlotTargets, cards)
                     selfBlock = rollState.selfBlock,
                     selfHeal = rollState.selfHeal,
                     summonOnAttack = rollState.summonOnAttack,
-                    wound = rollState.wound,
+                    applycond = rollState.applycond,
                     mangle = rollState.mangle,
                     isTopSlot = false,
                 }

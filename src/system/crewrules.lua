@@ -41,6 +41,42 @@ local function getCrewPortraitPath(roleName)
     return "assets/images/crew/" .. string.lower(roleName) .. ".png"
 end
 
+function crewrules.getCrewRoleKey(roleName)
+    if not roleName then
+        return nil
+    end
+
+    return tostring(roleName):lower()
+end
+
+function crewrules.isCrewRoleDead(deadCrewRoles, roleName)
+    local roleKey = crewrules.getCrewRoleKey(roleName)
+
+    return roleKey ~= nil and deadCrewRoles and deadCrewRoles[roleKey] == true or false
+end
+
+function crewrules.markCrewRoleDead(deadCrewRoles, roleName)
+    local roleKey = crewrules.getCrewRoleKey(roleName)
+
+    if not deadCrewRoles or not roleKey then
+        return false
+    end
+
+    deadCrewRoles[roleKey] = true
+    return true
+end
+
+function crewrules.markCrewRoleAlive(deadCrewRoles, roleName)
+    local roleKey = crewrules.getCrewRoleKey(roleName)
+
+    if not deadCrewRoles or not roleKey then
+        return false
+    end
+
+    deadCrewRoles[roleKey] = nil
+    return true
+end
+
 function crewrules.isCrewCard(card, cardDefinition)
     return card
         and (
@@ -153,25 +189,27 @@ function crewrules.addStartingCrewCards(ctx)
     local addedCount = 0
 
     for _, role in ipairs(STARTING_CREW_ROLES) do
-        local crewDefinition = getCrewDefinitionByName(ctx.cardregistry, role.name)
-        local crewCard = ctx.cardinstances.create(
-            crewDefinition,
-            "crew:" .. tostring(role.name),
-            {
-                kind = "grid",
-                rowId = "PlayerRow",
-                column = role.column,
-            },
-            "player"
-        )
+        if not crewrules.isCrewRoleDead(ctx.deadCrewRoles, role.name) then
+            local crewDefinition = getCrewDefinitionByName(ctx.cardregistry, role.name)
+            local crewCard = ctx.cardinstances.create(
+                crewDefinition,
+                "crew:" .. tostring(role.name),
+                {
+                    kind = "grid",
+                    rowId = "PlayerRow",
+                    column = role.column,
+                },
+                "player"
+            )
 
-        if crewCard then
-            crewCard.portraitPath = crewDefinition.portraitPath or getCrewPortraitPath(crewDefinition.name)
-            ctx.cards[#ctx.cards + 1] = crewCard
-            addedCount = addedCount + 1
+            if crewCard then
+                crewCard.portraitPath = crewDefinition.portraitPath or getCrewPortraitPath(crewDefinition.name)
+                ctx.cards[#ctx.cards + 1] = crewCard
+                addedCount = addedCount + 1
 
-            if ctx.initializeCardHealthState then
-                ctx.initializeCardHealthState(crewCard)
+                if ctx.initializeCardHealthState then
+                    ctx.initializeCardHealthState(crewCard)
+                end
             end
         end
     end

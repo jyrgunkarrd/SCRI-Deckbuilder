@@ -23,8 +23,8 @@ local rwcommmontroops = {
         classname = "Demo",
         subclass = "Troop",
         func = "deathdraw",
-        rarity = "uncommon",
-        poolId = "AGT0002",
+        rarity = "common",
+        poolId = "AGT0001",
     },
 }
 

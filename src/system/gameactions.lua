@@ -167,6 +167,10 @@ function gameactions.addObjectiveProgress(ctx, objectiveDefinition, amount, slot
         ctx.startIntelDestruction()
     end
 
+    if result.shouldDefeatPlayer and ctx.beginPlayerDefeat then
+        ctx.beginPlayerDefeat(objectiveDefinition)
+    end
+
     if result.escalationId then
         ctx.beginObjectiveEscalation(objectiveDefinition, result.escalationId)
     end

@@ -1,4 +1,5 @@
 local cardinstances = require("src.system.cardinstances")
+local crewrules = require("src.system.crewrules")
 local deckrules = require("src.system.deckrules")
 local keywordrules = require("src.system.keywordrules")
 
@@ -83,12 +84,16 @@ local function applyBoomKeywordDamage(ctx, cardIndex, card)
     return true
 end
 
+local markCrewCardDead
+
 local function resolveDefeatedCard(ctx, cardIndex, card)
     local state = ctx and ctx.state or nil
 
     if not state or not card then
         return false
     end
+
+    markCrewCardDead(ctx, card)
 
     local attachedKitCards = card.attachedKitCards
 
@@ -119,6 +124,31 @@ local function resolveDefeatedCard(ctx, cardIndex, card)
         addCardKeywordValue = ctx.addCardKeywordValue,
     })
     return true
+end
+
+markCrewCardDead = function(ctx, card)
+    local appState = ctx and ctx.appState or nil
+    local cardDefinition = ctx
+        and ctx.cardregistry
+        and card
+        and ctx.cardregistry.getCard(card.setName, card.cardId)
+        or nil
+
+    if not appState or not cardDefinition or not crewrules.isCrewCard(card, cardDefinition) then
+        return false
+    end
+
+    appState.deadCrewRoles = appState.deadCrewRoles or {}
+    appState.missionDeadCrewRoles = appState.missionDeadCrewRoles or {}
+
+    local wasDead = crewrules.isCrewRoleDead(appState.deadCrewRoles, cardDefinition.name)
+    local markedDead = crewrules.markCrewRoleDead(appState.deadCrewRoles, cardDefinition.name)
+
+    if markedDead and not wasDead then
+        appState.missionDeadCrewRoles[crewrules.getCrewRoleKey(cardDefinition.name)] = cardDefinition.name
+    end
+
+    return markedDead
 end
 
 local function isWarEngagePhase(ctx)
@@ -300,6 +330,7 @@ function cardlifecycle.startCardDestruction(ctx, cardIndex)
         return
     end
 
+    markCrewCardDead(ctx, card)
     card.destroying = true
     card.destroyElapsed = 0
     card.destroySeed = love.math.random() * 1000
@@ -495,6 +526,7 @@ function cardlifecycle.expireCardFromPlay(ctx, cardIndex)
         return false
     end
 
+    markCrewCardDead(ctx, card)
     card.destroying = true
     applyEnemyDefeatChampionDamage(ctx, card)
     applyBoomKeywordDamage(ctx, cardIndex, card)

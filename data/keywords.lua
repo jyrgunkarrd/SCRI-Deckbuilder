@@ -56,14 +56,6 @@ local keywords = {
         },
 
         {
-            id = "KWRLD",
-            name = "Reloading",
-            text = "All of this card's die faces are blank while it is reloading.",
-            hasvalue = 1,
-
-        },
-
-        {
             id = "KWGRO",
             name = "Growth",
             text = "Increase this card's health and all of its die values.",
@@ -130,6 +122,15 @@ local keywords = {
             text = "At the beginning of each turn this card heals.",
             posCond = true,
             hasvalue = 1,
+        },
+
+        {
+            id = "KWRLD",
+            name = "Spent",
+            text = "All of this card's die faces are blank while it is spent.",
+            negCond = true,
+            hasvalue = 1,
+
         },
 
 }

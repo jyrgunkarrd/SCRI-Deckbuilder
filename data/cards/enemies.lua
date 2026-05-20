@@ -939,6 +939,101 @@ local enemies = {
             D6 = "NUL",
         },
 
+    --- Fort Polychrome Deck ---
+
+    -- Captains --
+
+    {
+        id = "ENCHROMBLU",
+        name = "Chroma Corps Blue",
+        artId = "ENJNGMRC",
+        classname = "Enemy",
+        subclass = "Troop",
+        textbox = "When this card leaves play, create a Ferrofauna Link marker.",
+        flavor = "\"They color the clever ones blue, so they stand out more.\n\nToo clever to trust in large numbers. Not clever enough to realize why they are so few.\"",
+        health = 4,
+        max = 4,
+        keyword = { "KWTIME" },
+        kwval = {
+            KWTIME = 1,
+        },
+        encounter = {
+            spawns = {
+                { enemyId = "ENGRYSCL", count = 2 },
+            },
+        },
+        preview = {
+            label = "SQUAD",
+            cards = {
+                { "ENGRYSCL", quantity = 2 },
+            },
+        },
+        rfc = 2,
+        D1 = "OBJ3",
+        D2 = "OBJ3",
+        D3 = "THR3",
+        D4 = "THR3",
+        D5 = "OBJ2",
+        D6 = "BDMG4",
+    },
+
+    -- Markers --
+
+    {
+        id = "ENFERRLNK",
+        type = "marker",
+        classname = "Cybernetic",
+        subclass = "Uplink",
+        name = "Ferrofauna Link",
+        textbox = "When this card leaves play, create a Ferrofauna troop card.",
+        flavor = "\“Let's show them our true colors! HUE SHIFT!\”.",
+        keyword = { "KWTIME" },
+        kwval = {
+            KWREGEN = 1,
+        },
+    },
+
+    -- Subordinates --
+    {
+        id = "ENGRYSCL",
+        name = "Greyscale",
+        artId = "ENCLK",
+        classname = "Enemy",
+        subclass = "Troop",
+        flavor = "\"They're told it is the 'first step' to becoming part of the Chroma Corps. A lie, of course.\"",
+        keyword = { "KWTOUGH" },
+        health = 3,
+        max = 3,
+        rfc = 1,
+        D1 = "CQDMG3",
+        D2 = "CQDMG3",
+        D3 = "CQDMG2",
+        D4 = "CQDMG2",
+        D5 = "CQDMG1",
+        D6 = "CQDMG1",
+    },
+
+    -- Ferrofauna --
+
+    {
+        id = "ENFERRTRI",
+        name = "Ferrofauna Tricera",
+        classname = "Enemy",
+        subclass = "Troop",
+        flavor = "\"GET OUT OF THE W--!\"",
+        keyword = { "KWTOUGH" },
+        health = 10,
+        max = 10,
+        rfc = 8,
+        D1 = "OBJBLK3",
+        D2 = "OBJBLK3",
+        D3 = "CQARDMG3",
+        D4 = "CQARDMG3",
+        D5 = "CQDMG1",
+        D6 = "CQDMG1",
+    },
+
+
 }
 
 return enemies

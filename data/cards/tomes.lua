@@ -8,7 +8,7 @@ local tomes = {
         {
             id = "BOOKVAL",
             name = "Book of Valshamr",
-            classname = "Starter",
+            classname = "Start",
             subclass = "Tome",
             type = "kit",
             syncost = 5,

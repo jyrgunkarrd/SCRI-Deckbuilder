@@ -4,16 +4,19 @@
 --- Primary Objectives ---
 
 local objectives = {
+
+    --- PAM Objective ---
+
     {
         id = "PRIMOBJ0001",
         name = "Longinus III",
         plan = 0,
-        max = 15,
+        max = 12,
         type = "objective",
         flavor = "...the collisions were inevitable. And in an environment saturated with high velocity debris, only the most nimble and armored spacecraft could survive...",
         emphasis = 2,
         escalate = "PRIMOBJ0003",
-        hunterid = "HNTINFFM",
+        hunterid = "HNTSAT",
         D1 = "EXODMG10",
         D2 = "INF1",
         D3 = "NUL",
@@ -26,12 +29,12 @@ local objectives = {
         id = "PRIMOBJ0002",
         name = "Saint Nancy Space Center",
         plan = 0,
-        max = 10,
+        max = 6,
         type = "objective",
         flavor = "As Low Earth Orbit filled with vanity projects and weapon platforms of dubious capability, ground-based astronomy became impossible...",
         emphasis = 2,
         escalate = "PRIMOBJ0001",
-        hunterid = "HNTINFFM",
+        hunterid = "HNTROLL",
         D1 = "INF1",
         D2 = "NUL",
         D3 = "NUL",
@@ -44,16 +47,38 @@ local objectives = {
         id = "PRIMOBJ0003",
         name = "A Flash Of Light",
         plan = 0,
-        max = 6,
+        max = 4,
         type = "objective",
         textbox = "...blind to the stars, any enthusiasm for the night sky usually rests in the minds of those hoping to parlay with one of the old guns still intact up there.",
         emphasis = 2,
+        loss = true,
+        losstext = "Light and sound slam into the midnight hour across Sermon City, rattling windows and terriifying cats. A clap of thunder? And yet there's no rain.\n\nA shallow tremor stalks the moment to its grave.\n\n\"She got them. She'll want another target.\"",
         D1 = "EXOARDMG10",
         D2 = "EXOARDMG10",
         D3 = "EXODMG10",
         D4 = "EXODMG10",
         D5 = "INF2",
         D6 = "INF1",
+    },
+
+    --- Fort Chroma Objective ---
+
+    {
+        id = "PRIMOBJACTPNK",
+        name = "Project Pink",
+        plan = 0,
+        max = 4,
+        type = "objective",
+        flavor = "...the collisions were inevitable. And in an environment saturated with high velocity debris, only the most nimble and armored spacecraft could survive...",
+        emphasis = 2,
+        escalate = "PRIMOBJ0003",
+        hunterid = "HNTINFFM",
+        D1 = "EXODMG10",
+        D2 = "INF1",
+        D3 = "NUL",
+        D4 = "NUL",
+        D5 = "NUL",
+        D6 = "NUL",
     },
 
 --- Intelligence ---

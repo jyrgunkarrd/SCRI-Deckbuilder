@@ -6,7 +6,6 @@ local sfxrules = require("src.audio.sfxrules")
 local engagerules = {}
 local COUNTER_STRIKE_KEYWORD_ID = "KWCNTR"
 local RELOADING_KEYWORD_ID = "KWRLD"
-local WOUND_KEYWORD_ID = "KWWOUND"
 local RELOADING_KEYWORD_VALUE = 2
 
 function engagerules.isEngagePhase(ctx)
@@ -249,14 +248,22 @@ local function applyCounterStrikeToAttacker(ctx, attackerCard, targetCard, targe
     ctx.dealDamageToCard(attackerCard, counterDamage)
 end
 
-local function applyWoundToTarget(targetEntity, targetDefinition, rollState)
-    local woundValue = rollState and rollState.wound == true and math.max(0, tonumber(rollState.damageValue) or 0) or 0
+local function applyConditionsToTarget(targetEntity, targetDefinition, rollState)
+    local conditionValue = rollState and math.max(0, tonumber(rollState.damageValue) or 0) or 0
 
-    if woundValue <= 0 or not targetEntity or not targetDefinition then
+    if conditionValue <= 0 or not targetEntity or not targetDefinition or type(rollState.applycond) ~= "table" then
         return nil
     end
 
-    return keywordrules.addCardKeywordValue(targetEntity, targetDefinition, WOUND_KEYWORD_ID, woundValue)
+    local applied = nil
+
+    for _, conditionId in ipairs(rollState.applycond) do
+        if conditionId then
+            applied = keywordrules.addCardKeywordValue(targetEntity, targetDefinition, conditionId, conditionValue)
+        end
+    end
+
+    return applied
 end
 
 local function applyMangleToTarget(ctx, targetCard, targetDefinition, rollState)
@@ -479,7 +486,7 @@ function engagerules.tryResolveClick(hoveredTopSlotId, ctx)
 
                 ctx.dealDamageToChampion(attackerRollState.damageValue or 0)
                 if attackerCard then
-                    applyWoundToTarget(ctx.activeChampion, ctx.activeChampion, attackerRollState)
+                    applyConditionsToTarget(ctx.activeChampion, ctx.activeChampion, attackerRollState)
                 end
                 applyAttackSideEffects(ctx, attackerRollState, attackerCardIndex)
                 return true
@@ -507,7 +514,7 @@ function engagerules.tryResolveClick(hoveredTopSlotId, ctx)
                         local damageResult = ctx.dealDamageToCard(targetCard, attackerRollState.damageValue or 0)
 
                         if attackerCard then
-                            applyWoundToTarget(targetCard, targetDefinition, attackerRollState)
+                            applyConditionsToTarget(targetCard, targetDefinition, attackerRollState)
                         end
 
                         if applyMangleToTarget(ctx, targetCard, targetDefinition, attackerRollState) > 0

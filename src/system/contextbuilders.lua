@@ -27,6 +27,7 @@ function contextbuilders.getGameActionsContext(c)
         damageJitterMagnitude = c.damageJitterMagnitude,
         beginObjectiveEscalation = c.beginObjectiveEscalation,
         beginObjectiveHunterDeckTransformation = c.beginObjectiveHunterDeckTransformation,
+        beginPlayerDefeat = c.beginPlayerDefeat,
         beginReinforcementHunterDeckTransformation = c.beginReinforcementHunterDeckTransformation,
         beginWarzoneTransformation = c.beginWarzoneTransformation,
         beginPoiEmergenceEffect = c.beginPoiEmergenceEffect,
@@ -81,6 +82,7 @@ function contextbuilders.getCardPlayControllerContext(c)
         worldResources = c.appState and c.appState.worldResources or nil,
         carddraw = c.carddraw,
         cardregistry = c.cardregistry,
+        enhancementrules = c.enhancementrules,
         keywordrules = c.keywordrules,
         kitrules = c.kitrules,
         notifications = c.notifications,
@@ -187,8 +189,9 @@ function contextbuilders.getPhaseControllerDeps(c)
         getCardDrawPosition = c.getCardDrawPosition,
         getChampionPlayContext = c.getChampionPlayContext,
         getEngageRerollBonus = function()
-            return state.engageRerollBonus or 0
+            return (state.engageRerollBonus or 0) + (state.domainAwarenessRerollBonus or 0)
         end,
+        getOpeningHandBonus = c.getOpeningHandBonus,
         getEndPhaseObjectiveProgress = c.getEndPhaseObjectiveProgress,
         getRetaliationPhaseObjectiveProgress = c.getRetaliationPhaseObjectiveProgress,
         getReplacementIntel = c.getReplacementIntel,
@@ -213,6 +216,7 @@ function contextbuilders.getCardLifecycleContext(c)
 
     return {
         state = state,
+        appState = c.appState,
         cardregistry = c.cardregistry,
         haywirerules = c.haywirerules,
         sfxrules = c.sfxrules,

@@ -568,3 +568,103 @@ The Red Dot Gang:
 
 
  - I'm thinking about how FTL handles Scrap, Drone, Fuel and Missile rewards - where basically the player is guaranteed a large lump of scrap for defeating an enemy, but almost all fights can proc a surrender option where some amount of scrap is given up in favor of other rewards, and the player has to decide what ratio is worth it. 
+
+
+
+- Whenever a player allows an enemy to surrender, or whenever they are defeated, that adds narrative mutators to a pool that can be applied against the save file. Up to 2 of these mutators can be randomly applied against a save file at any given time; these mutators dictate what standard and modular packages will be used. 
+
+
+
+ - We need other nodes before Votaries, because Votaries interact with different node types. Next nodes we need is the Elite encounter.
+
+
+ - ...kOkay, now we need ...Benefactors? Sponsors? What's the name for these entities? 
+
+They are Votaries. The are bound to the JACL via the Doctrine of Votive Privity. 
+
+Two are selected at the very beginning of a run at random, each offering 1 of 3 initial benefits. The offer a further enhancement to that benefit as the run continues. 
+
+ - Our first Votary will be Pacific Atomics; also known as Fujisan Atomic Systems Co, Ltd. It is run by the Yomatsuri-musume; a circle of vampires turned by Anne, who still remains the CEO (and founder) of the company today.
+
+
+Nisshokuryū
+
+Nisshokuryū
+
+
+Fuji no Nisshokuryū is the flagship train. the nonsense machine that is a retro-futuristic train, a supersonic passenger jet and a robotic dragon, all powered by atomic energy and always given the protection of Mt Fuji's sun blocking ash column. 
+
+Act I - Replace the City Events with Eclipse Events. Boss: Silver Crown Airship
+
+Act II - Travel under the Parasol to Traveler Hill, gaining Familiar cards and the concord as an Agent, OR travel the rail line to Traveler Hill, gaining a locomotive that turns into a Daughter of Anne as a new Agent and a Thrall mechanic. Boss: Silver Crown Commandos
+
+Act III - Feed the dragon. Prey upon survivors and small communities as you approach Lake Ontario, gaining a dragon transformation for the Nisshokuryū that is trivial to activate, but incurring much steeper resource prices per node traveled; Assure the dragon. Do not prey upon the cattle here. Gain a restrictive dragon transformation for the Nisshokuryū. Boss: British Aircraft Carrier
+
+
+H51-gata Jōki Kikansha / Hachigōichi is the workhorse train.
+
+Act I - Gain the tran as an Agent. if the train is still alive at the end of a mission, gain 1d6 of each resource. Boss: Kobolds and their robot tank.
+
+Act II - Goldwake's Bazaar is replaced by Mintmaw's Luxuries OR the player gains Goldwake's entire shop on visit. Boss: Grimfang (Basilisk)
+
+Act  III - The train can transform into a Daughter of Anne and a package of familiars is added to the player's deck OR the player gains Sassy and her brood of dire wolves in their deck, with a Fresh Kill mechanic. Boss: The Taker (Dragon)
+
+
+Fuji-shiki Chōjū Resshahō / Oyama no Tsuchi is the rail artillery gun
+
+
+
+Niten no Shikabane Senkan Musashi is the corpse ship Musashi, crewed by the undead, 
+
+Sakuya-hime Aramitama,  the angry, displaced, homesick spirit of Mt Fuji
+
+Junrei no Masamune, the wandering blade that is journeying to the mouth of Mt Fuji
+
+ Oyama no Okuin, the company HQ office
+
+Sakuya no Kurogasa, the ash column 
+
+Lanterns of the Tokaido, carvings that may appear in surfaces, giving good or ill omens, and suggesting a way forward.
+
+Kōshū Kaidō Kango Keikaku, get Sakuya back home via the process of Bunrei.
+
+
+
+Fort Polychrome, 60 HP
+
+ - Chroma Blue - Ferrofauna Triceratops
+ - Chroma Red - Ferrofauna Tyrannosaurus
+ - Chroma Yellow - Ferrofauna Smilodon
+ - Chroma Green - Ferrofauna Titanosaurus
+ - Chroma Orange - Ferrofauna Mammoth
+ - Chroma Indigo - Ferrofauna bigbirb one
+ - Chroma Violet - Ferrofauna Raptor
+
+ - If 3 are in play at once, combine into Ferrofauna Draco
+ - 2 Ferrofauna Draco combine into Ferrfauna Hydra 
+
+ - Operator
+ - Maker
+ - Greyscale
+
+Intel:
+
+ - Desaturator
+ - Value Directors
+ - Colorizer
+ - Prismatic Reactor
+
+Objectives:
+
+ - Mobilize Chroma Pink
+ - Defcon Rainbow
+ - Code Magenta
+
+Warzone:
+
+ - Vector Genomics Lab / Huron General Hospital 
+
+
+
+
+

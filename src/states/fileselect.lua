@@ -1,5 +1,7 @@
 local fileselect = {}
 
+local systemrules = require("src.system.systemrules")
+
 local SAVE_DIRECTORY = "saves"
 local FONT_PATH = "assets/fonts/Furore.otf"
 local LOAD_DURATION = 0.55
@@ -112,6 +114,17 @@ function fileselect.selectSaveSlot(state, slotId, deps)
 
     state.selectedSaveSlot = slotId
     state.selectedSaveTimestamp = writeSaveSlot(slotId)
+    state.deadCrewRoles = {}
+    state.missionDeadCrewRoles = {}
+    state.worldMapFuelPayments = {}
+    state.pendingDomainAwareness = nil
+    state.worldMissionSystems = systemrules.createFreshSystems()
+    state.worldMapSystemRepair = nil
+    state.worldMapSystemRepairQueue = nil
+    state.pendingWorldMapHunterModal = nil
+    state.worldMapHunterModal = nil
+    state.pendingWorldMapCrewReviveModal = nil
+    state.worldMapCrewReviveModal = nil
     state.saveSlots = fileselect.getSaveSlots()
 
     if deps and deps.sfxrules and deps.sfxrules.playFileSelect then

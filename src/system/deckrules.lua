@@ -54,8 +54,20 @@ local function createDetachedDeckCard(deck, cardDefinition, location)
     return card
 end
 
+local function copyEnhancementFields(source, target)
+    if not source or not target then
+        return target
+    end
+
+    target.enh = source.enh
+    target.enhancement = source.enhancement
+    target.enhancements = source.enhancements
+    target.enhance = source.enhance
+    return target
+end
+
 local function copyCardInstance(card, location)
-    return {
+    return copyEnhancementFields(card, {
         instanceId = card.instanceId,
         setName = card.setName,
         cardId = card.cardId,
@@ -63,7 +75,39 @@ local function copyCardInstance(card, location)
         portraitPath = card.portraitPath,
         deckOwner = card.deckOwner,
         location = copyLocation(location),
+    })
+end
+
+local function normalizeRewardCardEntry(entry)
+    if type(entry) == "string" then
+        return {
+            cardId = entry,
+        }
+    end
+
+    if type(entry) ~= "table" then
+        return nil
+    end
+
+    return {
+        cardId = entry.cardId or entry.id,
+        enh = entry.enh,
+        enhancement = entry.enhancement,
+        enhancements = entry.enhancements,
+        enhance = entry.enhance,
     }
+end
+
+local function applyRewardEntryFields(card, entry)
+    if not card or not entry then
+        return card
+    end
+
+    card.enh = entry.enh
+    card.enhancement = entry.enhancement
+    card.enhancements = entry.enhancements
+    card.enhance = entry.enhance
+    return card
 end
 
 function deckrules.getDeckDefinition(deckId)
@@ -327,16 +371,18 @@ function deckrules.drawCardToHand(deck, slotIndex)
 end
 
 function deckrules.addCardById(deck, cardId, options)
-    if not deck or not cardId then
+    local rewardEntry = normalizeRewardCardEntry(cardId)
+
+    if not deck or not rewardEntry or not rewardEntry.cardId then
         return nil
     end
 
-    local cardDefinition = cardregistry.getCardById(cardId)
+    local cardDefinition = cardregistry.getCardById(rewardEntry.cardId)
 
     if not cardDefinition then
         deck.missingCards = deck.missingCards or {}
         deck.missingCards[#deck.missingCards + 1] = {
-            cardId = cardId,
+            cardId = rewardEntry.cardId,
             quantity = 1,
             source = options and options.source or "reward",
         }
@@ -347,6 +393,7 @@ function deckrules.addCardById(deck, cardId, options)
         kind = "deck",
     })
 
+    applyRewardEntryFields(deckCard, rewardEntry)
     deckCard.deckOwner = options and options.owner or deck.owner or deckCard.deckOwner
 
     if options and options.insertRandomly == false then

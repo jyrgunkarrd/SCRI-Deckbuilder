@@ -256,6 +256,7 @@ local function updateHoveredCardDetails(state, deps, card, cardIndex, drawX, dra
         "SUMMON"
     ) or state.hoveredDiceFace
     state.hoveredKeyword = deps.carddraw.getHoveredKeyword(card.setName, card.cardId, drawX, drawY, renderOptions, mouseX, mouseY)
+    state.hoveredEnhancement = deps.carddraw.getHoveredEnhancement(card.setName, card.cardId, drawX, drawY, expansionProgress, renderOptions, mouseX, mouseY)
     state.hoveredButtonBadge = deps.carddraw.getHoveredButtonBadge(card.setName, card.cardId, drawX, drawY, expansionProgress, renderOptions, mouseX, mouseY)
     hoverpreview.updateCardAbilityPreview(state, deps, mouseX, mouseY)
     hoverpreview.updateSpawnPreview(state, deps, card, cardIndex)
@@ -264,6 +265,7 @@ end
 function hoverpreview.updateHoveredCard(state, deps)
     local previousHoveredCardIndex = state.hoveredCardIndex
     state.hoveredKeyword = nil
+    state.hoveredEnhancement = nil
     state.hoveredDiceFace = nil
     state.hoveredButtonBadge = nil
 
@@ -275,6 +277,7 @@ function hoverpreview.updateHoveredCard(state, deps)
         hoverpreview.clearSpawnPreview(state)
         hoverpreview.clearCardAbilityPreview(state)
         state.hoveredDiceFace = nil
+        state.hoveredEnhancement = nil
         state.hoveredButtonBadge = nil
         return
     end
@@ -286,6 +289,7 @@ function hoverpreview.updateHoveredCard(state, deps)
     hoverpreview.clearSpawnPreview(state)
     hoverpreview.clearCardAbilityPreview(state)
     state.hoveredDiceFace = nil
+    state.hoveredEnhancement = nil
     state.hoveredButtonBadge = nil
 
     state.hoveredDiceFace = hoverpreview.attachDefinitionPreview(deps, deps.envdraw.getHoveredTopSlotDiceFace(
@@ -350,7 +354,7 @@ function hoverpreview.updateHoveredCard(state, deps)
         deps.sfxrules.playHover()
     end
 
-    if not state.hoveredKeyword and state.playerJacl then
+    if not state.hoveredKeyword and not state.hoveredEnhancement and state.playerJacl then
         local hoveredMethodBadge = deps.envdraw.getJaclMethodBadgeAt(mouseX, mouseY, state.playerJacl)
     
         if hoveredMethodBadge then

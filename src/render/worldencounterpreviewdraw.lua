@@ -1,10 +1,14 @@
 local worldencounterpreviewdraw = {}
 
 local objectiveDefinitions = require("data.objectives")
+local worldfuelrules = require("src.system.worldfuelrules")
+local crewrules = require("src.system.crewrules")
 local warzoneDefinitions = require("data.warzones")
 
 local FONT_PATH = "assets/fonts/Furore.otf"
 local MAP_IMAGE_DIRECTORY = "assets/images/map/"
+local ICON_IMAGE_DIRECTORY = "assets/images/icons/"
+local CREW_IMAGE_DIRECTORY = "assets/images/crew/"
 local CHAMP_IMAGE_DIRECTORY = "assets/images/champ/"
 local STDPKG_IMAGE_DIRECTORY = "assets/images/stdpkg/"
 local MODULARPKG_IMAGE_DIRECTORY = "assets/images/modularpkg/"
@@ -30,12 +34,23 @@ local OBJECTIVE_ROW_GAP = 12
 local PLAY_BUTTON_SIZE = 34
 local PLAY_BUTTON_MARGIN = 10
 local PLAY_BUTTON_COLOR = { 0.906, 0.102, 0.176, 1 }
+local PLAY_BUTTON_DISABLED_COLOR = { 0.22, 0.235, 0.25, 1 }
 local CORNER_ICON_SIZE = 34
 local LOADING_FLASH_INTERVAL = 0.06
+local FUEL_COST_PULSE_SPEED = 4.2
 local ALMS_COLOR = { 0.976, 0.761, 0.169, 1 }
+local DOMAIN_PANEL_WIDTH = 250
+local DOMAIN_PANEL_GAP = 12
+local DOMAIN_PANEL_PADDING = 14
+local DOMAIN_PORTRAIT_SIZE = 88
+local DOMAIN_BUTTON_HEIGHT = 44
+local DOMAIN_BUTTON_GAP = 10
+local DOMAIN_ACCENT_COLOR = { 1, 0.725, 0.337, 1 }
 
 local fontCache = {}
 local mapImageCache = {}
+local iconImageCache = {}
+local crewImageCache = {}
 local encounterImageCache = {}
 local objectiveImageCache = {}
 local warzoneImageCache = {}
@@ -73,6 +88,56 @@ local function getMapImage(fileName)
     image:setFilter("linear", "linear")
     image:setMipmapFilter("linear")
     mapImageCache[fileName] = image
+    return image
+end
+
+local function getIconImage(fileName)
+    if not fileName then
+        return nil
+    end
+
+    if iconImageCache[fileName] ~= nil then
+        return iconImageCache[fileName] or nil
+    end
+
+    local imagePath = ICON_IMAGE_DIRECTORY .. fileName
+
+    if not love.filesystem.getInfo(imagePath) then
+        iconImageCache[fileName] = false
+        return nil
+    end
+
+    local image = love.graphics.newImage(imagePath, {
+        mipmaps = true,
+    })
+    image:setFilter("linear", "linear")
+    image:setMipmapFilter("linear")
+    iconImageCache[fileName] = image
+    return image
+end
+
+local function getCrewImage(fileName)
+    if not fileName then
+        return nil
+    end
+
+    if crewImageCache[fileName] ~= nil then
+        return crewImageCache[fileName] or nil
+    end
+
+    local imagePath = CREW_IMAGE_DIRECTORY .. fileName
+
+    if not love.filesystem.getInfo(imagePath) then
+        crewImageCache[fileName] = false
+        return nil
+    end
+
+    local image = love.graphics.newImage(imagePath, {
+        mipmaps = true,
+    })
+    image:setFilter("linear", "linear")
+    image:setMipmapFilter("linear")
+    crewImageCache[fileName] = image
     return image
 end
 
@@ -641,10 +706,20 @@ local function drawNodePreviewPlayButton(state, hoveredNode, panelX, panelY, pan
     local buttonY = panelY + PLAY_BUTTON_MARGIN
     local triangleInsetX = buttonSize * 0.34
     local triangleInsetY = buttonSize * 0.28
+    local isEnabled = worldfuelrules.isCurrentSegmentCleared(state)
 
-    love.graphics.setColor(PLAY_BUTTON_COLOR[1], PLAY_BUTTON_COLOR[2], PLAY_BUTTON_COLOR[3], PLAY_BUTTON_COLOR[4])
+    if isEnabled then
+        love.graphics.setColor(PLAY_BUTTON_COLOR[1], PLAY_BUTTON_COLOR[2], PLAY_BUTTON_COLOR[3], PLAY_BUTTON_COLOR[4])
+    else
+        love.graphics.setColor(
+            PLAY_BUTTON_DISABLED_COLOR[1],
+            PLAY_BUTTON_DISABLED_COLOR[2],
+            PLAY_BUTTON_DISABLED_COLOR[3],
+            PLAY_BUTTON_DISABLED_COLOR[4]
+        )
+    end
     love.graphics.rectangle("fill", buttonX, buttonY, buttonSize, buttonSize, 3, 3)
-    love.graphics.setColor(0.96, 0.96, 0.95, 1)
+    love.graphics.setColor(0.96, 0.96, 0.95, isEnabled and 1 or 0.34)
     love.graphics.polygon(
         "fill",
         buttonX + triangleInsetX,
@@ -655,6 +730,30 @@ local function drawNodePreviewPlayButton(state, hoveredNode, panelX, panelY, pan
         buttonY + (buttonSize * 0.5)
     )
 
+    if not isEnabled then
+        local fuelImage = getMapImage("fuelcost.png")
+
+        if fuelImage then
+            local pulse = (math.sin(love.timer.getTime() * FUEL_COST_PULSE_SPEED) + 1) * 0.5
+            local iconSize = math.floor(buttonSize * 0.78)
+            local imageScale = math.min(iconSize / fuelImage:getWidth(), iconSize / fuelImage:getHeight())
+            local imageWidth = math.floor((fuelImage:getWidth() * imageScale) + 0.5)
+            local imageHeight = math.floor((fuelImage:getHeight() * imageScale) + 0.5)
+            local drawX = math.floor(buttonX + ((buttonSize - imageWidth) * 0.5) + 0.5)
+            local drawY = math.floor(buttonY + ((buttonSize - imageHeight) * 0.5) + 0.5)
+
+            love.graphics.setColor(1, 1, 1, pulse)
+            love.graphics.draw(
+                fuelImage,
+                drawX,
+                drawY,
+                0,
+                imageWidth / fuelImage:getWidth(),
+                imageHeight / fuelImage:getHeight()
+            )
+        end
+    end
+
     if state then
         state.worldMapNodePlayButtonTargets = state.worldMapNodePlayButtonTargets or {}
         state.worldMapNodePlayButtonTargets[#state.worldMapNodePlayButtonTargets + 1] = {
@@ -663,6 +762,7 @@ local function drawNodePreviewPlayButton(state, hoveredNode, panelX, panelY, pan
             width = buttonSize,
             height = buttonSize,
             hoveredNode = hoveredNode,
+            disabled = not isEnabled,
         }
         state.worldMapNodePlayButtonTarget = state.worldMapNodePlayButtonTargets[#state.worldMapNodePlayButtonTargets]
     end
@@ -695,6 +795,193 @@ local function drawNodePreviewCornerIcon(hoveredNode, panelX, panelY)
         imageScale,
         imageScale
     )
+end
+
+local function drawImageCover(image, x, y, width, height, alpha)
+    if not image then
+        return
+    end
+
+    local scale = math.max(width / image:getWidth(), height / image:getHeight())
+    local imageWidth = image:getWidth() * scale
+    local imageHeight = image:getHeight() * scale
+    local drawX = math.floor(x + ((width - imageWidth) * 0.5) + 0.5)
+    local drawY = math.floor(y + ((height - imageHeight) * 0.5) + 0.5)
+    local previousScissorX, previousScissorY, previousScissorWidth, previousScissorHeight = love.graphics.getScissor()
+
+    love.graphics.setScissor(x, y, width, height)
+    love.graphics.setColor(1, 1, 1, alpha or 1)
+    love.graphics.draw(image, drawX, drawY, 0, scale, scale)
+
+    if previousScissorX then
+        love.graphics.setScissor(previousScissorX, previousScissorY, previousScissorWidth, previousScissorHeight)
+    else
+        love.graphics.setScissor()
+    end
+end
+
+local function drawDomainAwarenessIcon(image, x, y, size, alpha)
+    x = math.floor(x + 0.5)
+    y = math.floor(y + 0.5)
+    size = math.floor(size + 0.5)
+
+    if image then
+        love.graphics.setColor(1, 1, 1, alpha or 1)
+        love.graphics.draw(image, x, y, 0, size / image:getWidth(), size / image:getHeight())
+    else
+        love.graphics.setColor(0.82, 0.85, 0.89, alpha or 1)
+        love.graphics.rectangle("line", x, y, size, size, 3, 3)
+    end
+end
+
+local function addDomainAwarenessTarget(state, button)
+    if not state or not button then
+        return
+    end
+
+    state.worldMapDomainAwarenessTargets = state.worldMapDomainAwarenessTargets or {}
+    state.worldMapDomainAwarenessTargets[#state.worldMapDomainAwarenessTargets + 1] = {
+        x = button.x,
+        y = button.y,
+        width = button.width,
+        height = button.height,
+        id = button.id,
+    }
+end
+
+local function drawDomainAwarenessButton(state, button, font)
+    local isDisabled = state and state.pendingDomainAwareness ~= nil
+    local alpha = isDisabled and 0.38 or 1
+    local iconSize = 24
+    local iconGap = 5
+    local textGap = 8
+    local buttonCenterY = button.y + (button.height * 0.5)
+    local iconY = math.floor(buttonCenterY - (iconSize * 0.5) + 0.5)
+    local costWidth = (#button.costIcons * iconSize) + ((#button.costIcons - 1) * iconGap)
+    local colonText = ":"
+    local valueText = button.value or ""
+    local groupWidth = costWidth
+        + textGap
+        + font:getWidth(colonText)
+        + textGap
+        + iconSize
+        + textGap
+        + font:getWidth(valueText)
+    local x = math.floor(button.x + ((button.width - groupWidth) * 0.5) + 0.5)
+
+    love.graphics.setColor(0.01, 0.012, 0.016, 0.94 * alpha)
+    love.graphics.rectangle("fill", button.x, button.y, button.width, button.height, 4, 4)
+    love.graphics.setColor(DOMAIN_ACCENT_COLOR[1], DOMAIN_ACCENT_COLOR[2], DOMAIN_ACCENT_COLOR[3], 0.86 * alpha)
+    love.graphics.rectangle("line", button.x, button.y, button.width, button.height, 4, 4)
+
+    for _, iconFile in ipairs(button.costIcons) do
+        drawDomainAwarenessIcon(getMapImage(iconFile), x, iconY, iconSize, alpha)
+        x = x + iconSize + iconGap
+    end
+
+    love.graphics.setFont(font)
+    love.graphics.setColor(0.94, 0.95, 0.96, alpha)
+    love.graphics.print(colonText, x + (textGap - iconGap), math.floor(buttonCenterY - (font:getHeight() * 0.5) + 0.5))
+    x = x + textGap + font:getWidth(colonText) + textGap - iconGap
+
+    drawDomainAwarenessIcon(getIconImage(button.rewardIcon), x, iconY, iconSize, alpha)
+    x = x + iconSize + textGap
+
+    love.graphics.setFont(font)
+    love.graphics.setColor(0.94, 0.95, 0.96, alpha)
+    love.graphics.print(valueText, x, math.floor(buttonCenterY - (font:getHeight() * 0.5) + 0.5))
+
+    addDomainAwarenessTarget(state, button)
+
+    if isDisabled then
+        love.graphics.setColor(0, 0, 0, 0.34)
+        love.graphics.rectangle("fill", button.x, button.y, button.width, button.height, 4, 4)
+        love.graphics.setColor(0.42, 0.44, 0.48, 0.78)
+        love.graphics.line(button.x + 5, button.y + button.height - 5, button.x + button.width - 5, button.y + 5)
+    end
+end
+
+local function drawDomainAwarenessPanel(state, previewPanel)
+    if not state
+        or not previewPanel
+        or crewrules.isCrewRoleDead(state.deadCrewRoles, "Tactician") then
+        return
+    end
+
+    local screenWidth, screenHeight = love.graphics.getDimensions()
+    local buttonFont = getFont(13)
+    local panelWidth = DOMAIN_PANEL_WIDTH
+    local panelHeight = DOMAIN_PANEL_PADDING
+        + DOMAIN_PORTRAIT_SIZE
+        + 16
+        + (DOMAIN_BUTTON_HEIGHT * 3)
+        + (DOMAIN_BUTTON_GAP * 2)
+        + DOMAIN_PANEL_PADDING
+    local panelX = math.floor(previewPanel.x + previewPanel.width + DOMAIN_PANEL_GAP + 0.5)
+    local panelY = math.floor(previewPanel.y + ((previewPanel.height - panelHeight) * 0.5) + 0.5)
+
+    if panelX + panelWidth > screenWidth - MARGIN_X then
+        panelX = math.floor(previewPanel.x - DOMAIN_PANEL_GAP - panelWidth + 0.5)
+    end
+
+    panelY = math.max(MARGIN_X, math.min(screenHeight - MARGIN_X - panelHeight, panelY))
+
+    local portraitX = math.floor(panelX + ((panelWidth - DOMAIN_PORTRAIT_SIZE) * 0.5) + 0.5)
+    local portraitY = panelY + DOMAIN_PANEL_PADDING
+    local buttonX = panelX + DOMAIN_PANEL_PADDING
+    local buttonWidth = panelWidth - (DOMAIN_PANEL_PADDING * 2)
+    local buttonY = portraitY + DOMAIN_PORTRAIT_SIZE + 16
+    local buttons = {
+        {
+            id = "domain-reroll",
+            x = buttonX,
+            y = buttonY,
+            width = buttonWidth,
+            height = DOMAIN_BUTTON_HEIGHT,
+            costIcons = { "tithes.png", "tithes.png" },
+            rewardIcon = "reroll.png",
+            value = "+2 / TURN",
+        },
+        {
+            id = "domain-method",
+            x = buttonX,
+            y = buttonY + DOMAIN_BUTTON_HEIGHT + DOMAIN_BUTTON_GAP,
+            width = buttonWidth,
+            height = DOMAIN_BUTTON_HEIGHT,
+            costIcons = { "munitions.png", "munitions.png" },
+            rewardIcon = "method.png",
+            value = "+1",
+        },
+        {
+            id = "domain-draw",
+            x = buttonX,
+            y = buttonY + ((DOMAIN_BUTTON_HEIGHT + DOMAIN_BUTTON_GAP) * 2),
+            width = buttonWidth,
+            height = DOMAIN_BUTTON_HEIGHT,
+            costIcons = { "munitions.png" },
+            rewardIcon = "draw.png",
+            value = "+3",
+        },
+    }
+
+    love.graphics.setColor(0.02, 0.025, 0.03, 0.58)
+    love.graphics.rectangle("fill", panelX - 6, panelY - 6, panelWidth + 12, panelHeight + 12, 8, 8)
+    love.graphics.setColor(0.06, 0.07, 0.09, 0.97)
+    love.graphics.rectangle("fill", panelX, panelY, panelWidth, panelHeight, 6, 6)
+    love.graphics.setColor(DOMAIN_ACCENT_COLOR[1], DOMAIN_ACCENT_COLOR[2], DOMAIN_ACCENT_COLOR[3], 0.95)
+    love.graphics.rectangle("line", panelX, panelY, panelWidth, panelHeight, 6, 6)
+
+    love.graphics.setColor(0.075, 0.082, 0.095, 0.92)
+    love.graphics.rectangle("fill", portraitX, portraitY, DOMAIN_PORTRAIT_SIZE, DOMAIN_PORTRAIT_SIZE, 5, 5)
+    love.graphics.setColor(DOMAIN_ACCENT_COLOR[1], DOMAIN_ACCENT_COLOR[2], DOMAIN_ACCENT_COLOR[3], 0.9)
+    love.graphics.rectangle("line", portraitX, portraitY, DOMAIN_PORTRAIT_SIZE, DOMAIN_PORTRAIT_SIZE, 5, 5)
+    drawImageCover(getCrewImage("tactician.png"), portraitX + 5, portraitY + 5, DOMAIN_PORTRAIT_SIZE - 10, DOMAIN_PORTRAIT_SIZE - 10, 1)
+
+    for _, button in ipairs(buttons) do
+        drawDomainAwarenessButton(state, button, buttonFont)
+    end
+
+    love.graphics.setColor(1, 1, 1, 1)
 end
 
 local function drawChampionPreviewPrize(prize, x, y, width, height, valueFont)
@@ -1067,9 +1354,20 @@ local function drawNodeEncounterPreview(state, hoveredNode, panelIndexOnEdge)
             state
         )
     end
+
+    drawDomainAwarenessPanel(state, {
+        x = panelX,
+        y = panelY,
+        width = panelWidth,
+        height = panelHeight,
+    })
 end
 
 function worldencounterpreviewdraw.drawGroup(state, previewGroup)
+    if state then
+        state.worldMapDomainAwarenessTargets = {}
+    end
+
     local previewNodes = previewGroup and previewGroup.previewNodes or nil
 
     if not previewNodes then

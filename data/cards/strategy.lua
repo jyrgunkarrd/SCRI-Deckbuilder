@@ -10,7 +10,7 @@ local strategy = {
         {
             id = "AEGPSYRAP",
             name = "Rappelling Psychos",
-            classname = "Starter",
+            classname = "Start",
             subclass = "Strategy",
             type = "strategy",
             func = "Spawn",
@@ -27,7 +27,7 @@ local strategy = {
         {
             id = "AEGSPMSL",
             name = "Splinter Missile Ambush",
-            classname = "Starter",
+            classname = "Start",
             subclass = "Strategy",
             type = "strategy",
             funccost = "sactarg",

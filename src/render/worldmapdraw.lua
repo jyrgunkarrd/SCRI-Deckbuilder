@@ -2,6 +2,8 @@ local worldmapdraw = {}
 
 local carddraw = require("src.render.carddraw")
 local worldmaprules = require("src.system.worldmaprules")
+local crewrules = require("src.system.crewrules")
+local worldfuelrules = require("src.system.worldfuelrules")
 local deckrules = require("src.system.deckrules")
 local cardregistry = require("src.system.cardregistry")
 local previewrules = require("src.system.previewrules")
@@ -10,8 +12,11 @@ local worldencounterpreviewdraw = require("src.render.worldencounterpreviewdraw"
 local worldloadoutdraw = require("src.render.worldloadoutdraw")
 local munitionsrules = require("src.system.munitionsrules")
 local tithesrules = require("src.system.tithesrules")
+local systemrules = require("src.system.systemrules")
 local worldrewardmodal = require("src.ui.worldrewardmodal")
 local cardrewardmodal = require("src.ui.cardrewardmodal")
+local huntermodal = require("src.ui.huntermodal")
+local crewrevivemodal = require("src.ui.crewrevivemodal")
 local rewarddebug = require("src.system.rewarddebug")
 local jaclDefinitions = require("data.jacl")
 
@@ -19,11 +24,14 @@ local CARD_FONT_PATH = "assets/fonts/Furore.otf"
 local MAP_IMAGE_DIRECTORY = "assets/images/map/"
 local WARZONE_IMAGE_DIRECTORY = "assets/images/warzone/"
 local CREW_IMAGE_DIRECTORY = "assets/images/crew/"
+local ICON_IMAGE_DIRECTORY = "assets/images/icons/"
+local DEAD_CREW_MAP_IMAGE = "crewkia.png"
 
 local nodePreviewIconCache = {}
 local objectivePreviewImageCache = {}
 local warzonePreviewImageCache = {}
 local crewImageCache = {}
+local iconImageCache = {}
 local fontCache = {}
 local PLAYER_POSITION_COLOR = { 0.1, 1, 0.94, 1 }
 local PLAYER_POSITION_PULSE_SPEED = 4.5
@@ -66,6 +74,7 @@ local WORLD_ROLE_PORTRAIT_FILL_COLOR = { 0.075, 0.082, 0.095, 0.92 }
 local WORLD_SYSTEMS_LABEL_COLOR = { 0.549, 1, 0.871, 1 }
 local WORLD_SYSTEMS_OUTLINE_COLOR = { 0.549, 1, 0.871, 1 }
 local WORLD_SYSTEMS_BOX_FILL_COLOR = { 0.075, 0.082, 0.095, 0.92 }
+local WORLD_SYSTEM_REPAIR_FLASH_COLOR = { 0.788, 0.925, 0.522, 1 }
 local WORLD_ROLE_PORTRAITS = {
     {
         label = "Captain",
@@ -174,6 +183,49 @@ local function getCrewImage(fileName)
     image:setMipmapFilter("linear")
     crewImageCache[fileName] = image
     return image
+end
+
+local function getIconImage(fileName)
+    if not fileName then
+        return nil
+    end
+
+    if iconImageCache[fileName] ~= nil then
+        return iconImageCache[fileName] or nil
+    end
+
+    local imagePath = ICON_IMAGE_DIRECTORY .. fileName
+
+    if not love.filesystem.getInfo(imagePath) then
+        iconImageCache[fileName] = false
+        return nil
+    end
+
+    local image = love.graphics.newImage(imagePath, {
+        mipmaps = true,
+    })
+    image:setFilter("linear", "linear")
+    image:setMipmapFilter("linear")
+    iconImageCache[fileName] = image
+    return image
+end
+
+local function getWorldRolePortraitImage(state, rolePortrait)
+    if crewrules.isCrewRoleDead(state and state.deadCrewRoles or nil, rolePortrait and rolePortrait.label or nil) then
+        return getMapImage(DEAD_CREW_MAP_IMAGE)
+    end
+
+    return getCrewImage(rolePortrait and rolePortrait.image or nil)
+end
+
+local function clamp01(value)
+    return math.max(0, math.min(1, value or 0))
+end
+
+local function easeOutCubic(value)
+    value = clamp01(value)
+    local inverse = 1 - value
+    return 1 - (inverse * inverse * inverse)
 end
 
 local function isPointInsideRect(x, y, rect)
@@ -948,6 +1000,14 @@ local function tryLaunchMissionFromNodePreview(state, x, y, deps)
         return false
     end
 
+    if target.disabled then
+        if deps and deps.sfxrules and deps.sfxrules.playPlayReject then
+            deps.sfxrules.playPlayReject()
+        end
+
+        return true
+    end
+
     local payload = buildMissionLaunchPayload(state, target.hoveredNode)
 
     if not payload or not deps or not deps.startMissionFromWorldNode then
@@ -969,6 +1029,177 @@ local function tryLaunchMissionFromNodePreview(state, x, y, deps)
     end
 
     return false
+end
+
+local function getRouteFuelIconTargetAt(state, x, y)
+    for _, target in ipairs(state and state.worldMapFuelIconTargets or {}) do
+        if isPointInsideRect(x, y, target) then
+            return target
+        end
+    end
+
+    return nil
+end
+
+local function getDomainAwarenessTargetAt(state, x, y)
+    for _, target in ipairs(state and state.worldMapDomainAwarenessTargets or {}) do
+        if isPointInsideRect(x, y, target) then
+            return target
+        end
+    end
+
+    return nil
+end
+
+local function tryUseDomainAwarenessButton(state, x, y, deps)
+    local target = getDomainAwarenessTargetAt(state, x, y)
+
+    if not target then
+        return false
+    end
+
+    if state.pendingDomainAwareness then
+        if deps and deps.sfxrules and deps.sfxrules.playPlayReject then
+            deps.sfxrules.playPlayReject()
+        end
+
+        return true
+    end
+
+    local resources = state.worldResources or {}
+    local costs = {
+        ["domain-reroll"] = {
+            key = "tithes",
+            amount = 2,
+            bonus = {
+                rerollBonus = 2,
+            },
+        },
+        ["domain-method"] = {
+            key = "munitions",
+            amount = 2,
+            bonus = {
+                methodResourceBonus = true,
+            },
+        },
+        ["domain-draw"] = {
+            key = "munitions",
+            amount = 1,
+            bonus = {
+                openingHandBonus = 3,
+            },
+        },
+    }
+    local config = costs[target.id]
+
+    if not config then
+        return false
+    end
+
+    local available = math.max(0, math.floor(tonumber(resources[config.key]) or 0))
+
+    if available < config.amount then
+        if deps and deps.sfxrules and deps.sfxrules.playPlayReject then
+            deps.sfxrules.playPlayReject()
+        end
+
+        return true
+    end
+
+    resources[config.key] = available - config.amount
+    state.worldResources = resources
+    state.pendingDomainAwareness = {
+        id = target.id,
+        rerollBonus = config.bonus.rerollBonus,
+        methodResourceBonus = config.bonus.methodResourceBonus,
+        openingHandBonus = config.bonus.openingHandBonus,
+    }
+
+    if deps and deps.sfxrules and deps.sfxrules.playClick then
+        deps.sfxrules.playClick()
+    end
+
+    return true
+end
+
+local function getReservedSystemRepairTargets(state)
+    local reserved = {}
+    local activeRepair = state and state.worldMapSystemRepair or nil
+
+    if activeRepair and activeRepair.systemIndex then
+        reserved[activeRepair.systemIndex] = true
+    end
+
+    for _, queuedRepair in ipairs(state and state.worldMapSystemRepairQueue or {}) do
+        if queuedRepair.systemIndex then
+            reserved[queuedRepair.systemIndex] = true
+        end
+    end
+
+    return reserved
+end
+
+local function buildWorldSystemRepair(systemIndex)
+    return {
+        systemIndex = systemIndex,
+        elapsed = 0,
+        travelDuration = 0.42,
+        flashDuration = 0.28,
+        restored = false,
+    }
+end
+
+local function queueEngineerSystemRepair(state)
+    if not state
+        or crewrules.isCrewRoleDead(state.deadCrewRoles, "Engineer")
+        or (state.runSetupModal and state.runSetupModal.isOpen) then
+        return false
+    end
+
+    local systems = systemrules.ensureSystems(state.worldMissionSystems)
+    local reserved = getReservedSystemRepairTargets(state)
+
+    for systemIndex = 1, systemrules.SYSTEM_COUNT do
+        if systemrules.isSystemBurned(systems, systemIndex) and not reserved[systemIndex] then
+            local repair = buildWorldSystemRepair(systemIndex)
+
+            if state.worldMapSystemRepair then
+                state.worldMapSystemRepairQueue = state.worldMapSystemRepairQueue or {}
+                state.worldMapSystemRepairQueue[#state.worldMapSystemRepairQueue + 1] = repair
+            else
+                state.worldMapSystemRepair = repair
+            end
+
+            return true
+        end
+    end
+
+    return false
+end
+
+local function tryPayRouteFuelIcon(state, x, y, deps)
+    local target = getRouteFuelIconTargetAt(state, x, y)
+    local currentSegment = worldfuelrules.getCurrentSegment(state)
+
+    if not target
+        or not currentSegment
+        or target.segmentKey ~= currentSegment.key then
+        return false
+    end
+
+    local paid = worldfuelrules.payCurrentSegmentFuel(state)
+
+    if paid then
+        queueEngineerSystemRepair(state)
+
+        if deps and deps.sfxrules and deps.sfxrules.playRefuel then
+            deps.sfxrules.playRefuel()
+        end
+    elseif deps and deps.sfxrules and deps.sfxrules.playPlayReject then
+        deps.sfxrules.playPlayReject()
+    end
+
+    return true
 end
 
 local function getWorldMapDeckModalLayout(deckModal)
@@ -1599,13 +1830,14 @@ function worldmapdraw.updateHover(state, deps)
         return
     end
 
-    if state.worldMapRewardModal or state.worldMapCardRewardModal then
+    if state.worldMapRewardModal or state.worldMapCardRewardModal or state.worldMapHunterModal or state.worldMapCrewReviveModal then
         state.hoveredWorldMapNode = nil
         state.pinnedWorldMapNode = nil
         state.worldMapDeckModal = nil
         state.worldMapObjectivePreviewModal = nil
         state.worldMapNodePlayButtonTarget = nil
         state.worldMapNodePlayButtonTargets = nil
+        state.worldMapFuelIconTargets = nil
         return
     end
 
@@ -1633,6 +1865,28 @@ function worldmapdraw.updateHover(state, deps)
 end
 
 function worldmapdraw.updateRewardModal(state, dt, deps)
+    local repair = state and state.worldMapSystemRepair or nil
+
+    if repair and repair.systemIndex then
+        repair.elapsed = (repair.elapsed or 0) + (dt or 0)
+
+        local travelDuration = math.max(0.01, repair.travelDuration or 0.42)
+        local flashDuration = math.max(0.01, repair.flashDuration or 0.28)
+
+        if not repair.restored and repair.elapsed >= travelDuration then
+            systemrules.restoreSystem(state.worldMissionSystems, repair.systemIndex)
+            repair.restored = true
+        end
+
+        if repair.restored and repair.elapsed >= travelDuration + flashDuration then
+            state.worldMapSystemRepair = nil
+
+            if state.worldMapSystemRepairQueue and #state.worldMapSystemRepairQueue > 0 then
+                state.worldMapSystemRepair = table.remove(state.worldMapSystemRepairQueue, 1)
+            end
+        end
+    end
+
     local hadRewardModal = state and state.worldMapRewardModal ~= nil
     local pendingCardReward = state
         and (state.pendingWorldMapCardReward or (state.worldMapRewardModal and state.worldMapRewardModal.cardrw))
@@ -1673,7 +1927,26 @@ function worldmapdraw.updateRewardModal(state, dt, deps)
         end
     end
 
-    return updated or cardrewardmodal.update(state, dt, deps)
+    if state
+        and not state.worldMapRewardModal
+        and not state.worldMapCardRewardModal
+        and not pendingCardReward
+        and state.pendingWorldMapHunterModal
+        and not state.worldMapHunterModal then
+        huntermodal.open(state, state.pendingWorldMapHunterModal)
+    end
+
+    if state
+        and not state.worldMapRewardModal
+        and not state.worldMapCardRewardModal
+        and not state.worldMapHunterModal
+        and not state.pendingWorldMapHunterModal
+        and state.pendingWorldMapCrewReviveModal
+        and not state.worldMapCrewReviveModal then
+        crewrevivemodal.open(state, state.pendingWorldMapCrewReviveModal)
+    end
+
+    return updated or cardrewardmodal.update(state, dt, deps) or huntermodal.update(state, dt, deps) or crewrevivemodal.update(state, dt, deps)
 end
 
 function worldmapdraw.mousepressed(state, x, y, button, deps)
@@ -1687,6 +1960,14 @@ function worldmapdraw.mousepressed(state, x, y, button, deps)
 
     if state.worldMapCardRewardModal then
         return cardrewardmodal.mousepressed(state, x, y, button, deps)
+    end
+
+    if state.worldMapHunterModal then
+        return huntermodal.mousepressed(state, x, y, button, deps)
+    end
+
+    if state.worldMapCrewReviveModal then
+        return crewrevivemodal.mousepressed(state, x, y, button, deps)
     end
 
     if state.worldMapObjectivePreviewModal then
@@ -1739,6 +2020,14 @@ function worldmapdraw.mousepressed(state, x, y, button, deps)
         return false
     end
 
+    if tryUseDomainAwarenessButton(state, x, y, deps) then
+        return true
+    end
+
+    if tryPayRouteFuelIcon(state, x, y, deps) then
+        return true
+    end
+
     if tryLaunchMissionFromNodePreview(state, x, y, deps) then
         return true
     end
@@ -1759,8 +2048,20 @@ function worldmapdraw.mousepressed(state, x, y, button, deps)
     return true
 end
 
+function worldmapdraw.mousereleased(state, x, y, button, deps)
+    if state and state.worldMapHunterModal then
+        return huntermodal.mousereleased(state, x, y, button, deps)
+    end
+
+    if state and state.worldMapCrewReviveModal then
+        return crewrevivemodal.mousereleased(state, x, y, button, deps)
+    end
+
+    return false
+end
+
 function worldmapdraw.wheelmoved(state, _, y)
-    if worldrewardmodal.wheelmoved(state) or cardrewardmodal.wheelmoved(state) then
+    if worldrewardmodal.wheelmoved(state) or cardrewardmodal.wheelmoved(state) or huntermodal.wheelmoved(state) or crewrevivemodal.wheelmoved(state) then
         return true
     end
 
@@ -1790,6 +2091,49 @@ end
 
 function worldmapdraw.getNextMapPosition(playerMapPosition)
     return getNextMapPosition(playerMapPosition)
+end
+
+local function getWorldRolePortraitRects(state)
+    if state and state.runSetupModal and state.runSetupModal.isOpen then
+        return nil
+    end
+
+    local layout = getSelectedRunLoadoutLayout(state)
+
+    if not layout then
+        return nil
+    end
+
+    local roleCount = #WORLD_ROLE_PORTRAITS
+    local gap = math.max(6, math.floor(layout.gap * 0.65))
+    local resourceLayout = getWorldResourceTrackerLayout(state)
+    local resourceTrackerRight = resourceLayout.x
+        + resourceLayout.iconSize
+        + resourceLayout.iconGap
+        + resourceLayout.trackerWidth
+    local totalWidth = math.max(1, resourceTrackerRight - layout.x)
+    local boxWidth = (totalWidth - (gap * (roleCount - 1))) / roleCount
+    local boxHeight = math.max(56, boxWidth * 1.12)
+    local y = math.floor(layout.y - gap - boxHeight)
+    local labelHeight = math.max(18, boxHeight * 0.24)
+    local rects = {}
+
+    for roleIndex, rolePortrait in ipairs(WORLD_ROLE_PORTRAITS) do
+        local x = layout.x + ((roleIndex - 1) * (boxWidth + gap))
+
+        rects[rolePortrait.label] = {
+            x = x,
+            y = y,
+            width = boxWidth,
+            height = boxHeight,
+            portraitX = x + 5,
+            portraitY = y + 5,
+            portraitWidth = boxWidth - 10,
+            portraitHeight = boxHeight - labelHeight - 8,
+        }
+    end
+
+    return rects
 end
 
 local function drawWorldRolePortraits(state)
@@ -1822,7 +2166,7 @@ local function drawWorldRolePortraits(state)
     for roleIndex, rolePortrait in ipairs(WORLD_ROLE_PORTRAITS) do
         local roleLabel = rolePortrait.label
         local x = layout.x + ((roleIndex - 1) * (boxWidth + gap))
-        local image = getCrewImage(rolePortrait.image)
+        local image = getWorldRolePortraitImage(state, rolePortrait)
 
         love.graphics.setColor(0.025, 0.028, 0.035, 0.9)
         love.graphics.rectangle("fill", x, y, boxWidth, boxHeight, 5, 5)
@@ -1910,6 +2254,41 @@ local function getWorldRolePortraitBounds(state, layout)
         bottom = layout.y + layout.jaclHeight,
         gap = gap,
     }
+end
+
+local function getWorldSystemIconRects(state)
+    if state and state.runSetupModal and state.runSetupModal.isOpen then
+        return nil
+    end
+
+    local layout = getSelectedRunLoadoutLayout(state)
+
+    if not layout then
+        return nil
+    end
+
+    local bounds = getWorldRolePortraitBounds(state, layout)
+    local gap = bounds.gap
+    local labelFont = getFont(12)
+    local labelHeight = math.max(18, labelFont:getHeight())
+    local boxGap = math.max(5, math.floor(gap * 0.75))
+    local availableHeight = math.max(1, bounds.bottom - bounds.y - labelHeight - boxGap)
+    local boxSize = math.max(30, math.floor((availableHeight - (boxGap * 4)) / 5))
+    local x = bounds.right + layout.gap
+    local y = bounds.y
+    local boxY = y + labelHeight + boxGap
+    local rects = {}
+
+    for systemIndex = 1, 5 do
+        rects[systemIndex] = {
+            x = x,
+            y = boxY + ((systemIndex - 1) * (boxSize + boxGap)),
+            width = boxSize,
+            height = boxSize,
+        }
+    end
+
+    return rects
 end
 
 local function drawWorldAlmsTracker(state)
@@ -2038,7 +2417,9 @@ local function drawWorldSystemsColumn(state)
     local y = bounds.y
     local boxX = x
     local boxY = y + labelHeight + boxGap
-    local image = getMapImage("systems.png") or getMapImage("system.png")
+    local systems = systemrules.ensureSystems(state and state.worldMissionSystems or nil)
+    local freshImage = getMapImage("systems.png") or getMapImage("system.png")
+    local burnedImage = getMapImage("systemsburn.png") or freshImage
     local previousFont = love.graphics.getFont()
 
     love.graphics.setFont(labelFont)
@@ -2052,6 +2433,7 @@ local function drawWorldSystemsColumn(state)
 
     for systemIndex = 1, 5 do
         local rowY = boxY + ((systemIndex - 1) * (boxSize + boxGap))
+        local image = systemrules.isSystemBurned(systems, systemIndex) and burnedImage or freshImage
 
         love.graphics.setColor(0.025, 0.028, 0.035, 0.9)
         love.graphics.rectangle("fill", boxX, rowY, boxSize, boxSize, 5, 5)
@@ -2093,6 +2475,69 @@ local function drawWorldSystemsColumn(state)
     love.graphics.setColor(1, 1, 1, 1)
 end
 
+local function drawWorldSystemRepairAnimation(state)
+    local repair = state and state.worldMapSystemRepair or nil
+
+    if not repair or not repair.systemIndex then
+        return
+    end
+
+    local roleRects = getWorldRolePortraitRects(state)
+    local systemRects = getWorldSystemIconRects(state)
+    local engineerRect = roleRects and roleRects.Engineer or nil
+    local systemRect = systemRects and systemRects[repair.systemIndex] or nil
+
+    if not engineerRect or not systemRect then
+        return
+    end
+
+    local travelDuration = math.max(0.01, repair.travelDuration or 0.42)
+    local flashDuration = math.max(0.01, repair.flashDuration or 0.28)
+    local travelProgress = clamp01((repair.elapsed or 0) / travelDuration)
+    local easedProgress = easeOutCubic(travelProgress)
+    local startX = engineerRect.portraitX + (engineerRect.portraitWidth * 0.5)
+    local startY = engineerRect.portraitY + (engineerRect.portraitHeight * 0.45)
+    local targetX = systemRect.x + (systemRect.width * 0.5)
+    local targetY = systemRect.y + (systemRect.height * 0.5)
+    local iconX = startX + ((targetX - startX) * easedProgress)
+    local iconY = startY + ((targetY - startY) * easedProgress)
+    local icon = getIconImage("sysrepair.png")
+
+    if repair.restored then
+        local flashProgress = clamp01(((repair.elapsed or 0) - travelDuration) / flashDuration)
+        local flashAlpha = (1 - flashProgress) * (0.45 + (0.35 * math.sin(flashProgress * math.pi * 4)))
+
+        love.graphics.setColor(
+            WORLD_SYSTEM_REPAIR_FLASH_COLOR[1],
+            WORLD_SYSTEM_REPAIR_FLASH_COLOR[2],
+            WORLD_SYSTEM_REPAIR_FLASH_COLOR[3],
+            math.max(0, flashAlpha)
+        )
+        love.graphics.setLineWidth(math.max(2, math.floor(systemRect.width * 0.08)))
+        love.graphics.rectangle("line", systemRect.x - 2, systemRect.y - 2, systemRect.width + 4, systemRect.height + 4, 6, 6)
+        love.graphics.setLineWidth(1)
+    end
+
+    if icon and not repair.restored then
+        local iconSize = math.max(28, math.floor(math.min(engineerRect.width, systemRect.width) * 0.56))
+        local scale = math.min(iconSize / icon:getWidth(), iconSize / icon:getHeight())
+        local drawWidth = icon:getWidth() * scale
+        local drawHeight = icon:getHeight() * scale
+
+        love.graphics.setColor(1, 1, 1, 1)
+        love.graphics.draw(
+            icon,
+            math.floor(iconX - (drawWidth * 0.5)),
+            math.floor(iconY - (drawHeight * 0.5)),
+            0,
+            scale,
+            scale
+        )
+    end
+
+    love.graphics.setColor(1, 1, 1, 1)
+end
+
 local function drawHybridEncounterEventNode(mode, x, y, radius)
     if mode == "line" then
         love.graphics.line(x - radius, y, x, y - radius, x + radius, y)
@@ -2117,6 +2562,113 @@ local function drawCenteredSquare(mode, x, y, radius)
     local size = radius * 2
 
     love.graphics.rectangle(mode, x - radius, y - radius, size, size)
+end
+
+local function getRouteNodePosition(layout, clusterIndex, nodeIndex)
+    return getClusterNodeX(layout, clusterIndex, nodeIndex), layout.y
+end
+
+local function drawRouteFuelIcon(image, centerX, centerY, iconSize, alpha)
+    if not image then
+        return nil
+    end
+
+    local snappedIconSize = math.floor(iconSize)
+    local imageScale = math.min(snappedIconSize / image:getWidth(), snappedIconSize / image:getHeight())
+    local imageWidth = math.floor((image:getWidth() * imageScale) + 0.5)
+    local imageHeight = math.floor((image:getHeight() * imageScale) + 0.5)
+    local drawX = math.floor(centerX - (imageWidth * 0.5) + 0.5)
+    local drawY = math.floor(centerY - (imageHeight * 0.5) + 0.5)
+
+    love.graphics.setColor(1, 1, 1, alpha or 1)
+    love.graphics.draw(
+        image,
+        drawX,
+        drawY,
+        0,
+        imageWidth / image:getWidth(),
+        imageHeight / image:getHeight()
+    )
+
+    return {
+        x = drawX,
+        y = drawY,
+        width = imageWidth,
+        height = imageHeight,
+    }
+end
+
+local function addRouteFuelIconTarget(state, rect, segmentKey, iconIndex)
+    if not state or not rect or not segmentKey then
+        return
+    end
+
+    state.worldMapFuelIconTargets = state.worldMapFuelIconTargets or {}
+    state.worldMapFuelIconTargets[#state.worldMapFuelIconTargets + 1] = {
+        x = rect.x,
+        y = rect.y,
+        width = rect.width,
+        height = rect.height,
+        segmentKey = segmentKey,
+        iconIndex = iconIndex,
+    }
+end
+
+local function drawRouteFuelIcons(state, layout)
+    local fuelImage = getMapImage("fuel.png")
+    local fuelCostImage = getMapImage("fuelcost.png") or fuelImage
+
+    if not fuelImage then
+        return
+    end
+
+    local iconSize = math.max(20, math.floor(math.min(layout.circleRadius, layout.diamondRadius) * 1.30))
+    local iconGap = math.max(3, math.floor(iconSize * 0.16))
+    local iconY = math.floor(layout.y + (layout.lineWidth * 0.5) + iconGap + (iconSize * 0.5) + 0.5)
+    local pairedIconGap = math.max(3, math.floor(iconSize * 0.18))
+    local previousX = layout.startX
+    local previousPosition = {
+        kind = "start",
+    }
+    local currentSegment = worldfuelrules.getCurrentSegment(state)
+    local currentSegmentKey = currentSegment and currentSegment.key or nil
+
+    for clusterIndex = 1, layout.clusterCount do
+        for nodeIndex = 1, layout.clusterSize do
+            local nodeX = getRouteNodePosition(layout, clusterIndex, nodeIndex)
+            local nodePosition = {
+                kind = "path",
+                clusterIndex = clusterIndex,
+                nodeIndex = nodeIndex,
+            }
+            local segmentKey = worldfuelrules.getSegmentKey(previousPosition, nodePosition)
+            local segmentCost = worldfuelrules.getSegmentFuelCost(previousPosition)
+            local remainingIconCount = worldfuelrules.getRemainingFuelCount(state, segmentKey, segmentCost)
+            local isActiveSegment = segmentKey == currentSegmentKey
+            local image = isActiveSegment and fuelCostImage or fuelImage
+            local segmentCenterX = (previousX + nodeX) * 0.5
+
+            if remainingIconCount == 2 then
+                local offset = (iconSize + pairedIconGap) * 0.5
+                local firstRect = drawRouteFuelIcon(image, segmentCenterX - offset, iconY, iconSize, 1)
+                local secondRect = drawRouteFuelIcon(image, segmentCenterX + offset, iconY, iconSize, 1)
+
+                if isActiveSegment then
+                    addRouteFuelIconTarget(state, firstRect, segmentKey, 1)
+                    addRouteFuelIconTarget(state, secondRect, segmentKey, 2)
+                end
+            elseif remainingIconCount == 1 then
+                local rect = drawRouteFuelIcon(image, segmentCenterX, iconY, iconSize, 1)
+
+                if isActiveSegment then
+                    addRouteFuelIconTarget(state, rect, segmentKey, 1)
+                end
+            end
+
+            previousX = nodeX
+            previousPosition = nodePosition
+        end
+    end
 end
 
 function worldmapdraw.draw(state)
@@ -2144,14 +2696,32 @@ function worldmapdraw.draw(state)
     local playerMapPosition = getPlayerMapPosition(state)
     local nextMapPosition = getNextMapPosition(playerMapPosition)
 
-    local suppressMapElements = state and (state.worldMapRewardModal or state.worldMapCardRewardModal)
+    local suppressMapElements = state and (state.worldMapRewardModal or state.worldMapCardRewardModal or state.worldMapHunterModal or state.worldMapCrewReviveModal)
 
     love.graphics.clear(0.045, 0.047, 0.055, 1)
+
+    if state then
+        state.worldMapFuelIconTargets = {}
+    end
 
     if not suppressMapElements then
     love.graphics.setLineWidth(5)
     love.graphics.setColor(0.5, 0.5, 0.5, 1)
     love.graphics.line(startX, y, lastDiamondX, y)
+    drawRouteFuelIcons(state, {
+        y = y,
+        circleRadius = circleRadius,
+        diamondRadius = diamondRadius,
+        bossDiamondRadius = bossDiamondRadius,
+        lineWidth = 5,
+        clusterSize = clusterSize,
+        clusterCount = clusterCount,
+        clusterGap = clusterGap,
+        intraClusterSpacing = intraClusterSpacing,
+        nonBossNodeShift = nonBossNodeShift,
+        startX = startX,
+        firstDiamondX = firstDiamondX,
+    })
 
     love.graphics.setColor(0, 0, 0, 1)
     love.graphics.circle("fill", startX, y, circleRadius)
@@ -2287,28 +2857,34 @@ function worldmapdraw.draw(state)
         state.worldMapObjectivePreviewTargets = {}
         state.worldMapNodePlayButtonTarget = nil
         state.worldMapNodePlayButtonTargets = {}
+        state.worldMapDomainAwarenessTargets = {}
     end
 
-    drawWorldAlmsTracker(state)
-    drawWorldRolePortraits(state)
-    local munitionsTooltip = drawWorldResourceTrackers(state)
-    drawWorldSystemsColumn(state)
-    worldloadoutdraw.draw(state)
-    if not suppressMapElements then
-        worldencounterpreviewdraw.drawGroup(
-            state,
-            state and (state.pinnedWorldMapNode or state.hoveredWorldMapNode or getDefaultFunctionalNode(state)) or nil
-        )
-        drawWorldMapDeckModal(state and state.worldMapDeckModal or nil)
-        drawObjectiveCardPreviewModal(state and state.worldMapObjectivePreviewModal or nil)
-    end
+    if not (state and (state.worldMapHunterModal or state.worldMapCrewReviveModal)) then
+        drawWorldAlmsTracker(state)
+        drawWorldRolePortraits(state)
+        local munitionsTooltip = drawWorldResourceTrackers(state)
+        drawWorldSystemsColumn(state)
+        drawWorldSystemRepairAnimation(state)
+        worldloadoutdraw.draw(state)
+        if not suppressMapElements then
+            worldencounterpreviewdraw.drawGroup(
+                state,
+                state and (state.pinnedWorldMapNode or state.hoveredWorldMapNode or getDefaultFunctionalNode(state)) or nil
+            )
+            drawWorldMapDeckModal(state and state.worldMapDeckModal or nil)
+            drawObjectiveCardPreviewModal(state and state.worldMapObjectivePreviewModal or nil)
+        end
 
-    if munitionsTooltip then
-        drawMunitionsSystemTooltip(munitionsTooltip.systemDefinition, munitionsTooltip.anchor)
+        if munitionsTooltip then
+            drawMunitionsSystemTooltip(munitionsTooltip.systemDefinition, munitionsTooltip.anchor)
+        end
     end
 
     worldrewardmodal.draw(state)
     cardrewardmodal.draw(state)
+    huntermodal.draw(state)
+    crewrevivemodal.draw(state)
 end
 
 return worldmapdraw

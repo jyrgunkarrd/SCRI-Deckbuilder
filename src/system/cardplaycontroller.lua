@@ -1,5 +1,15 @@
 local cardplaycontroller = {}
 
+local function resolveCardPlayedEnhancements(card, cardDefinition, ctx)
+    if ctx.enhancementrules and ctx.enhancementrules.resolveCardPlayed then
+        return ctx.enhancementrules.resolveCardPlayed(card, cardDefinition, {
+            drawCardFromPlayerDeck = ctx.drawCardFromPlayerDeck,
+        })
+    end
+
+    return false
+end
+
 function cardplaycontroller.canPlayCard(card, ctx)
     local cardDefinition = ctx.cardregistry.getCard(card.setName, card.cardId)
 
@@ -191,7 +201,9 @@ local function isValidCrewButtonDefeatTopSlotTarget(topSlotId, pendingSelection,
 end
 
 function cardplaycontroller.tryPlayStrategyCard(strategyCardIndex, targetCardIndex, ctx)
-    return ctx.strategyrules.playStrategy(strategyCardIndex, targetCardIndex, {
+    local strategyCard = strategyCardIndex and ctx.state.cards[strategyCardIndex] or nil
+    local strategyDefinition = strategyCard and ctx.cardregistry.getCard(strategyCard.setName, strategyCard.cardId) or nil
+    local played = ctx.strategyrules.playStrategy(strategyCardIndex, targetCardIndex, {
         cards = ctx.state.cards,
         turnrules = ctx.turnrules,
         warrules = ctx.warrules,
@@ -205,10 +217,18 @@ function cardplaycontroller.tryPlayStrategyCard(strategyCardIndex, targetCardInd
             return beginPendingStrategySelection(ctx, pendingSelection)
         end,
     })
+
+    if played then
+        resolveCardPlayedEnhancements(strategyCard, strategyDefinition, ctx)
+    end
+
+    return played
 end
 
 function cardplaycontroller.tryPlayKitCard(kitCardIndex, targetCardIndex, ctx)
-    return ctx.kitrules.playKit(kitCardIndex, targetCardIndex, {
+    local kitCard = kitCardIndex and ctx.state.cards[kitCardIndex] or nil
+    local kitDefinition = kitCard and ctx.cardregistry.getCard(kitCard.setName, kitCard.cardId) or nil
+    local played = ctx.kitrules.playKit(kitCardIndex, targetCardIndex, {
         cards = ctx.state.cards,
         cardregistry = ctx.cardregistry,
         canAffordCosts = function(costEntries)
@@ -219,6 +239,12 @@ function cardplaycontroller.tryPlayKitCard(kitCardIndex, targetCardIndex, ctx)
         end,
         removeCardFromPlay = ctx.removeCardFromPlay,
     })
+
+    if played then
+        resolveCardPlayedEnhancements(kitCard, kitDefinition, ctx)
+    end
+
+    return played
 end
 
 function cardplaycontroller.getPendingSelection(state)
@@ -429,11 +455,17 @@ function cardplaycontroller.isPendingSelectionTopSlotTarget(topSlotId, pendingSe
 end
 
 function cardplaycontroller.resolvePlayedTroopCard(troopCardIndex, ctx)
-    return ctx.trooprules.resolvePlay(troopCardIndex, {
+    local troopCard = troopCardIndex and ctx.state.cards[troopCardIndex] or nil
+    local troopDefinition = troopCard and ctx.cardregistry.getCard(troopCard.setName, troopCard.cardId) or nil
+    local resolved = ctx.trooprules.resolvePlay(troopCardIndex, {
         cards = ctx.state.cards,
         cardregistry = ctx.cardregistry,
+        drawCardFromPlayerDeck = ctx.drawCardFromPlayerDeck,
         spawnTokensNearPlayerCard = ctx.spawnTokensNearPlayerCard,
     })
+
+    resolveCardPlayedEnhancements(troopCard, troopDefinition, ctx)
+    return resolved
 end
 
 function cardplaycontroller.resolveDestroyedTroopCard(troopCardIndex, attachedKitCards, ctx)

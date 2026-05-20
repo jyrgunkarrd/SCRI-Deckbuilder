@@ -1,6 +1,8 @@
 local cardrewardpools = require("src.system.cardrewardpools")
 local cardregistry = require("src.system.cardregistry")
 local carddraw = require("src.render.carddraw")
+local crewrules = require("src.system.crewrules")
+local enhancementrules = require("src.system.enhancementrules")
 local worldloadoutdraw = require("src.render.worldloadoutdraw")
 local rewarddebug = require("src.system.rewarddebug")
 
@@ -11,12 +13,22 @@ local MODAL_MARGIN = 38
 local MODAL_PADDING = 22
 local CARD_WIDTH = 172
 local CARD_GAP = 26
-local HEADER_HEIGHT = 68
+local HEADER_HEIGHT = 94
 local FOOTER_HEIGHT = 44
 local OUTLINE_COLOR = { 0.976, 0.761, 0.169, 1 }
 local TARGET_COLOR = { 0.549, 1, 0.871, 1 }
+local CAPTAIN_HIGHLIGHT_COLOR = { 1, 0.725, 0.337, 1 }
+local OLD_FRIEND_ENHANCEMENT_ID = "FRND"
+local CAPTAIN_PORTRAIT_PATH = "assets/images/crew/captain.png"
+local OLD_FRIEND_BADGE_PATH = "assets/images/cards/enh/FRND.png"
+local CAPTAIN_BADGE_SIZE = 34
+local CAPTAIN_BADGE_GAP = 10
+local CAPTAIN_PORTRAIT_SIZE = 46
+local CAPTAIN_PORTRAIT_GAP = 12
+local CAPTAIN_HIGHLIGHT_MARGIN = 12
 
 local fontCache = {}
+local imageCache = {}
 
 local function getFont(size)
     local key = tostring(size)
@@ -27,6 +39,23 @@ local function getFont(size)
 
     fontCache[key] = love.graphics.newFont(FONT_PATH, size)
     return fontCache[key]
+end
+
+local function getImage(path)
+    if imageCache[path] ~= nil then
+        return imageCache[path] or nil
+    end
+
+    if not love.filesystem.getInfo(path) then
+        imageCache[path] = false
+        return nil
+    end
+
+    imageCache[path] = love.graphics.newImage(path, {
+        mipmaps = true,
+    })
+    imageCache[path]:setFilter("linear", "linear")
+    return imageCache[path]
 end
 
 local function isPointInsideRect(x, y, rect)
@@ -52,6 +81,16 @@ local function getJaclDefinition(state)
     return state and state.selectedRunPackage and state.selectedRunPackage.jacl or nil
 end
 
+local function hasCaptainOldFriendChoice(modal)
+    for _, choice in ipairs(modal and modal.choices or {}) do
+        if choice.captainOldFriend then
+            return true
+        end
+    end
+
+    return false
+end
+
 local function getLayout(modal)
     local screenWidth, screenHeight = love.graphics.getDimensions()
     local cardWidth, cardHeight = carddraw.getCardSize({
@@ -59,14 +98,17 @@ local function getLayout(modal)
         showLabelWhenCollapsed = true,
         showHealthOnPortrait = true,
     })
+    local hasCaptainSlot = hasCaptainOldFriendChoice(modal)
+    local oldFriendTopBand = hasCaptainSlot and (CAPTAIN_BADGE_SIZE + CAPTAIN_BADGE_GAP + CAPTAIN_HIGHLIGHT_MARGIN) or 0
+    local oldFriendBottomBand = hasCaptainSlot and (CAPTAIN_PORTRAIT_SIZE + CAPTAIN_PORTRAIT_GAP + CAPTAIN_HIGHLIGHT_MARGIN) or 0
     local choiceCount = math.max(1, #(modal and modal.choices or {}))
     local contentWidth = (choiceCount * cardWidth) + (math.max(0, choiceCount - 1) * CARD_GAP)
     local modalWidth = math.min(screenWidth - (MODAL_MARGIN * 2), contentWidth + (MODAL_PADDING * 2))
-    local modalHeight = math.min(screenHeight - (MODAL_MARGIN * 2), HEADER_HEIGHT + cardHeight + FOOTER_HEIGHT + (MODAL_PADDING * 2))
+    local modalHeight = math.min(screenHeight - (MODAL_MARGIN * 2), HEADER_HEIGHT + oldFriendTopBand + cardHeight + oldFriendBottomBand + FOOTER_HEIGHT + (MODAL_PADDING * 2))
     local modalX = math.floor((screenWidth - modalWidth) * 0.5)
     local modalY = math.floor((screenHeight - modalHeight) * 0.34)
     local cardsX = math.floor(modalX + ((modalWidth - contentWidth) * 0.5))
-    local cardsY = math.floor(modalY + HEADER_HEIGHT)
+    local cardsY = math.floor(modalY + HEADER_HEIGHT + oldFriendTopBand)
 
     return {
         x = modalX,
@@ -77,6 +119,8 @@ local function getLayout(modal)
         cardHeight = cardHeight,
         cardsX = cardsX,
         cardsY = cardsY,
+        oldFriendTopBand = oldFriendTopBand,
+        oldFriendBottomBand = oldFriendBottomBand,
     }
 end
 
@@ -98,6 +142,41 @@ local function getChoiceTargets(modal)
     end
 
     return targets, layout
+end
+
+local function isCaptainAlive(state)
+    return not crewrules.isCrewRoleDead(state and state.deadCrewRoles or nil, "Captain")
+end
+
+local function markCaptainOldFriendChoice(state, choices)
+    if not isCaptainAlive(state) or #choices <= 0 then
+        return nil
+    end
+
+    local choiceIndex = math.ceil(#choices / 2)
+    local choice = choices[choiceIndex]
+
+    if choice then
+        choice.captainOldFriend = true
+        choice.enh = OLD_FRIEND_ENHANCEMENT_ID
+    end
+
+    return choiceIndex
+end
+
+local function getRewardEntryForChoice(choice)
+    if not choice or not choice.cardId then
+        return nil
+    end
+
+    if choice.captainOldFriend then
+        return {
+            cardId = choice.cardId,
+            enh = OLD_FRIEND_ENHANCEMENT_ID,
+        }
+    end
+
+    return choice.cardId
 end
 
 local function getRewardTargetAt(state, x, y)
@@ -210,7 +289,7 @@ local function addRewardToTarget(state, choice, target)
     local bucket = target.kind == "jacl" and rewards.jacl or rewards.agents
 
     bucket[target.id] = bucket[target.id] or {}
-    bucket[target.id][#bucket[target.id] + 1] = choice.cardId
+    bucket[target.id][#bucket[target.id] + 1] = getRewardEntryForChoice(choice)
 
     state.worldMapCardRewardModal = nil
     state.worldMapCardRewardTargets = nil
@@ -230,6 +309,7 @@ function cardrewardmodal.open(state, options)
     local choices = cardrewardpools.roll(options and options.poolId or "universal", options and options.count or 3, state, {
         cardrw = options and options.cardrw or nil,
     })
+    local captainOldFriendChoiceIndex = markCaptainOldFriendChoice(state, choices)
 
     if #choices <= 0 then
         rewarddebug.log("cardrewardmodal.open.failed", {
@@ -256,6 +336,7 @@ function cardrewardmodal.open(state, options)
         poolId = options and options.poolId or "universal",
         cardrw = options and options.cardrw or nil,
         choices = choices,
+        captainOldFriendChoiceIndex = captainOldFriendChoiceIndex,
         selectedChoice = nil,
         selectedChoiceIndex = nil,
         stage = "choose_card",
@@ -356,6 +437,57 @@ local function drawTargetHighlights(state)
     love.graphics.setColor(1, 1, 1, 1)
 end
 
+local function drawImageInRect(image, x, y, width, height, alpha)
+    if not image then
+        return
+    end
+
+    local scale = math.min(width / image:getWidth(), height / image:getHeight())
+    local drawWidth = image:getWidth() * scale
+    local drawHeight = image:getHeight() * scale
+    local drawX = math.floor(x + ((width - drawWidth) * 0.5) + 0.5)
+    local drawY = math.floor(y + ((height - drawHeight) * 0.5) + 0.5)
+
+    love.graphics.setColor(1, 1, 1, alpha or 1)
+    love.graphics.draw(image, drawX, drawY, 0, scale, scale)
+end
+
+local function drawCaptainOldFriendHighlight(target, alpha)
+    local previousLineWidth = love.graphics.getLineWidth()
+    local badgeX = math.floor(target.x + ((target.width - CAPTAIN_BADGE_SIZE) * 0.5) + 0.5)
+    local badgeY = math.floor(target.y - CAPTAIN_BADGE_SIZE - CAPTAIN_BADGE_GAP)
+    local portraitX = math.floor(target.x + ((target.width - CAPTAIN_PORTRAIT_SIZE) * 0.5) + 0.5)
+    local portraitY = math.floor(target.y + target.height + CAPTAIN_PORTRAIT_GAP + 0.5)
+    local highlightY = badgeY - CAPTAIN_HIGHLIGHT_MARGIN
+    local highlightHeight = (portraitY + CAPTAIN_PORTRAIT_SIZE + CAPTAIN_HIGHLIGHT_MARGIN) - highlightY
+
+    love.graphics.setColor(CAPTAIN_HIGHLIGHT_COLOR[1], CAPTAIN_HIGHLIGHT_COLOR[2], CAPTAIN_HIGHLIGHT_COLOR[3], 0.14 * alpha)
+    love.graphics.rectangle("fill", target.x - CAPTAIN_HIGHLIGHT_MARGIN, highlightY, target.width + (CAPTAIN_HIGHLIGHT_MARGIN * 2), highlightHeight, 8, 8)
+    love.graphics.setLineWidth(3)
+    love.graphics.setColor(CAPTAIN_HIGHLIGHT_COLOR[1], CAPTAIN_HIGHLIGHT_COLOR[2], CAPTAIN_HIGHLIGHT_COLOR[3], 0.86 * alpha)
+    love.graphics.rectangle("line", target.x - CAPTAIN_HIGHLIGHT_MARGIN, highlightY, target.width + (CAPTAIN_HIGHLIGHT_MARGIN * 2), highlightHeight, 8, 8)
+    love.graphics.setLineWidth(previousLineWidth)
+
+    love.graphics.setColor(0.04, 0.035, 0.025, 0.96 * alpha)
+    love.graphics.rectangle("fill", badgeX - 4, badgeY - 4, CAPTAIN_BADGE_SIZE + 8, CAPTAIN_BADGE_SIZE + 8, 5, 5)
+    love.graphics.setColor(CAPTAIN_HIGHLIGHT_COLOR[1], CAPTAIN_HIGHLIGHT_COLOR[2], CAPTAIN_HIGHLIGHT_COLOR[3], 0.92 * alpha)
+    love.graphics.rectangle("line", badgeX - 4, badgeY - 4, CAPTAIN_BADGE_SIZE + 8, CAPTAIN_BADGE_SIZE + 8, 5, 5)
+    drawImageInRect(getImage(OLD_FRIEND_BADGE_PATH), badgeX, badgeY, CAPTAIN_BADGE_SIZE, CAPTAIN_BADGE_SIZE, alpha)
+
+    love.graphics.setColor(0.04, 0.035, 0.025, 0.96 * alpha)
+    love.graphics.rectangle("fill", portraitX - 4, portraitY - 4, CAPTAIN_PORTRAIT_SIZE + 8, CAPTAIN_PORTRAIT_SIZE + 8, 6, 6)
+    love.graphics.setColor(CAPTAIN_HIGHLIGHT_COLOR[1], CAPTAIN_HIGHLIGHT_COLOR[2], CAPTAIN_HIGHLIGHT_COLOR[3], 0.92 * alpha)
+    love.graphics.rectangle("line", portraitX - 4, portraitY - 4, CAPTAIN_PORTRAIT_SIZE + 8, CAPTAIN_PORTRAIT_SIZE + 8, 6, 6)
+    drawImageInRect(getImage(CAPTAIN_PORTRAIT_PATH), portraitX, portraitY, CAPTAIN_PORTRAIT_SIZE, CAPTAIN_PORTRAIT_SIZE, alpha)
+
+    return {
+        x = badgeX - 4,
+        y = badgeY - 4,
+        width = CAPTAIN_BADGE_SIZE + 8,
+        height = CAPTAIN_BADGE_SIZE + 8,
+    }
+end
+
 function cardrewardmodal.draw(state)
     local modal = state and state.worldMapCardRewardModal or nil
 
@@ -400,17 +532,31 @@ function cardrewardmodal.draw(state)
         )
     end
 
+    local hoveredOldFriendBadge = false
+
     for _, target in ipairs(targets) do
         local hovered = isPointInsideRect(mouseX, mouseY, target)
         local selected = modal.selectedChoiceIndex == target.choiceIndex
         local alpha = modal.selectedChoice and not selected and 0.36 or 1
-
-        love.graphics.setColor(1, 1, 1, alpha)
-        carddraw.drawCardState(target.choice.setName, target.choice.cardId, target.x, target.y, 0, {
+        local drawCardOptions = {
             width = CARD_WIDTH,
             showLabelWhenCollapsed = true,
             showHealthOnPortrait = true,
-        })
+        }
+
+        if target.choice.captainOldFriend then
+            drawCardOptions.card = {
+                enh = OLD_FRIEND_ENHANCEMENT_ID,
+            }
+        end
+
+        love.graphics.setColor(1, 1, 1, alpha)
+        carddraw.drawCardState(target.choice.setName, target.choice.cardId, target.x, target.y, 0, drawCardOptions)
+
+        if target.choice.captainOldFriend then
+            local badgeRect = drawCaptainOldFriendHighlight(target, alpha)
+            hoveredOldFriendBadge = hoveredOldFriendBadge or isPointInsideRect(mouseX, mouseY, badgeRect)
+        end
 
         if hovered or selected then
             love.graphics.setColor(hovered and 1 or OUTLINE_COLOR[1], hovered and 1 or OUTLINE_COLOR[2], hovered and 1 or OUTLINE_COLOR[3], selected and 1 or 0.78)
@@ -422,6 +568,13 @@ function cardrewardmodal.draw(state)
 
     if modal.selectedChoice then
         drawTargetHighlights(state)
+    end
+
+    if hoveredOldFriendBadge then
+        carddraw.drawEnhancementTooltip({
+            definition = enhancementrules.getDefinition(OLD_FRIEND_ENHANCEMENT_ID),
+            enhancementId = OLD_FRIEND_ENHANCEMENT_ID,
+        }, mouseX, mouseY)
     end
 
     love.graphics.setColor(1, 1, 1, 1)

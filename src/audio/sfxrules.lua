@@ -26,6 +26,7 @@ local MISSION_START_SFX_PATH = "assets/audio/sfx/missionstart.wav"
 local RESTORED_SFX_PATH = "assets/audio/sfx/restored.wav"
 local MUNITIONS_SFX_PATH = "assets/audio/sfx/munitions.wav"
 local COLLECT_SFX_PATH = "assets/audio/sfx/collect.wav"
+local REFUEL_SFX_PATH = "assets/audio/sfx/refuel.wav"
 local CHAMPION_DEFEAT_SFX_DIRECTORY = "assets/audio/sfx/"
 
 local hoverSource = nil
@@ -54,6 +55,7 @@ local missionStartSource = nil
 local restoredSource = nil
 local munitionsSource = nil
 local collectSource = nil
+local refuelSource = nil
 local championDefeatSources = {}
 
 local function getHoverSource()
@@ -290,6 +292,15 @@ local function getCollectSource()
     return collectSource
 end
 
+local function getRefuelSource()
+    if refuelSource ~= nil then
+        return refuelSource
+    end
+
+    refuelSource = love.audio.newSource(REFUEL_SFX_PATH, "static")
+    return refuelSource
+end
+
 local function getChampionDefeatSource(fileName)
     if not fileName or fileName == "" then
         return nil
@@ -437,6 +448,11 @@ end
 
 function sfxrules.playCollect()
     local source = getCollectSource():clone()
+    source:play()
+end
+
+function sfxrules.playRefuel()
+    local source = getRefuelSource():clone()
     source:play()
 end
 

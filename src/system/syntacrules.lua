@@ -18,6 +18,10 @@ function syntacrules.resolveRewardButtons(ctx)
         state.engageRerollBonus = math.max(0, tonumber(state.engageRerollBonus) or 0) + 2
     end
 
+    if rewardButtons.scanner then
+        nextRewardButtons.scanner = true
+    end
+
     if rewardButtons.method and rewardButtons.methodResource then
         local methodButton = ctx.envdraw.getSyntacRewardButtonLayout("method", state.playerJacl)
         local sourceCenter = methodButton and {
@@ -43,8 +47,10 @@ end
 
 function syntacrules.clearResolvedMethodReward(state)
     if state.syntacMethodRewardAnimating then
+        local scannerUsed = state.syntacRewardButtons and state.syntacRewardButtons.scanner == true
+
         state.syntacMethodRewardAnimating = false
-        state.syntacRewardButtons = {}
+        state.syntacRewardButtons = scannerUsed and { scanner = true } or {}
     end
 end
 
@@ -84,7 +90,7 @@ function syntacrules.tryUseRewardButton(mouseX, mouseY, ctx)
     local state = ctx.state
     local button = ctx.envdraw.getSyntacRewardButtonAt(mouseX, mouseY, state.playerJacl)
 
-    if not button or (button.id ~= "method" and button.id ~= "draw" and button.id ~= "rerolls" and button.id ~= "munitions" and button.id ~= "tithes") then
+    if not button or (button.id ~= "method" and button.id ~= "draw" and button.id ~= "rerolls" and button.id ~= "scanner" and button.id ~= "munitions" and button.id ~= "tithes") then
         return false
     end
 
@@ -137,6 +143,10 @@ function syntacrules.tryUseRewardButton(mouseX, mouseY, ctx)
         state.isJaclDeckModalOpen = false
         ctx.sfxrules.playResourcePlay()
         return true
+    end
+
+    if button.id == "scanner" then
+        state.scannerPurchased = true
     end
 
     state.syntacRewardButtons[button.id] = true

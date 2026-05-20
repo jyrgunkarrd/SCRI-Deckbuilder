@@ -24,6 +24,7 @@ contextbuilders = appmodules.contextbuilders
 crewrules = appmodules.crewrules
 deckrules = appmodules.deckrules
 engagerules = appmodules.engagerules
+enhancementrules = appmodules.enhancementrules
 envrules = appmodules.envrules
 gameactions = appmodules.gameactions
 gamestate = appmodules.gamestate
@@ -38,6 +39,7 @@ lifecyclebridge = appmodules.lifecyclebridge
 notifications = appmodules.notifications
 objectiverules = appmodules.objectiverules
 phasecontroller = appmodules.phasecontroller
+playerdefeatcontroller = appmodules.playerdefeatcontroller
 previewrules = appmodules.previewrules
 resourcerules = appmodules.resourcerules
 rewarddebug = appmodules.rewarddebug
@@ -64,11 +66,25 @@ surrendermodal = appmodules.surrendermodal
 local setupScenario = gamestate.getDefaultScenario()
 local gameState = gamestate.createInitialState()
 local appState = gamestates.create()
+local DOMAIN_AWARENESS_METHOD_RESOURCES = {
+    "The Blade",
+    "The Shadow",
+    "The Rampage",
+    "The Inferno",
+    "The Stitch",
+    "The Crusade",
+    "The Gate",
+    "The Trigger",
+    "The Beast",
+    "The Nightmare",
+}
 local getCardDrawPosition
 local isGridRowColumnOccupied
 local isWarRollSourceActive
 local getTargetingContext
 local getTopSlotRollTargets
+local getPlayerDefeatControllerContext
+local clearDomainAwarenessEncounterBonus
 local beginInfiltrationEffect
 local addCardKeywordValue
 local beginEndPhaseSacrificeSelection
@@ -76,6 +92,7 @@ local getNextOpenHandSlot
 local preloadWarzoneFamily
 local updateInfiltrationEffect
 local resolveChampionDefeated
+local beginPlayerDefeat
 local playHunterAddedSfxForCard
 local playHunterAddedSfxForCardDefinition
 local playHunterAddedSfxForCards
@@ -127,6 +144,236 @@ end
 local function clearActiveMissionReward()
     appState.activeMissionReward = nil
     appState.activeMissionPrize = nil
+end
+
+local function getRewardEntryCardId(entry)
+    if type(entry) == "string" then
+        return entry
+    end
+
+    return type(entry) == "table" and (entry.cardId or entry.id) or nil
+end
+
+local function copyRewardEntry(entry)
+    if type(entry) ~= "table" then
+        return entry
+    end
+
+    local copiedEntry = {}
+
+    for key, value in pairs(entry) do
+        copiedEntry[key] = value
+    end
+
+    return copiedEntry
+end
+
+local function isRewardEntryCardType(entry, cardType)
+    local cardId = getRewardEntryCardId(entry)
+    local cardDefinition = cardId and cardregistry.getCardById(cardId) or nil
+
+    return cardDefinition and cardDefinition.type == cardType or false
+end
+
+local function isHunterRewardEntry(entry)
+    return isRewardEntryCardType(entry, "hunter")
+end
+
+local function isAllyRewardEntry(entry)
+    return isRewardEntryCardType(entry, "ally")
+end
+
+local function ensureRunJaclRewardBucket()
+    appState.selectedRunCardRewards = appState.selectedRunCardRewards or {}
+    appState.selectedRunCardRewards.jacl = appState.selectedRunCardRewards.jacl or {}
+    appState.selectedRunCardRewards.agents = appState.selectedRunCardRewards.agents or {}
+
+    local jaclId = appState.selectedRunJaclId or setupScenario.playerJaclId
+
+    if not jaclId then
+        return nil
+    end
+
+    appState.selectedRunCardRewards.jacl[jaclId] = appState.selectedRunCardRewards.jacl[jaclId] or {}
+    return appState.selectedRunCardRewards.jacl[jaclId]
+end
+
+local function copyDeckCardAsRewardEntry(card)
+    if not card or not card.cardId then
+        return nil
+    end
+
+    return {
+        cardId = card.cardId,
+        enh = card.enh,
+        enhancement = card.enhancement,
+        enhancements = card.enhancements,
+        enhance = card.enhance,
+    }
+end
+
+local function collectMissionDeckCardEntriesByType(cardType)
+    local cardEntries = {}
+
+    for _, card in ipairs(gameState.playerDeck and gameState.playerDeck.cards or {}) do
+        local cardDefinition = cardregistry.getCard(card.setName, card.cardId)
+
+        if cardDefinition and cardDefinition.type == cardType then
+            cardEntries[#cardEntries + 1] = copyDeckCardAsRewardEntry(card)
+        end
+    end
+
+    for _, card in ipairs(gameState.playerDeck and gameState.playerDeck.discard or {}) do
+        local cardDefinition = cardregistry.getCard(card.setName, card.cardId)
+
+        if cardDefinition and cardDefinition.type == cardType then
+            cardEntries[#cardEntries + 1] = copyDeckCardAsRewardEntry(card)
+        end
+    end
+
+    return cardEntries
+end
+
+local function collectMissionHandCardEntriesByType(cardType)
+    local cardEntries = {}
+
+    for _, card in ipairs(gameState.cards or {}) do
+        local cardDefinition = cardregistry.getCard(card.setName, card.cardId)
+
+        if card
+            and card.location
+            and card.location.kind == "hand"
+            and not cardlifecycle.isCardDestroyed(card)
+            and cardDefinition
+            and cardDefinition.type == cardType then
+            cardEntries[#cardEntries + 1] = copyDeckCardAsRewardEntry(card)
+        end
+    end
+
+    return cardEntries
+end
+
+local function appendEntries(target, entries)
+    for _, entry in ipairs(entries or {}) do
+        target[#target + 1] = entry
+    end
+end
+
+local function preserveMissionCardsForWorld()
+    local rewardBucket = ensureRunJaclRewardBucket()
+
+    if not rewardBucket then
+        return {}
+    end
+
+    local retainedRewards = {}
+
+    for _, rewardEntry in ipairs(rewardBucket) do
+        if not isHunterRewardEntry(rewardEntry) and not isAllyRewardEntry(rewardEntry) then
+            retainedRewards[#retainedRewards + 1] = copyRewardEntry(rewardEntry)
+        end
+    end
+
+    local hunterEntries = collectMissionDeckCardEntriesByType("hunter")
+    local allyEntries = collectMissionDeckCardEntriesByType("ally")
+
+    appendEntries(allyEntries, collectMissionHandCardEntriesByType("ally"))
+    appendEntries(retainedRewards, hunterEntries)
+    appendEntries(retainedRewards, allyEntries)
+
+    for index = #rewardBucket, 1, -1 do
+        rewardBucket[index] = nil
+    end
+
+    for index, rewardEntry in ipairs(retainedRewards) do
+        rewardBucket[index] = rewardEntry
+    end
+
+    return hunterEntries
+end
+
+local function addWorldHunterToJaclDeck(_, hunterId)
+    local rewardBucket = ensureRunJaclRewardBucket()
+
+    if not rewardBucket or not hunterId then
+        return false
+    end
+
+    rewardBucket[#rewardBucket + 1] = hunterId
+    return true
+end
+
+local function removeFirstMatchingHunterReward(rewardBucket, hunterEntry)
+    local hunterId = getRewardEntryCardId(hunterEntry)
+
+    if not rewardBucket or not hunterId then
+        return false
+    end
+
+    for index, rewardEntry in ipairs(rewardBucket) do
+        if rewardEntry == hunterEntry then
+            table.remove(rewardBucket, index)
+            return true
+        end
+    end
+
+    for index, rewardEntry in ipairs(rewardBucket) do
+        if isHunterRewardEntry(rewardEntry) and getRewardEntryCardId(rewardEntry) == hunterId then
+            table.remove(rewardBucket, index)
+            return true
+        end
+    end
+
+    return false
+end
+
+local function finalizeWorldHunterModal(_, modal)
+    local rewardBucket = ensureRunJaclRewardBucket()
+
+    if not rewardBucket or not modal then
+        return false
+    end
+
+    local shouldAddNewHunter = true
+
+    for _, lockedHunter in pairs(modal.lockedHunters or {}) do
+        if lockedHunter.source == "new" then
+            shouldAddNewHunter = false
+        elseif lockedHunter.source == "existing" then
+            removeFirstMatchingHunterReward(rewardBucket, lockedHunter.entry)
+        end
+    end
+
+    if shouldAddNewHunter and modal.newHunterId then
+        rewardBucket[#rewardBucket + 1] = modal.newHunterId
+    end
+
+    return true
+end
+
+local function getMissionDeadCrewRoleNames()
+    local orderedRoles = { "Captain", "Surgeon", "Sheriff", "Tactician", "Engineer" }
+    local roleNames = {}
+    local missionDeadCrewRoles = appState.missionDeadCrewRoles or {}
+
+    for _, roleName in ipairs(orderedRoles) do
+        local roleKey = crewrules.getCrewRoleKey(roleName)
+
+        if roleKey and missionDeadCrewRoles[roleKey] then
+            roleNames[#roleNames + 1] = roleName
+        end
+    end
+
+    return roleNames
+end
+
+local function finalizeWorldCrewReviveModal(_, modal)
+    if modal and modal.lockedCrew and modal.lockedCrew.roleName then
+        crewrules.markCrewRoleAlive(appState.deadCrewRoles, modal.lockedCrew.roleName)
+    end
+
+    appState.missionDeadCrewRoles = {}
+    return true
 end
 
 local function isCardDestroyed(card)
@@ -195,8 +442,15 @@ local function beginVictoryTransition()
     appState.worldMapNodePlayButtonTargets = nil
     appState.worldMapRewardModal = nil
     appState.worldMapRewardCollectButtonTarget = nil
+    appState.worldMapSystemRepair = nil
+    appState.worldMapSystemRepairQueue = nil
+    clearDomainAwarenessEncounterBonus()
     appState.pendingWorldMapCardReward = nil
     appState.worldMapCardRewardModal = nil
+    appState.pendingWorldMapHunterModal = nil
+    appState.worldMapHunterModal = nil
+    appState.pendingWorldMapCrewReviveModal = nil
+    appState.worldMapCrewReviveModal = nil
     appState.worldToMissionTransition = nil
 end
 
@@ -349,9 +603,18 @@ local function completeVictoryTransitionToWorld(transition)
     appState.worldMapNodePlayButtonTargets = nil
     appState.worldMapRewardModal = nil
     appState.worldMapRewardCollectButtonTarget = nil
+    appState.worldMapSystemRepair = nil
+    appState.worldMapSystemRepairQueue = nil
+    clearDomainAwarenessEncounterBonus()
     appState.pendingWorldMapCardReward = nil
     appState.worldMapCardRewardModal = nil
+    appState.pendingWorldMapHunterModal = nil
+    appState.worldMapHunterModal = nil
+    appState.pendingWorldMapCrewReviveModal = nil
+    appState.worldMapCrewReviveModal = nil
     transition.switchedToWorld = true
+
+    local existingHunterEntries = preserveMissionCardsForWorld()
 
     local reward = appState.activeMissionReward
     local prize = getMissionRewardAlms()
@@ -382,6 +645,23 @@ local function completeVictoryTransitionToWorld(transition)
         }
     end
 
+    appState.pendingWorldMapHunterModal = {
+        newHunterId = "HNTINFFM",
+        existingHunters = existingHunterEntries,
+        scannerPurchased = gameState.scannerPurchased == true,
+        sheriffAlive = not crewrules.isCrewRoleDead(appState.deadCrewRoles, "Sheriff"),
+    }
+
+    local missionDeadCrewRoles = getMissionDeadCrewRoleNames()
+
+    if #missionDeadCrewRoles > 0 and not crewrules.isCrewRoleDead(appState.deadCrewRoles, "Surgeon") then
+        appState.pendingWorldMapCrewReviveModal = {
+            deadCrewRoles = missionDeadCrewRoles,
+        }
+    else
+        appState.missionDeadCrewRoles = {}
+    end
+
     clearActiveMissionReward()
 end
 
@@ -407,6 +687,31 @@ end
 
 local function beginObjectiveHunterDeckTransformation(objectiveDefinition, generatedCardId)
     return topsloteffects.beginObjectiveHunterDeckTransformation(objectiveDefinition, generatedCardId)
+end
+
+getPlayerDefeatControllerContext = function()
+    return {
+        appState = appState,
+        gameState = gameState,
+        gamestate = gamestate,
+        envdraw = envdraw,
+        turnrules = turnrules,
+        resourcerules = resourcerules,
+        warrules = warrules,
+        notifications = notifications,
+        cardinstances = cardinstances,
+        warzonecontrolrules = warzonecontrolrules,
+        topsloteffects = topsloteffects,
+        infiltrationrules = infiltrationrules,
+        munitionsrules = munitionsrules,
+        setSetupScenario = function(nextSetupScenario)
+            setupScenario = nextSetupScenario
+        end,
+    }
+end
+
+beginPlayerDefeat = function(objectiveDefinition)
+    return playerdefeatcontroller.begin(getPlayerDefeatControllerContext(), objectiveDefinition)
 end
 
 local function beginReinforcementHunterDeckTransformation(sourceLocation, sourceCardDefinition, generatedCardId)
@@ -522,8 +827,14 @@ local function addStartingCrewCards()
         cards = gameState.cards,
         cardinstances = cardinstances,
         cardregistry = cardregistry,
+        deadCrewRoles = appState.deadCrewRoles,
         initializeCardHealthState = initializeCardHealthState,
     })
+end
+
+local function getWorldMissionSystems()
+    appState.worldMissionSystems = systemrules.ensureSystems(appState.worldMissionSystems)
+    return appState.worldMissionSystems
 end
 
 local function finishMissionSetup()
@@ -551,6 +862,20 @@ function getSetupAgentDeckIds()
 end
 
 local function copyCardRewardBuckets(source)
+    local function copyRewardEntry(entry)
+        if type(entry) ~= "table" then
+            return entry
+        end
+
+        local copiedEntry = {}
+
+        for key, value in pairs(entry) do
+            copiedEntry[key] = value
+        end
+
+        return copiedEntry
+    end
+
     local copied = {
         jacl = {},
         agents = {},
@@ -560,7 +885,7 @@ local function copyCardRewardBuckets(source)
         copied.jacl[ownerId] = {}
 
         for index, cardId in ipairs(cardIds or {}) do
-            copied.jacl[ownerId][index] = cardId
+            copied.jacl[ownerId][index] = copyRewardEntry(cardId)
         end
     end
 
@@ -568,31 +893,31 @@ local function copyCardRewardBuckets(source)
         copied.agents[ownerId] = {}
 
         for index, cardId in ipairs(cardIds or {}) do
-            copied.agents[ownerId][index] = cardId
+            copied.agents[ownerId][index] = copyRewardEntry(cardId)
         end
     end
 
     return copied
 end
 
-local function collectSetupRewardCardIds()
-    local rewardCardIds = {}
+local function collectSetupRewardCardEntries()
+    local rewardCardEntries = {}
     local rewards = setupScenario.playerCardRewards or {}
     local jaclRewards = rewards.jacl and rewards.jacl[setupScenario.playerJaclId] or nil
 
-    for _, cardId in ipairs(jaclRewards or {}) do
-        rewardCardIds[#rewardCardIds + 1] = cardId
+    for _, rewardEntry in ipairs(jaclRewards or {}) do
+        rewardCardEntries[#rewardCardEntries + 1] = rewardEntry
     end
 
     for _, agentId in ipairs(setupScenario.setupAgentIds or {}) do
         local agentRewards = rewards.agents and rewards.agents[agentId] or nil
 
-        for _, cardId in ipairs(agentRewards or {}) do
-            rewardCardIds[#rewardCardIds + 1] = cardId
+        for _, rewardEntry in ipairs(agentRewards or {}) do
+            rewardCardEntries[#rewardCardEntries + 1] = rewardEntry
         end
     end
 
-    return rewardCardIds
+    return rewardCardEntries
 end
 
 local function applySetupRewardCardsToPlayerDeck()
@@ -600,7 +925,7 @@ local function applySetupRewardCardsToPlayerDeck()
         return 0
     end
 
-    return deckrules.addCardIds(gameState.playerDeck, collectSetupRewardCardIds(), {
+    return deckrules.addCardIds(gameState.playerDeck, collectSetupRewardCardEntries(), {
         owner = "player",
         insertRandomly = true,
         source = "card-reward",
@@ -710,6 +1035,7 @@ function resolveOpeningMulligan()
         gameState.mulliganReturnedCards = {}
         gameState.hoveredCardIndex = nil
         gameState.hoveredKeyword = nil
+        gameState.hoveredEnhancement = nil
         gameState.hoveredDiceFace = nil
         gameState.hoveredButtonBadge = nil
         gameState.draggedCardIndex = nil
@@ -755,6 +1081,7 @@ function resolveOpeningMulligan()
     gameState.mulliganResolving = true
     gameState.hoveredCardIndex = nil
     gameState.hoveredKeyword = nil
+    gameState.hoveredEnhancement = nil
     gameState.hoveredDiceFace = nil
     gameState.hoveredButtonBadge = nil
     gameState.draggedCardIndex = nil
@@ -827,9 +1154,41 @@ end
 local function clearTemporaryRerollBonus()
     gameState.engageRerollBonus = 0
 
-    if gameState.engageRerollCount > 2 then
-        gameState.engageRerollCount = 2
+    local baselineRerolls = 2 + math.max(0, tonumber(gameState.domainAwarenessRerollBonus) or 0)
+
+    if gameState.engageRerollCount > baselineRerolls then
+        gameState.engageRerollCount = baselineRerolls
     end
+end
+
+local function getDomainAwarenessOpeningHandBonus()
+    return math.max(0, math.floor(tonumber(gameState.domainAwarenessOpeningHandBonus) or 0))
+end
+
+local function applyPendingDomainAwarenessToMission()
+    local pending = appState.pendingDomainAwareness
+
+    gameState.domainAwarenessRerollBonus = 0
+    gameState.domainAwarenessOpeningHandBonus = 0
+
+    if not pending then
+        return
+    end
+
+    gameState.domainAwarenessRerollBonus = math.max(0, math.floor(tonumber(pending.rerollBonus) or 0))
+    gameState.domainAwarenessOpeningHandBonus = math.max(0, math.floor(tonumber(pending.openingHandBonus) or 0))
+
+    if pending.methodResourceBonus then
+        for _, resourceName in ipairs(DOMAIN_AWARENESS_METHOD_RESOURCES) do
+            resourcerules.addResource(resourceName, 1)
+        end
+    end
+end
+
+clearDomainAwarenessEncounterBonus = function()
+    appState.pendingDomainAwareness = nil
+    gameState.domainAwarenessRerollBonus = 0
+    gameState.domainAwarenessOpeningHandBonus = 0
 end
 
 local function refundPendingSyntacMethodChoice()
@@ -1424,6 +1783,7 @@ contextassemblyState = {
         deckrules = deckrules,
         envdraw = envdraw,
         envrules = envrules,
+        enhancementrules = enhancementrules,
         haywirerules = haywirerules,
         keywordrules = keywordrules,
         previewrules = previewrules,
@@ -1460,6 +1820,7 @@ contextassemblyState = {
         beginKitReturnAnimation = beginKitReturnAnimation,
         beginObjectiveEscalation = beginObjectiveEscalation,
         beginObjectiveHunterDeckTransformation = beginObjectiveHunterDeckTransformation,
+        beginPlayerDefeat = beginPlayerDefeat,
         beginReinforcementHunterDeckTransformation = beginReinforcementHunterDeckTransformation,
         beginPoiEmergenceEffect = beginPoiEmergenceEffect,
         beginPoiFlipEffect = beginPoiFlipEffect,
@@ -1487,6 +1848,7 @@ contextassemblyState = {
         discardCardFromPlay = discardCardFromPlay,
         drawCardFromPlayerDeck = drawCardFromPlayerDeck,
         drawKitReturnAnimations = drawKitReturnAnimations,
+        getOpeningHandBonus = getDomainAwarenessOpeningHandBonus,
         drawHunterAutoPlayAnimations = drawHunterAutoPlayAnimations,
         drawHunterDeckDiscardAnimations = drawHunterDeckDiscardAnimations,
         drawHaywireDeckAddAnimations = drawHaywireDeckAddAnimations,
@@ -1597,6 +1959,10 @@ startNewRun = function(saveSlotId, saveTimestamp)
     topsloteffects.reset()
     infiltrationrules.reset()
     munitionsrules.reset()
+    appState.missionDeadCrewRoles = {}
+    clearDomainAwarenessEncounterBonus()
+    gameState.missionSystems = getWorldMissionSystems()
+    applyPendingDomainAwarenessToMission()
     gameState.playerJacl = jaclrules.getJacl(setupScenario.playerJaclId)
     gameState.munitionsSystem = munitionsrules.getJaclMunitions(gameState.playerJacl)
     gameState.titheSystem = tithesrules.getJaclTithe(gameState.playerJacl)
@@ -1701,6 +2067,9 @@ local function buildMissionSetupQueue(saveSlotId, saveTimestamp)
                 topsloteffects.reset()
                 infiltrationrules.reset()
                 munitionsrules.reset()
+                appState.missionDeadCrewRoles = {}
+                gameState.missionSystems = getWorldMissionSystems()
+                applyPendingDomainAwarenessToMission()
             end,
         },
         {
@@ -1805,7 +2174,7 @@ local function buildMissionSetupQueue(saveSlotId, saveTimestamp)
             id = "opening-hand",
             action = function()
                 local firstCardId = gameState.playerJacl and gameState.playerJacl.tomeId or nil
-                local openingHandSize = firstCardId and 7 or 6
+                local openingHandSize = (firstCardId and 7 or 6) + getDomainAwarenessOpeningHandBonus()
 
                 gameState.cards = deckrules.assignCardsToHand(gameState.playerDeck, openingHandSize, {
                     firstCardId = firstCardId,
@@ -1926,8 +2295,14 @@ startMissionFromWorldNode = function(payload)
     appState.worldMapNodePlayButtonTargets = nil
     appState.worldMapRewardModal = nil
     appState.worldMapRewardCollectButtonTarget = nil
+    appState.worldMapSystemRepair = nil
+    appState.worldMapSystemRepairQueue = nil
     appState.pendingWorldMapCardReward = nil
     appState.worldMapCardRewardModal = nil
+    appState.pendingWorldMapHunterModal = nil
+    appState.worldMapHunterModal = nil
+    appState.pendingWorldMapCrewReviveModal = nil
+    appState.worldMapCrewReviveModal = nil
     appState.victoryTransition = nil
     appState.worldToMissionTransition = nil
     appState.pendingMissionSetup = {
@@ -1961,6 +2336,11 @@ end
 contextassemblyState.updateInfiltrationEffect = updateInfiltrationEffect
 
 function love.update(dt)
+    if playerdefeatcontroller.hasOpen(getPlayerDefeatControllerContext()) then
+        playerdefeatcontroller.update(getPlayerDefeatControllerContext(), dt)
+        return
+    end
+
     if appState.victoryTransition then
         local transition = appState.victoryTransition
         local coverDuration = math.max(0.01, transition.coverDuration or transition.duration or 1)
@@ -2162,6 +2542,11 @@ function love.update(dt)
 end
 
 function love.mousepressed(x, y, button)
+    if playerdefeatcontroller.hasOpen(getPlayerDefeatControllerContext()) then
+        playerdefeatcontroller.mousepressed(getPlayerDefeatControllerContext(), x, y, button)
+        return
+    end
+
     if isVictoryInputLocked() then
         return
     end
@@ -2186,6 +2571,9 @@ function love.mousepressed(x, y, button)
         gamestates.mousepressedWorldStage(appState, x, y, button, {
             sfxrules = sfxrules,
             startMissionFromWorldNode = startMissionFromWorldNode,
+            addWorldHunterToJaclDeck = addWorldHunterToJaclDeck,
+            finalizeWorldHunterModal = finalizeWorldHunterModal,
+            finalizeWorldCrewReviveModal = finalizeWorldCrewReviveModal,
         })
         return
     end
@@ -2194,6 +2582,10 @@ function love.mousepressed(x, y, button)
 end
 
 function love.wheelmoved(_, y)
+    if playerdefeatcontroller.hasOpen(getPlayerDefeatControllerContext()) then
+        return
+    end
+
     if isVictoryInputLocked() then
         return
     end
@@ -2215,6 +2607,10 @@ function love.wheelmoved(_, y)
 end
 
 function love.mousereleased(x, y, button)
+    if playerdefeatcontroller.hasOpen(getPlayerDefeatControllerContext()) then
+        return
+    end
+
     if isVictoryInputLocked() then
         return
     end
@@ -2223,7 +2619,16 @@ function love.mousereleased(x, y, button)
         return
     end
 
-    if gamestates.isFileSelect(appState) or gamestates.isWorldStage(appState) then
+    if gamestates.isWorldStage(appState) then
+        gamestates.mousereleasedWorldStage(appState, x, y, button, {
+            sfxrules = sfxrules,
+            finalizeWorldHunterModal = finalizeWorldHunterModal,
+            finalizeWorldCrewReviveModal = finalizeWorldCrewReviveModal,
+        })
+        return
+    end
+
+    if gamestates.isFileSelect(appState) then
         return
     end
 
@@ -2231,6 +2636,10 @@ function love.mousereleased(x, y, button)
 end
 
 function love.keypressed(key)
+    if playerdefeatcontroller.hasOpen(getPlayerDefeatControllerContext()) then
+        return
+    end
+
     if isVictoryInputLocked() then
         return
     end
@@ -2312,6 +2721,7 @@ function drawMissionStage()
         isSyntacMethodModalOpen = gameState.isSyntacMethodModalOpen,
         primedSyntacAbility = gameState.primedSyntacAbility,
         hoveredKeyword = gameState.hoveredKeyword,
+        hoveredEnhancement = gameState.hoveredEnhancement,
         hoveredDiceFace = gameState.hoveredDiceFace,
         hoveredButtonBadge = gameState.hoveredButtonBadge,
         hoveredJaclSpecialDefinition = gameState.hoveredJaclSpecialDefinition,
@@ -2341,6 +2751,7 @@ function drawMissionStage()
         getObjectiveProgressEffectSlotId = getObjectiveProgressEffectSlotId,
         getSetupCardCount = getSetupCardCount,
         isCardDestroyed = isCardDestroyed,
+        isHunterCard = isHunterCard,
         getCardDrawPosition = getCardDrawPosition,
         drawCardStateOverlays = drawCardStateOverlays,
         getDropCell = getDropCell,
@@ -2355,6 +2766,7 @@ function drawMissionStage()
     })
 
     surrendermodal.draw(gameState)
+    playerdefeatcontroller.draw(getPlayerDefeatControllerContext())
 end
 
 function drawWorldToMissionTransition(transition)

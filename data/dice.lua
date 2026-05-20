@@ -253,6 +253,33 @@ local dice = {
         },
 
         {
+            id = "CQARDMG3",
+            type = "Black",
+            over = "CQArAtk",
+            value = 3,
+            action = "attack",
+            target = "enemy_card",
+            selfBlock = true,
+            area = true,
+            facename = "Hi-Ex Close Quarters Attack",
+            facedesc = "Deal damage to a target troop or Champion. Damages adjacent troops. This card gains block.",
+        },
+
+        {
+            id = "CQSPDMG2",
+            type = "Spt",
+            over = "CQAtk",
+            value = 2,
+            action = "attack",
+            target = "enemy_card",
+            selfBlock = true,
+            area = true,
+            applycond = "KWRLD",
+            facename = "Hi-Ex Close Quarters Stun Attack",
+            facedesc = "Deal damage to a target troop or Champion. Inflict the Spent condition. Damages adjacent troops. This card gains block.",
+        },
+
+        {
             id = "HCQDMG4",
             type = "Black",
             over = "CQHvAtk",
@@ -398,7 +425,7 @@ local dice = {
             targ = "Atk",
             facename = "Wound Attack",
             facedesc = "Deal damage to a target troop or Champion. Inflict the Wound condition.",
-            wound = true,
+            applycond = { "KWWOUND" },
         },
 
         {
@@ -409,7 +436,7 @@ local dice = {
             targ = "Atk",
             facename = "Wound Attack",
             facedesc = "Deal damage to a target troop or Champion. Inflict the Wound condition.",
-            wound = true,
+            applycond = { "KWWOUND" },
         },
 
         {
@@ -420,7 +447,7 @@ local dice = {
             targ = "Atk",
             facename = "Hi-Ex Wound Attack",
             facedesc = "Deal damage to a target troop and adjacent troops or Champion. Inflict the Wound condition.",
-            wound = true,
+            applycond = { "KWWOUND" },
             area = true,
         },
 
@@ -432,7 +459,7 @@ local dice = {
             targ = "Atk",
             facename = "Hi-Ex Wound Attack",
             facedesc = "Deal damage to a target troop and adjacent troops or Champion. Inflict the Wound condition.",
-            wound = true,
+            applycond = { "KWWOUND" },
             area = true,
         },
 
@@ -1122,6 +1149,19 @@ local dice = {
         facedesc = "Increase the progress on an objective. This card gains block.",
     },
 
+    {
+        id = "OBJBLK3",
+        type = "Cvt",
+        over = "BscBlk",
+        value = 3,
+        targ = "Obj",
+        selfBlock = true,
+        facename = "Red Switch and Block",
+        facedesc = "Increase the progress on an objective. This card gains block.",
+    },
+
+
+    
     --- Summoning
 
     {
@@ -1271,6 +1311,39 @@ local dice = {
             cardId = "ENORB",
         },
     },
+
+    {
+        id = "CHROMATKSMN",
+        type = "SmnBg",
+        over = "BscAtk",
+        value = 1,
+        targ = "AtkSmn",
+        facename = "Attack and Summon",
+        facedesc = "Deal damage to a target troop or Champion. Summon the shown troop.",
+        target = { "ENCHROMBLU" },
+        func = "Spawn",
+        preview = {
+            label = "SUMMON",
+            cardId = "ENCHROMBLU",
+        },
+    },
+
+    {
+        id = "GRYSCLATKSMN",
+        type = "SmnBg",
+        over = "BscAtk",
+        value = 1,
+        targ = "AtkSmn",
+        facename = "Attack and Summon",
+        facedesc = "Deal damage to a target troop or Champion. Summon a randomly chosen troop.",
+        target = { "ENGRYSCL" },
+        func = "Spawn",
+        preview = {
+            label = "SUMMON",
+            cardId = "ENGRYSCL",
+        },
+    },
+    
     
     
     }
